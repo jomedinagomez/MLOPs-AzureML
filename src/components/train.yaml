@@ -1,0 +1,29 @@
+# <component>
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: train_linear_regression_model
+display_name: TrainLinearRegressionModel
+type: command
+inputs:
+  training_data: 
+    type: uri_folder
+  model_name:
+    type: string
+    default: test
+outputs:
+  model_output:
+    type: mlflow_model
+  test_data:
+    type: uri_folder
+  train_data:
+    type: uri_folder
+code: ../train
+environment:
+      conda_file: ../../environment/train/conda.yaml
+      image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04:latest
+command: >-
+  python train.py 
+  --training_data ${{inputs.training_data}} 
+  --model_name ${{inputs.model_name}} 
+  --model_output ${{outputs.model_output}}
+
+# </component>

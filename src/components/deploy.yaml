@@ -1,0 +1,25 @@
+# <component>
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: Deploy_taxi_fares
+display_name: DeployTaxiFares
+type: command
+inputs:
+  model_name:
+    type: string
+  endpoint_name:
+    type: string
+  deployment_name:
+    type: string
+  register_job_status:
+    type: uri_folder
+environment:
+      conda_file: ../../environment/train/conda.yaml
+      image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04:latest
+code: ../deploy
+command: >-
+  python deploy.py 
+  --model_name ${{inputs.model_name}} 
+  --endpoint_name ${{inputs.endpoint_name}} 
+  --deployment_name ${{inputs.deployment_name}} 
+  --register_job_status ${{inputs.register_job_status}} 
+# </component>

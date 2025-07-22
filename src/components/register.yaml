@@ -1,0 +1,26 @@
+# <component>
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: register_taxi_fares
+display_name: RegisterTaxiFares
+type: command
+inputs:
+  model_input:
+    type: uri_folder
+  model_name:
+    type: string
+  compare_output:
+    type: uri_folder
+outputs:
+  register_output:
+    type: uri_folder
+environment:
+      conda_file: ../../environment/train/conda.yaml
+      image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04:latest
+code: ../register
+command: >-
+  python register.py 
+  --model_input ${{inputs.model_input}} 
+  --model_name ${{inputs.model_name}} 
+  --compare_output ${{inputs.compare_output}} 
+  --register_output ${{outputs.register_output}} 
+# </component>

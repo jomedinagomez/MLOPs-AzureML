@@ -1,0 +1,30 @@
+# <component>
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: taxi_feature_engineering
+display_name: TaxiFeatureEngineering
+type: command
+inputs:
+  clean_data: 
+    type: uri_folder 
+  test_split_ratio:
+    type: number
+    min: 0
+    max: 1
+    default: 0.5
+
+outputs:
+  train_data:
+    type: uri_folder
+  test_data:
+    type: uri_folder
+code: ../transform
+environment:
+      conda_file: ../../environment/train/conda.yaml
+      image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04:latest
+command: >-
+  python transform.py 
+  --clean_data ${{inputs.clean_data}} 
+  --train_data ${{outputs.train_data}}
+  --test_data ${{outputs.test_data}}
+  --test_split_ratio ${{inputs.test_split_ratio}}
+# </component>
