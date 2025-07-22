@@ -1,0 +1,18 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+command: >-
+  python merge_data.py 
+  --raw_data_green ${{inputs.raw_data_green}}
+  --raw_data_yellow ${{inputs.raw_data_yellow}}
+  --merged_data ${{outputs.merged_data}}
+code: ../code/merge_data
+inputs:
+  raw_data_green:
+    type: uri_file 
+    path: azureml:green-taxi-raw:1
+  raw_data_yellow:
+    type: uri_file
+    path: azureml:yellow-taxi-raw:1
+outputs:
+  merged_data:
+environment: azureml:AzureML-sklearn-1.0-ubuntu20.04-py38-cpu@latest
+compute: azureml:cpu-cluster

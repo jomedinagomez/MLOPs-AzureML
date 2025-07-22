@@ -1,0 +1,5 @@
+$schema: https://azuremlschemas.azureedge.net/latest/data.schema.json
+name: transformed-taxi-training-data
+description: Processed and merged taxi data for input to training step
+type: mltable
+path: azureml://subscriptions/4101c419-a948-424e-a9c6-a6342fac043e/resourcegroups/rg-demo-aml/workspaces/mlw-demo-001/datastores/workspaceblobstore/paths/datasets/taxi-data/csv/transformed_training_data/

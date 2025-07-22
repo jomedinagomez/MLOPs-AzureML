@@ -1,0 +1,5 @@
+$schema: https://azuremlschemas.azureedge.net/latest/data.schema.json
+name: yellow-taxi-data
+description: yellow taxi ride data
+type: uri_file
+path: azureml://subscriptions/14585b9f-5c83-4a76-8055-42149123f99f/resourcegroups/azureml_rg/workspaces/azureml_dev_jamg/datastores/workspaceblobstore/paths/UI/2022-10-31_200904_UTC/yellowTaxiData.csv
