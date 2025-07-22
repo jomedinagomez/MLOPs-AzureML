@@ -104,7 +104,7 @@ classification_job.set_limits(
 classification_job.set_training(
     enable_onnx_compatible_models=True,
     enable_stack_ensemble=False,
-    EnableVoteEnsemble=False,
+    enable_vote_ensemble=False,
 )
 
 ### Run Command
