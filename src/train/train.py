@@ -42,7 +42,7 @@ ml_client = MLClient(credential=credential,subscription_id=ws._subscription_id,r
 
 from azure.ai.ml.entities import AmlCompute
 from azure.core.exceptions import ResourceNotFoundError
-compute_name = "cpu-cluster-lg"
+compute_name = "cpu-cluster-uami"
 _ = ml_client.compute.get(compute_name)
 print("Found existing compute target.")
 ####
@@ -74,7 +74,7 @@ my_training_data_input = Input(
 
 ####
 # General job parameters
-max_trials = 4
+max_trials = 2
 exp_name = "Taxi-Regression-AutoML-Job-subrun"
 
 #https://github.com/Azure/azureml-examples/blob/main/sdk/python/jobs/automl-standalone-jobs/automl-classification-task-bankmarketing/automl-classification-task-bankmarketing.ipynb

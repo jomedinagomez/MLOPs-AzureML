@@ -29,7 +29,7 @@ settings:
 jobs:
   merge_job:
     type: command
-    code: ../code/merge_data
+    code: ../src/merge_data
     command: >-
       python merge_data.py
       --raw_data_green ${{inputs.raw_data_green}}
@@ -38,10 +38,10 @@ jobs:
     inputs:
       raw_data_green:
         type: uri_file 
-        path: azureml:green-taxi-raw:1
+        path: ../data/taxi-data/raw/greenTaxiData.csv
       raw_data_yellow:
         type: uri_file 
-        path: azureml:yellow-taxi-raw:1
+        path: ../data/taxi-data/raw/yellowTaxiData.csv
     outputs:
       merged_data:
         mode: upload
@@ -49,7 +49,7 @@ jobs:
 
   transform_job:
     type: command
-    component: ../code/components/transform.yaml
+    component: ../src/components/transform.yaml
     inputs:
       test_split_ratio: 0.3
       clean_data: ${{parent.jobs.merge_job.outputs.merged_data}}
@@ -59,7 +59,7 @@ jobs:
 
   train_job:
     type: command
-    component: ../code/components/train.yaml
+    component: ../src/components/train.yaml
     inputs:
       training_data: ${{parent.jobs.transform_job.outputs.train_data}}
       testing_data: ${{parent.jobs.transform_job.outputs.test_data}}
@@ -69,7 +69,7 @@ jobs:
 
   predict_job:
     type: command
-    component: ../code/components/predict.yaml
+    component: ../src/components/predict.yaml
     inputs:
       model_input: ${{parent.jobs.train_job.outputs.model_output}}
       test_data: ${{parent.jobs.transform_job.outputs.test_data}}
@@ -78,7 +78,7 @@ jobs:
 
   compare_job:
     type: command
-    component: ../code/components/compare.yaml
+    component: ../src/components/compare.yaml
     inputs:
       model_input: ${{parent.jobs.train_job.outputs.model_output}}
       test_data: ${{parent.jobs.transform_job.outputs.test_data}}
@@ -89,7 +89,7 @@ jobs:
     
   score_job:
     type: command
-    component: ../code/components/score.yaml
+    component: ../src/components/score.yaml
     inputs:
       predictions: ${{parent.jobs.predict_job.outputs.predictions}}
       model: ${{parent.jobs.train_job.outputs.model_output}}
@@ -98,7 +98,7 @@ jobs:
 
   register_job:
     type: command
-    component: ../code/components/register.yaml
+    component: ../src/components/register.yaml
     inputs:
       model_input: ${{parent.jobs.train_job.outputs.model_output}}
       model_name: ${{parent.inputs.model_name}}
@@ -108,7 +108,7 @@ jobs:
   
   deploy_job:
     type: command
-    component: ../code/components/deploy.yaml
+    component: ../src/components/deploy.yaml
     inputs:
       model_name: ${{parent.inputs.model_name}}
       endpoint_name: ${{parent.inputs.endpoint_name}}
