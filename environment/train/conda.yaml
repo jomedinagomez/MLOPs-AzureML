@@ -1,6 +1,7 @@
 name: train-mlops-environment
 channels:
   - conda-forge
+  - pytorch
   - anaconda
 dependencies:
   - python=3.9
