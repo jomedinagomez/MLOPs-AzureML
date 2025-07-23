@@ -74,7 +74,7 @@ my_training_data_input = Input(
 
 ####
 # General job parameters
-max_trials = 2
+max_trials = 1
 exp_name = "Taxi-Regression-AutoML-Job-subrun"
 
 #https://github.com/Azure/azureml-examples/blob/main/sdk/python/jobs/automl-standalone-jobs/automl-classification-task-bankmarketing/automl-classification-task-bankmarketing.ipynb

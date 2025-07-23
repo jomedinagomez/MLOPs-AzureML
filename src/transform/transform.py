@@ -242,4 +242,3 @@ my_data = Data(
     name="cat-sample-train-data",)
 
 ml_client.data.create_or_update(my_data)
-
