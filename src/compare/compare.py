@@ -85,61 +85,69 @@ print(testX.columns)
 
 from sklearn.metrics import mean_squared_error, r2_score,accuracy_score
 
-# Load the model from input port
+# Load the new model from input port
 new_model = mlflow.pyfunc.load_model(str(Path(args.model_input) / "outputs")+"/"+"mlflow-model")
 
-# Make predictions on testX data and record them in a column named predicted_cost
-
-# Compare predictions to actuals (testy)
-output_data = pd.DataFrame(testX)
-output_data["actual_cost"] = testy
-print(output_data)
-
-# Save the output data with feature columns, predicted cost, and actual cost in csv file
-
-output_data["predicted_cost"] = new_model.predict(testX)
-new_model_predictions = output_data["predicted_cost"]
-output_data = output_data["predicted_cost"]
+# Make predictions with the new model
+new_model_predictions = new_model.predict(testX)
 new_model_accuracy = accuracy_score(testy, new_model_predictions)
 
+print(f"New model accuracy: {new_model_accuracy}")
+
 ##--------------------------------------------------------------------------------------------------------
-def compare_metrics(baseline_model_accuracy,new_model_accuracy):
-    if baseline_model_accuracy <= new_model_accuracy: ##Change in practice
-        print ("candidate improved upon the baseline model (Accuracy):")
-        print("baseline accuracy: ", baseline_model_accuracy )
-        print("baseline accuracy: ", new_model_accuracy )
+def compare_metrics(baseline_model_accuracy, new_model_accuracy):
+    if new_model_accuracy >= baseline_model_accuracy:
+        print("Candidate model improved upon the baseline model (Accuracy):")
+        print(f"Baseline accuracy: {baseline_model_accuracy}")
+        print(f"New model accuracy: {new_model_accuracy}")
+        return True
     else:
-        print("baseline accuracy: ", baseline_model_accuracy )
-        print("baseline accuracy: ", new_model_accuracy )
+        print("Candidate model does not perform better than baseline model:")
+        print(f"Baseline accuracy: {baseline_model_accuracy}")
+        print(f"New model accuracy: {new_model_accuracy}")
         raise Exception("candidate model does not perform better than baseline model")
 
+# Check if a baseline model exists for comparison
 target_for_current_downloaded_model = "downloaded_model"
+baseline_exists = False
 
-models = ml_client.models.list(name="taxi-classification")
-model_list = [model for model in models]
-if model_list:
-    latest_model_version = model_list[0].version
-    model = ml_client.models.download(name=args.model_name, version=latest_model_version, download_path=target_for_current_downloaded_model)
+try:
+    models = ml_client.models.list(name=args.model_name)
+    model_list = [model for model in models]
+    if model_list:
+        baseline_exists = True
+        latest_model_version = model_list[0].version
+        print(f"Found existing model version: {latest_model_version}")
+        
+        # Download the baseline model
+        ml_client.models.download(name=args.model_name, version=latest_model_version, download_path=target_for_current_downloaded_model)
+        
+        full_path_to_cwd = os.path.realpath('.')
+        full_path_to_model = os.path.join(full_path_to_cwd, target_for_current_downloaded_model, args.model_name, "mlflow-model")
+        
+        # Load and evaluate baseline model
+        baseline_model = mlflow.pyfunc.load_model(full_path_to_model)
+        baseline_predictions = baseline_model.predict(testX)
+        baseline_model_accuracy = accuracy_score(testy, baseline_predictions)
+        
+        print(f"Baseline model accuracy: {baseline_model_accuracy}")
+        
+        # Compare models
+        compare_metrics(baseline_model_accuracy, new_model_accuracy)
+        
+except Exception as e:
+    print(f"No baseline model found for comparison: {e}")
+    print("This appears to be the first model - skipping baseline comparison.")
 
-    print("We have a version of the model trained")
+# Create output data with predictions
+output_data = pd.DataFrame(testX)
+output_data["actual_cost"] = testy
+output_data["predicted_cost"] = new_model_predictions
 
-    full_path_to_cwd = os.path.realpath('.')
-    full_path_to_model = os.path.join(full_path_to_cwd, target_for_current_downloaded_model, args.model_name, "mlflow-model")
+if baseline_exists:
+    output_data["baseline_predicted_cost"] = baseline_predictions
 
-    basline_model = mlflow.pyfunc.load_model(full_path_to_model)
+print(f"Output data shape: {output_data.shape}")
 
-    # Make predictions on testX data and record them in a column named predicted_cost
-    # Compare predictions to actuals (testy)
-    output_data = pd.DataFrame(testX)
-    output_data["actual_cost"] = testy
-    output_data["base_predicted_cost"] = basline_model.predict(testX)
-    base_model_predictions = output_data["base_predicted_cost"]
-    output_data = output_data["base_predicted_cost"]
-    baseline_model_accuracy = accuracy_score(testy, base_model_predictions)
-
-    compare_metrics(baseline_model_accuracy, new_model_accuracy)
-
-    # Save the output data with feature columns, predicted cost, and actual cost in csv file
-    output_data = output_data.to_csv((Path(args.compare_output) / "predictions.csv"),index=False)
-else:
-    print("No previous model found. Skipping baseline comparison.")
+# Save the output data
+output_data.to_csv((Path(args.compare_output) / "predictions.csv"), index=False)
