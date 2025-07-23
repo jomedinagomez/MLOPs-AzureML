@@ -9,7 +9,6 @@ dependencies:
   - joblib=1.2.0
   - setuptools-git
   - 'psutil>5.0.0,<6.0.0'
-  - pytorch=2.2.2
   - tqdm
   - numpy
   - pandas
@@ -37,3 +36,4 @@ dependencies:
     - azure-ai-ml
     - azureml-inference-server-http==1.4.1
     - pyarrow==14.0.2  
+    - pytorch=2.2.2
