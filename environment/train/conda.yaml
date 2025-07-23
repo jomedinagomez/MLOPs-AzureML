@@ -34,5 +34,5 @@ dependencies:
     - mltable>=1.0.0
     - azure-identity
     - azure-ai-ml
-    - azureml-inference-server-http==1.0.0
+    - azureml-inference-server-http==1.4.1
     - pyarrow==14.0.2  
