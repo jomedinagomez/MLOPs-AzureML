@@ -114,17 +114,17 @@ def compare_metrics(baseline_model_accuracy,new_model_accuracy):
         raise Exception("candidate model does not perform better than baseline model")
 
 target_for_current_downloaded_model = "downloaded_model"
-try:
 
-    models = ml_client.models.list(name="taxi-classification")
-    model_list = [model for model in models]
+models = ml_client.models.list(name="taxi-classification")
+model_list = [model for model in models]
+if model_list:
     latest_model_version = model_list[0].version
-    model = ml_client.models.download(name=args.model_name, version=latest_model_version,download_path=target_for_current_downloaded_model)
+    model = ml_client.models.download(name=args.model_name, version=latest_model_version, download_path=target_for_current_downloaded_model)
 
     print("We have a version of the model trained")
 
     full_path_to_cwd = os.path.realpath('.')
-    full_path_to_model = (full_path_to_cwd+"/"+target_for_current_downloaded_model+"/"+args.model_name+"/"+"mlflow-model")
+    full_path_to_model = os.path.join(full_path_to_cwd, target_for_current_downloaded_model, args.model_name, "mlflow-model")
 
     basline_model = mlflow.pyfunc.load_model(full_path_to_model)
 
@@ -137,10 +137,9 @@ try:
     output_data = output_data["base_predicted_cost"]
     baseline_model_accuracy = accuracy_score(testy, base_model_predictions)
 
-    compare_metrics(baseline_model_accuracy,new_model_accuracy)
+    compare_metrics(baseline_model_accuracy, new_model_accuracy)
 
-except:
-    print("model not yet trained")
-
-# Save the output data with feature columns, predicted cost, and actual cost in csv file
-output_data = output_data.to_csv((Path(args.compare_output) / "predictions.csv"),index=False)
+    # Save the output data with feature columns, predicted cost, and actual cost in csv file
+    output_data = output_data.to_csv((Path(args.compare_output) / "predictions.csv"),index=False)
+else:
+    print("No previous model found. Skipping baseline comparison.")

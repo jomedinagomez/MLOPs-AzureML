@@ -64,6 +64,7 @@ print(testX.shape)
 print(testX.columns)
 
 # Load the model from input port
+#folder = str(Path(args.model_input) / "outputs")+"/"+"mlflow-model"
 model = mlflow.pyfunc.load_model(str(Path(args.model_input) / "outputs")+"/"+"mlflow-model")
 
 # Make predictions on testX data and record them in a column named predicted_cost

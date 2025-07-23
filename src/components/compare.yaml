@@ -17,7 +17,7 @@ outputs:
     type: uri_folder
 environment:
       conda_file: ../../environment/train/conda.yaml
-      image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04:latest
+      image: mcr.microsoft.com/azureml/curated/ai-ml-automl:latest
 code: ../compare
 command: >-
   python compare.py 

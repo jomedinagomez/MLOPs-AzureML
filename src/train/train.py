@@ -121,7 +121,6 @@ ml_client.jobs.stream(returned_job.name)
 returned_job.services["Studio"].endpoint
 print(returned_job.name)
 
-
 ###Obtain the tracking URI for MLFlow
 
 # Obtain the tracking URL from MLClient
