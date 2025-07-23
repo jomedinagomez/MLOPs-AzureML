@@ -19,7 +19,7 @@ outputs:
 code: ../train
 environment:
       conda_file: ../../environment/train/conda.yaml
-      image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04:latest
+      image: mcr.microsoft.com/azureml/openmpi5.0-ubuntu24.04:latest
 command: >-
   python train.py 
   --training_data ${{inputs.training_data}} 
