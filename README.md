@@ -371,6 +371,4 @@ For issues and questions:
 
 ---
 
-**Author**: [Your Name]  
-**Project**: Azure ML Operations (MLOps)  
-**Date**: July 28, 2025
+**Authors**: Jose Medina Gomez, Matt Felton
