@@ -16,7 +16,7 @@ outputs:
 environment:
       conda_file: ../../environment/train/conda.yaml
       image: mcr.microsoft.com/azureml/openmpi5.0-ubuntu24.04:latest
-code: ../register
+code: ../register_to_ws/
 command: >-
   python register.py 
   --model_input ${{inputs.model_input}} 

@@ -44,7 +44,7 @@ from azure.ai.ml.entities import AmlCompute
 from azure.core.exceptions import ResourceNotFoundError
 compute_name = "cpu-cluster-uami"
 _ = ml_client.compute.get(compute_name)
-print("Found existing compute target.")
+print("Found existing compute target..")
 ####
 
 mlflow.sklearn.autolog()

@@ -96,7 +96,7 @@ jobs:
     outputs:
       score_report: ${{parent.outputs.pipeline_job_score_report}}
 
-  register_job:
+  registerws_job:
     type: command
     component: ../src/components/register.yaml
     inputs:
@@ -106,11 +106,11 @@ jobs:
     outputs:
       register_output:
   
-  deploy_job:
+  deployws_job:
     type: command
     component: ../src/components/deploy.yaml
     inputs:
       model_name: ${{parent.inputs.model_name}}
       endpoint_name: ${{parent.inputs.endpoint_name}}
       deployment_name: ${{parent.inputs.deployment_name}}
-      register_job_status: ${{parent.jobs.register_job.outputs.register_output}}
+      register_job_status: ${{parent.jobs.registerws_job.outputs.register_output}}
