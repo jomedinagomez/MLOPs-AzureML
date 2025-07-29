@@ -54,14 +54,128 @@ This infrastructure uses a **modular orchestration** approach. The deployment or
 
 ### Orchestration & Dependency Diagram
 ```mermaid
-flowchart TD
-    MAIN["Root main.tf<br/>Orchestration"] --> VNET["aml-vnet<br/>Networking Foundation"]
-    MAIN --> WORKSPACE["aml-managed-smi<br/>ML Workspace"]
-    MAIN --> REGISTRY["aml-registry-smi<br/>ML Registry"]
-    VNET --> WORKSPACE
-    VNET --> REGISTRY
-    WORKSPACE --> PRIVATEENDPOINT["modules/private-endpoint"]
-    REGISTRY --> PRIVATEENDPOINT
+graph TB
+    subgraph "Root Orchestration"
+        MAIN[Root main.tf<br/>Infrastructure Orchestrator<br/>🎯 Deploy from here]
+    end
+    
+    subgraph "Foundation Layer: rg-aml-vnet-{environment}-{location-code}"
+        subgraph "Networking Infrastructure"
+            VNET[Virtual Network<br/>10.1.0.0/16<br/>🌐 Private Network]
+            SUBNET[Private Subnet<br/>10.1.1.0/24<br/>🔒 Workload Isolation]
+        end
+        
+        subgraph "DNS Infrastructure"
+            DNS1[DNS Zone: blob.core.windows.net<br/>🗂️ Storage Resolution]
+            DNS2[DNS Zone: vaultcore.azure.net<br/>🗝️ Key Vault Resolution]
+            DNS3[DNS Zone: azurecr.io<br/>📦 Container Registry Resolution]
+            DNS4[DNS Zone: api.azureml.ms<br/>🤖 ML API Resolution]
+            DNS5[DNS Zone: notebooks.azure.net<br/>📊 Notebooks Resolution]
+        end
+        
+        subgraph "Identity Management"
+            UAI1[User-Assigned Identity<br/>Workspace Compute<br/>🆔 Cluster Identity]
+            UAI2[User-Assigned Identity<br/>Registry Access<br/>🆔 Registry Connector]
+        end
+        
+        VNET --> SUBNET
+        SUBNET -.-> DNS1
+        SUBNET -.-> DNS2
+        SUBNET -.-> DNS3
+        SUBNET -.-> DNS4
+        SUBNET -.-> DNS5
+    end
+    
+    subgraph "Workspace Layer: rg-aml-ws-{environment}-{location-code}"
+        subgraph "Core ML Services"
+            WS[Azure ML Workspace<br/>📈 ML Platform Hub]
+            AI[Application Insights<br/>📊 Monitoring & Telemetry]
+            COMPUTE[Compute Cluster<br/>⚡ Training Infrastructure]
+        end
+        
+        subgraph "Data & Storage"
+            STOR[Storage Account<br/>📁 ML Data & Artifacts]
+            STOR_PE[Storage Private Endpoint<br/>🔒 Private Access]
+        end
+        
+        subgraph "Security & Access"
+            KV[Key Vault<br/>🗝️ Secrets Management]
+            KV_PE[Key Vault Private Endpoint<br/>🔒 Private Access]
+            ACR[Container Registry<br/>📦 Custom Images]
+            ACR_PE[ACR Private Endpoint<br/>🔒 Private Access]
+        end
+        
+        subgraph "RBAC Configuration"
+            USER_WS[User Workspace Access<br/>👤 ML Engineer Role]
+            UAI_WS[UAI Workspace Access<br/>🆔 Contributor Role]
+        end
+        
+        WS --> AI
+        WS --> COMPUTE
+        WS --> STOR
+        WS --> KV
+        WS --> ACR
+        STOR --> STOR_PE
+        KV --> KV_PE
+        ACR --> ACR_PE
+        COMPUTE -.-> UAI1
+    end
+    
+    subgraph "Registry Layer: rg-aml-reg-{environment}-{location-code}"
+        subgraph "Centralized ML Assets"
+            REG[Azure ML Registry<br/>📚 Model Repository]
+            LA[Log Analytics Workspace<br/>📊 Registry Monitoring]
+        end
+        
+        subgraph "Registry Connectivity"
+            REG_PE[Registry Private Endpoint<br/>🔒 Private API Access]
+        end
+        
+        subgraph "Registry RBAC"
+            USER_REG[User Registry Access<br/>👤 Registry User Role]
+            UAI_REG[UAI Registry Access<br/>🆔 Registry Consumer]
+        end
+        
+        REG --> LA
+        REG --> REG_PE
+    end
+    
+    subgraph "Microsoft-Managed Resource Group: rg-{registry-name}"
+        MGT[Internal Registry Components<br/>⚠️ DO NOT MODIFY<br/>Auto-managed by Azure]
+        STOR_SYS[System Storage Account<br/>🏪 Internal Registry Data]
+        ACR_SYS[System Container Registry<br/>📦 Registry Infrastructure]
+        
+        REG -.-> MGT
+        MGT --> STOR_SYS
+        MGT --> ACR_SYS
+    end
+    
+    %% Orchestration Dependencies
+    MAIN --> VNET
+    MAIN --> WS
+    MAIN --> REG
+    
+    %% Foundation Dependencies
+    VNET --> WS
+    VNET --> REG
+    UAI1 --> WS
+    UAI2 --> REG
+    
+    %% Network Dependencies
+    STOR_PE -.-> SUBNET
+    KV_PE -.-> SUBNET
+    ACR_PE -.-> SUBNET
+    REG_PE -.-> SUBNET
+    
+    %% DNS Dependencies
+    STOR_PE -.-> DNS1
+    KV_PE -.-> DNS2
+    ACR_PE -.-> DNS3
+    REG_PE -.-> DNS4
+    
+    %% Cross-Layer Access
+    WS -.-> REG
+    UAI1 -.-> REG
 ```
 
 ### Microsoft-Managed Resource Groups
