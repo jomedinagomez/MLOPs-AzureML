@@ -69,7 +69,7 @@ flowchart TD
         LA[Log Analytics]
     end
     subgraph RG4["rg-{registry-name} - Microsoft Managed"]
-        MSREG["Internal Registry Infra\n Do Not Modify"]
+        MSREG["Internal Registry Infra<br>Do Not Modify"]
     end
 
     VNET -->|subnet outputs| WS
