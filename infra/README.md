@@ -46,37 +46,37 @@ infra/
 ### **Deployment Flow & Dependencies**
 
 ```mermaid
-graph TD
-    A[🎯 Root main.tf] --> B[🌐 aml-vnet]
-    A --> C[🏢 aml-managed-smi]  
-    A --> D[📚 aml-registry-smi]
-    
-    B --> E[VNet & Subnet]
-    B --> F[DNS Zones x9]
-    B --> G[Managed Identities x2]
-    
-    C --> H[ML Workspace]
-    C --> I[Storage + Private EP]
-    C --> J[Key Vault + Private EP]
-    C --> K[ACR + Private EP]
-    C --> L[Compute Cluster]
-    C --> M[Application Insights]
-    
-    D --> N[ML Registry]
-    D --> O[Log Analytics]
-    D --> P[Private Endpoints]
-    
-    E -.-> H
-    F -.-> I
-    F -.-> J
-    F -.-> K
-    G -.-> L
-    
-    style A fill:#ff9999
-    style B fill:#99ccff
-    style C fill:#99ff99
-    style D fill:#ffcc99
+
+## 🚦 Deployment Flow & Dependencies
+
+This infrastructure uses a **modular orchestration** approach. The deployment order and dependencies are as follows:
+
+### Deployment Order
+1. **aml-vnet**: Deploys networking, DNS, and managed identities (foundation for all other modules)
+2. **aml-managed-smi**: Deploys ML workspace, storage, Key Vault, ACR, compute, and private endpoints. Consumes outputs from `aml-vnet`.
+3. **aml-registry-smi**: Deploys ML registry, Log Analytics, and private endpoint. Consumes outputs from `aml-vnet`.
+
+### Orchestration & Dependency Diagram
+```mermaid
+flowchart TD
+    MAIN[Root main.tf (Orchestration)] --> VNET[aml-vnet (Networking Foundation)]
+    MAIN --> WORKSPACE[aml-managed-smi (ML Workspace)]
+    MAIN --> REGISTRY[aml-registry-smi (ML Registry)]
+    VNET --> WORKSPACE
+    VNET --> REGISTRY
+    WORKSPACE --> PRIVATEENDPOINT[modules/private-endpoint]
+    REGISTRY --> PRIVATEENDPOINT
 ```
+
+### Microsoft-Managed Resource Groups
+> ⚠️ **Important:** When deploying the ML Registry, Azure automatically creates a Microsoft-managed resource group (`rg-{registry-name}`) containing internal infrastructure (storage, ACR, etc.). **Never modify or delete resources in this group.**
+
+### Key Dependency Callouts
+- **aml-managed-smi** and **aml-registry-smi** both require outputs from **aml-vnet** (subnet, DNS, managed identities)
+- All modules are orchestrated from the root `main.tf` for dependency management
+- Microsoft-managed resource groups are created automatically for the registry and are not managed by Terraform
+
+**Note:** Always deploy modules in the order above. Confirm outputs from `aml-vnet` before proceeding with dependent modules. All dependencies are managed via module outputs and remote state.
 
 **Key Dependencies:**
 1. **aml-vnet** creates networking foundation and managed identities

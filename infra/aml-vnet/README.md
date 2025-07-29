@@ -4,6 +4,33 @@ This Terraform module deploys the foundational networking infrastructure for sec
 
 ## 🎯 **Module Overview**
 
+## 🚦 Deployment Flow & Dependencies
+
+This module is the **foundation** for all Azure ML infrastructure. It must be deployed **first** before any dependent modules (such as `aml-managed-smi` or `aml-registry-smi`).
+
+### Deployment Order
+1. **aml-vnet** (this module): Creates networking, DNS, and managed identities
+2. **aml-managed-smi**: Consumes VNet, subnet, DNS, and identity outputs to deploy the ML workspace
+3. **aml-registry-smi**: Consumes VNet, DNS, and identity outputs to deploy the ML registry
+
+### Module Dependency Diagram
+```mermaid
+flowchart TD
+    VNET[aml-vnet (Networking Foundation)] --> WORKSPACE[aml-managed-smi (ML Workspace)]
+    VNET --> REGISTRY[aml-registry-smi (ML Registry)]
+    VNET --> PRIVATEENDPOINT[modules/private-endpoint]
+    WORKSPACE --> PRIVATEENDPOINT
+    REGISTRY --> PRIVATEENDPOINT
+```
+
+### Key Outputs Consumed by Other Modules
+- `resource_group_name_dns`: Used by dependent modules for resource placement
+- `subnet_id`: Used for private endpoint and workspace/registry subnet assignment
+- `dns_zone_*_id`: Used for private DNS zone association in downstream modules
+- `cc_identity_id`, `moe_identity_id`: Used for secure identity assignment in compute and endpoints
+
+**Note:** All dependent modules reference these outputs via Terraform remote state or module outputs. Always deploy `aml-vnet` and confirm outputs before proceeding with other modules.
+
 This module provides the secure networking foundation for Azure ML services:
 
 - **🌐 Network Foundation**: Virtual Network with dedicated subnet for ML resources
