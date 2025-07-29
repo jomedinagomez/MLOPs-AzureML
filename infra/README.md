@@ -43,10 +43,6 @@ infra/
     └── storage-account/           # Storage account module
 ```
 
-### **Deployment Flow & Dependencies**
-
-```mermaid
-
 ## 🚦 Deployment Flow & Dependencies
 
 This infrastructure uses a **modular orchestration** approach. The deployment order and dependencies are as follows:
