@@ -30,4 +30,9 @@ resource "azurerm_monitor_diagnostic_setting" "diag-base" {
   enabled_log {
     category = "ContainerRegistryLoginEvents"
   }
+
+  # Additional comprehensive logging for Container Registry
+  enabled_metric {
+    category = "AllMetrics"
+  }
 }

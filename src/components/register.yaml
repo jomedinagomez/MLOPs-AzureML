@@ -1,4 +1,17 @@
 # <component>
+# https://learn.microsoft.com/en-us/azure/machine-learning/how-to-manage-inputs-outputs-pipeline?view=azureml-api-2&tabs=cli
+# https://learn.microsoft.com/en-us/azure/machine-learning/how-to-manage-inputs-outputs-pipeline?view=azureml-api-2&tabs=cli#define-optional-inputs
+#
+# FIX NOTE: The registry parameter is optional. When using optional inputs in Azure ML components,
+# they must be wrapped in $[[...]] syntax in the command section. This allows the parameter
+# to be conditionally included only when provided, preventing errors when the input is not specified.
+# Format: $[[--parameter-name ${{inputs.parameter-name}}]]
+#
+# COMMON ERROR: "Identity is not allowed to access registry"
+# This error occurs when the compute identity or user doesn't have permissions to access the external registry.
+# To fix: Ensure the registry exists and the user/managed identity has proper RBAC permissions on the registry.
+# Required roles: AzureML Registry User or higher on the target registry resource.
+#
 $schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
 name: register_taxi_fares
 display_name: RegisterTaxiFares
@@ -10,17 +23,23 @@ inputs:
     type: string
   compare_output:
     type: uri_folder
+  registry:
+    type: string
+    optional: true
 outputs:
   register_output:
     type: uri_folder
 environment:
       conda_file: ../../environment/train/conda.yaml
       image: mcr.microsoft.com/azureml/openmpi5.0-ubuntu24.04:latest
-code: ../register_to_ws/
+code: ../register/
+# COMMAND FIX: Using $[[...]] syntax for optional registry parameter
+# This ensures the --registry argument is only included when registry input is provided
 command: >-
   python register.py 
   --model_input ${{inputs.model_input}} 
   --model_name ${{inputs.model_name}} 
   --compare_output ${{inputs.compare_output}} 
-  --register_output ${{outputs.register_output}} 
+  --register_output ${{outputs.register_output}}
+  $[[--registry ${{inputs.registry}}]] 
 # </component>

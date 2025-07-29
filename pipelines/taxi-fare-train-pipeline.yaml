@@ -9,6 +9,7 @@ inputs:
   model_name: 'taxi-classification'
   endpoint_name: 'demo-classification'
   deployment_name: 'green'
+  registry: 'amlrdevcc001'
 outputs: 
   pipeline_job_trained_model:
     mode: rw_mount
@@ -105,12 +106,25 @@ jobs:
       compare_output: ${{parent.jobs.compare_job.outputs.compare_output}}
     outputs:
       register_output:
-  
-  deployws_job:
+
+  registerex_job:
     type: command
-    component: ../src/components/deploy.yaml
+    component: ../src/components/register.yaml
     inputs:
+      model_input: ${{parent.jobs.train_job.outputs.model_output}}
       model_name: ${{parent.inputs.model_name}}
-      endpoint_name: ${{parent.inputs.endpoint_name}}
-      deployment_name: ${{parent.inputs.deployment_name}}
-      register_job_status: ${{parent.jobs.registerws_job.outputs.register_output}}
+      registry: ${{parent.inputs.registry}}
+      compare_output: ${{parent.jobs.compare_job.outputs.compare_output}}
+    outputs:
+      register_output:
+
+# Deployment job is commented out for now
+
+# deployws_job:
+#   type: command
+#   component: ../src/components/deploy.yaml
+#   inputs:
+#     model_name: ${{parent.inputs.model_name}}
+#     endpoint_name: ${{parent.inputs.endpoint_name}}
+#     deployment_name: ${{parent.inputs.deployment_name}}
+#     register_job_status: ${{parent.jobs.registerws_job.outputs.register_output}}

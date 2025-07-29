@@ -1,9 +1,3 @@
 # Setup providers
-provider "azapi" {
-}
-
-provider "azurerm" {
-  features {}
-  storage_use_azuread = true
-  subscription_id = var.sub_id
-}
+# Note: All providers are inherited from root module
+# No provider blocks needed in child modules

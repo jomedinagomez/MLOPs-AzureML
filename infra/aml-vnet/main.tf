@@ -1,5 +1,5 @@
 resource "azurerm_resource_group" "aml_vnet_rg" {
-  name     = "${local.vnet_resource_group_prefix}${var.purpose}${var.location_code}${var.random_string}"
+  name     = "${local.vnet_resource_group_prefix}-${var.purpose}-${var.location_code}"
   location = var.location
   tags     = var.tags
 }
@@ -19,12 +19,6 @@ resource "azurerm_subnet" "aml_subnet" {
   address_prefixes     = [var.subnet_address_prefix]
 }
 
-
-output "subnet_id" {
-  value = azurerm_subnet.aml_subnet.id
-}
-
-
 # Managed Identity for Compute Cluster
 
 resource "azurerm_user_assigned_identity" "cc" {
@@ -41,14 +35,6 @@ resource "azurerm_user_assigned_identity" "moe" {
   location            = var.location
   resource_group_name = azurerm_resource_group.aml_vnet_rg.name
   tags                = var.tags
-}
-
-output "cc_identity_id" {
-  value = azurerm_user_assigned_identity.cc.id
-}
-
-output "moe_identity_id" {
-  value = azurerm_user_assigned_identity.moe.id
 }
 
 ##### Private DNS Zones for Azure ML and supporting services
@@ -196,66 +182,34 @@ resource "azurerm_private_dns_zone_virtual_network_link" "aml_instances_link" {
   tags                  = var.tags
 }
 
-##### Outputs for other modules to reference
+##### Log Analytics and Monitoring
 #####
 
-output "resource_group_name" {
-  description = "Name of the resource group containing VNet and DNS zones"
-  value       = azurerm_resource_group.aml_vnet_rg.name
+# Log Analytics Workspace for VNet monitoring
+resource "azurerm_log_analytics_workspace" "vnet_logs" {
+  name                = "${local.log_analytics_prefix}${var.purpose}${var.location_code}${var.random_string}"
+  location            = azurerm_resource_group.aml_vnet_rg.location
+  resource_group_name = azurerm_resource_group.aml_vnet_rg.name
+  sku                 = var.log_analytics_sku
+  retention_in_days   = var.log_analytics_retention_days
+  tags                = var.tags
 }
 
-output "vnet_id" {
-  description = "ID of the virtual network"
-  value       = azurerm_virtual_network.aml_vnet.id
-}
+##### Diagnostic Settings for Monitoring
+#####
 
-output "vnet_name" {
-  description = "Name of the virtual network"
-  value       = azurerm_virtual_network.aml_vnet.name
-}
+# Virtual Network diagnostic settings with supported log categories
+resource "azurerm_monitor_diagnostic_setting" "vnet_diagnostics" {
+  name                       = "${azurerm_virtual_network.aml_vnet.name}-diagnostics"
+  target_resource_id         = azurerm_virtual_network.aml_vnet.id
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.vnet_logs.id
 
-# DNS Zone Resource IDs (for private endpoint configuration)
-output "dns_zone_blob_id" {
-  description = "Resource ID of the blob storage DNS zone"
-  value       = azurerm_private_dns_zone.blob.id
-}
+  # VNet only supports VMProtectionAlerts log category based on Microsoft documentation
+  enabled_log {
+    category = "VMProtectionAlerts"
+  }
 
-output "dns_zone_file_id" {
-  description = "Resource ID of the file storage DNS zone"
-  value       = azurerm_private_dns_zone.file.id
-}
-
-output "dns_zone_table_id" {
-  description = "Resource ID of the table storage DNS zone"
-  value       = azurerm_private_dns_zone.table.id
-}
-
-output "dns_zone_queue_id" {
-  description = "Resource ID of the queue storage DNS zone"
-  value       = azurerm_private_dns_zone.queue.id
-}
-
-output "dns_zone_keyvault_id" {
-  description = "Resource ID of the Key Vault DNS zone"
-  value       = azurerm_private_dns_zone.keyvault.id
-}
-
-output "dns_zone_acr_id" {
-  description = "Resource ID of the Container Registry DNS zone"
-  value       = azurerm_private_dns_zone.acr.id
-}
-
-output "dns_zone_aml_api_id" {
-  description = "Resource ID of the Azure ML API DNS zone"
-  value       = azurerm_private_dns_zone.aml_api.id
-}
-
-output "dns_zone_aml_notebooks_id" {
-  description = "Resource ID of the Azure ML Notebooks DNS zone"
-  value       = azurerm_private_dns_zone.aml_notebooks.id
-}
-
-output "dns_zone_aml_instances_id" {
-  description = "Resource ID of the Azure ML Instances DNS zone"
-  value       = azurerm_private_dns_zone.aml_instances.id
+  enabled_metric {
+    category = "AllMetrics"
+  }
 }

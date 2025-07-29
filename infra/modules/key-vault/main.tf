@@ -56,21 +56,27 @@ resource "azurerm_key_vault_access_policy" "access-policy" {
   certificate_permissions = each.value.certificate_permissions
 }
 
-resource "azurerm_monitor_diagnostic_setting" "diag-base" {
-  depends_on = [ 
-    azurerm_key_vault.kv,
-    azurerm_role_assignment.assign-admin
-  ]
+# Temporarily disabled due to conflict with existing diagnostic setting
+# resource "azurerm_monitor_diagnostic_setting" "diag-base" {
+#   depends_on = [ 
+#     azurerm_key_vault.kv,
+#     azurerm_role_assignment.assign-admin
+#   ]
 
-  name                       = "diag-base"
-  target_resource_id         = azurerm_key_vault.kv.id
-  log_analytics_workspace_id = var.law_resource_id
+#   name                       = "diag-base"
+#   target_resource_id         = azurerm_key_vault.kv.id
+#   log_analytics_workspace_id = var.law_resource_id
 
-  enabled_log {
-    category = "AuditEvent"
-  }
+#   enabled_log {
+#     category = "AuditEvent"
+#   }
 
-  enabled_log {
-    category = "AzurePolicyEvaluationDetails"
-  }
-}
+#   enabled_log {
+#     category = "AzurePolicyEvaluationDetails"
+#   }
+
+#   metric {
+#     category = "AllMetrics"
+#     enabled  = true
+#   }
+# }

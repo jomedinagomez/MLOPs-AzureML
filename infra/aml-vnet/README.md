@@ -1,53 +1,106 @@
 # Azure ML Virtual Network Infrastructure Module
 
-This Terraform module deploys the foundational networking infrastructure required for Azure Machine Learning services, including virtual network, subnets, private DNS zones, and managed identities.
+This Terraform module deploys the foundational networking infrastructure for secure Azure Machine Learning deployments. It creates the complete networking foundation including virtual network, private DNS zones, and managed identities required for a private ML environment.
 
-## Overview
+## 🎯 **Module Overview**
 
-This module creates the networking foundation for secure Azure ML deployments:
-- Virtual Network with dedicated subnet for ML resources
-- Nine private DNS zones for all Azure ML and supporting services
-- VNet links for proper DNS resolution
-- User-assigned managed identities for compute clusters and endpoints
-- Complete network isolation foundation
+This module provides the secure networking foundation for Azure ML services:
 
-## Required Customizations
+- **🌐 Network Foundation**: Virtual Network with dedicated subnet for ML resources
+- **🔒 Private DNS**: Nine private DNS zones for all Azure ML and supporting services  
+- **🔗 DNS Integration**: VNet links for proper private endpoint DNS resolution
+- **🆔 Managed Identities**: User-assigned identities for compute clusters and online endpoints
+- **🛡️ Security**: Complete network isolation for private ML deployments
 
-Before deploying, you MUST update the following values in `terraform.tfvars`:
+## 🏗️ **Architecture**
 
-### 1. Network Configuration
-Update the following network settings to match your requirements:
+```mermaid
+graph TB
+    subgraph "Resource Group: {resource-group-name}"
+        VNet[Virtual Network<br/>10.1.0.0/16]
+        Subnet[ML Subnet<br/>10.1.1.0/24]
+        
+        subgraph "Private DNS Zones"
+            DNS1[privatelink.blob.core.windows.net]
+            DNS2[privatelink.file.core.windows.net]  
+            DNS3[privatelink.table.core.windows.net]
+            DNS4[privatelink.queue.core.windows.net]
+            DNS5[privatelink.vaultcore.azure.net]
+            DNS6[privatelink.azurecr.io]
+            DNS7[privatelink.api.azureml.ms]
+            DNS8[privatelink.notebooks.azure.net]
+            DNS9[instances.azureml.ms]
+        end
+        
+        subgraph "Managed Identities"
+            MI1[{cluster-identity-name}<br/>Compute Cluster Identity]
+            MI2[{endpoint-identity-name}<br/>Online Endpoint Identity]
+        end
+        
+        VNet --> Subnet
+        DNS1 -.-> VNet
+        DNS2 -.-> VNet
+        DNS3 -.-> VNet
+        DNS4 -.-> VNet
+        DNS5 -.-> VNet
+        DNS6 -.-> VNet
+        DNS7 -.-> VNet
+        DNS8 -.-> VNet
+        DNS9 -.-> VNet
+    end
+```
 
+## 📋 **Required Configuration**
+
+### **Critical Settings to Update**
+
+Before deploying this module, you **MUST** customize these values in `terraform.tfvars`:
+
+#### 1. **Network Configuration** 🌐
 ```hcl
-vnet_address_space     = "10.1.0.0/16"        # VNet address range
-subnet_address_prefix  = "10.1.1.0/24"        # Subnet for ML resources
+# Network ranges - MUST NOT conflict with existing networks
+vnet_address_space     = "10.1.0.0/16"        # VNet CIDR block (65,534 IPs)
+subnet_address_prefix  = "10.1.1.0/24"        # ML subnet (254 IPs)
 ```
 
-**Important**: Ensure these address ranges don't conflict with existing networks in your environment.
+**⚠️ Critical**: Verify these ranges don't overlap with:
+- Existing Azure VNets in your subscription
+- On-premises network ranges
+- Other connected networks
 
-### 2. Location and Naming
-- `location`: Azure region for all resources
-- `location_code`: Short code for the region (e.g., "cc" for Canada Central)
-- `purpose`: Environment identifier (e.g., "dev", "test", "prod")
-- `random_string`: Unique identifier to ensure resource name uniqueness
-
-### 3. Tags
-Customize the `tags` section to match your organization's tagging strategy.
-
-## Optional Customizations
-
-All variables have sensible defaults but can be customized based on your requirements:
-
-- **Network Sizing**: Adjust VNet and subnet address spaces based on your scale requirements
-- **Naming Convention**: Modify the naming pattern in `locals.tf` if needed
-- **Resource Organization**: Update tags for consistent resource management
-
-## Architecture
-
-This module creates the networking foundation for a complete Azure ML environment:
-
+#### 2. **Environment & Location** 🌍
+```hcl
+location               = "canadacentral"       # Azure region for deployment
+location_code          = "cc"                 # Short region identifier
+purpose                = "dev"                # Environment (dev/test/prod)
+random_string          = "001"               # Unique identifier for naming
 ```
-┌─────────────────────────────────────────────────────────────────┐
+
+#### 3. **Resource Tagging** 🏷️
+```hcl
+tags = {
+  environment   = "dev"
+  project      = "ml-platform" 
+  owner        = "YourName"           # Update with your name
+  created_by   = "terraform"
+  created_date = "2025-01-28"         # Update with current date
+}
+```
+
+### **Resource Naming Convention**
+
+Resources follow this standardized pattern:
+- **Resource Group**: `rg-aml-vnet-{purpose}-{location_code}`
+- **VNet**: `vnet-{purpose}-{location_code}-{random_string}`
+- **Subnet**: `snet-{purpose}-ml-{location_code}-{random_string}`
+- **DNS Zones**: Standard Azure private DNS zone names
+- **Managed Identities**: `{purpose}-mi-{type}` (cluster/endpoint)
+
+**Example with dev environment:**
+- Resource Group: `{resource-group-name}`
+- VNet: `{vnet-name}`
+- Subnet: `{subnet-name}`
+- Managed Identity: `{managed-identity-name}`
 │                    Networking Resource Group                    │
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐    │
@@ -206,6 +259,7 @@ The module provides the following outputs for use by other modules:
 
 ### Network Outputs
 - `resource_group_name`: Name of the networking resource group
+- `resource_group_name_dns`: Name of the resource group containing DNS zones (alias for resource_group_name)
 - `vnet_id`: Full resource ID of the virtual network
 - `vnet_name`: Name of the virtual network
 - `subnet_id`: Full resource ID of the ML subnet
@@ -223,7 +277,9 @@ The module provides the following outputs for use by other modules:
 
 ### Identity Outputs
 - `cc_identity_id`: Resource ID of compute cluster managed identity
+- `cc_identity_name`: Name of compute cluster managed identity (follows ${purpose}-mi-cluster pattern)
 - `moe_identity_id`: Resource ID of managed online endpoint identity
+- `moe_identity_name`: Name of managed online endpoint identity (follows ${purpose}-mi-endpoint pattern)
 
 ## Troubleshooting
 
@@ -305,6 +361,20 @@ This module provides foundational networking for:
 - **aml-registry-smi**: Azure ML registry with private connectivity
 - **modules/private-endpoint**: Shared private endpoint creation
 
+## Module Integration
+
+This module is designed to be deployed first in a multi-module Azure ML infrastructure:
+
+1. **Deploy `aml-vnet` first**: Creates networking foundation and managed identities
+2. **Deploy `aml-managed-smi` next**: Creates ML workspace using outputs from this module
+
+### Key Integration Points:
+- **Resource Group**: The `resource_group_name_dns` output is used by dependent modules
+- **Subnet**: The `subnet_id` output provides the target for private endpoints
+- **DNS Zones**: All DNS zone outputs enable private endpoint DNS resolution
+- **Managed Identities**: Identity outputs provide secure compute authentication
+- **Naming Consistency**: Uses `${purpose}-mi-cluster` pattern for predictable identity names
+
 ## Best Practices
 
 1. **Network Planning**: Carefully plan address spaces to avoid future conflicts
@@ -316,14 +386,6 @@ This module provides foundational networking for:
 
 ## Network Planning Guidelines
 
-### Address Space Recommendations
-
-| Environment | VNet CIDR | Subnet CIDR | Max Private Endpoints |
-|-------------|-----------|-------------|----------------------|
-| Development | /20 (4096 IPs) | /24 (256 IPs) | ~200 |
-| Testing | /19 (8192 IPs) | /23 (512 IPs) | ~400 |
-| Production | /18 (16384 IPs) | /22 (1024 IPs) | ~800 |
-
 ### DNS Zone Requirements
 
 All 9 private DNS zones are required for complete Azure ML functionality:
@@ -331,3 +393,9 @@ All 9 private DNS zones are required for complete Azure ML functionality:
 - Key Vault zone secures secrets and certificates
 - Container Registry zone protects ML container images
 - ML-specific zones enable private workspace and compute access
+
+---
+
+**Authors**: Jose Medina Gomez & Matt Felton  
+**Last Updated**: July 29, 2025  
+**Version**: 1.6.0 - Production-Ready Diagnostic Settings Deployment

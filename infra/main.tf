@@ -1,0 +1,109 @@
+terraform {
+  required_version = ">= 1.0"
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 4.32.0"
+    }
+    azapi = {
+      source  = "azure/azapi"
+      version = "~> 2.3.0"
+    }
+  }
+}
+
+provider "azurerm" {
+  features {}
+}
+
+provider "azapi" {}
+
+# Data sources to automatically get current subscription and user information
+data "azurerm_client_config" "current" {}
+
+##### Module Orchestration
+#####
+
+# 1. Create networking foundation first
+module "aml_vnet" {
+  source = "./aml-vnet"
+  
+  purpose               = var.purpose
+  location              = var.location
+  location_code         = var.location_code
+  random_string         = var.random_string
+  vnet_address_space    = var.vnet_address_space
+  subnet_address_prefix = var.subnet_address_prefix
+  tags                  = var.tags
+}
+
+# 2. Create ML workspace (depends on VNet outputs)
+module "aml_workspace" {
+  source = "./aml-managed-smi"
+  
+  # Core variables
+  purpose       = var.purpose
+  location      = var.location
+  location_code = var.location_code
+  random_string = var.random_string
+  sub_id        = data.azurerm_client_config.current.subscription_id
+  user_object_id = data.azurerm_client_config.current.object_id
+  tags          = var.tags
+  
+  # Use VNet module outputs instead of variables
+  subnet_id                    = module.aml_vnet.subnet_id
+  resource_group_name_dns      = module.aml_vnet.resource_group_name_dns
+  workload_vnet_location       = var.location
+  workload_vnet_location_code  = var.location_code
+  
+  # Pass managed identity IDs from VNet module
+  compute_cluster_identity_id  = module.aml_vnet.cc_identity_id
+  compute_cluster_principal_id = module.aml_vnet.cc_identity_principal_id
+  
+  # Pass DNS zone IDs from VNet module
+  dns_zone_blob_id         = module.aml_vnet.dns_zone_blob_id
+  dns_zone_file_id         = module.aml_vnet.dns_zone_file_id
+  dns_zone_table_id        = module.aml_vnet.dns_zone_table_id
+  dns_zone_queue_id        = module.aml_vnet.dns_zone_queue_id
+  dns_zone_keyvault_id     = module.aml_vnet.dns_zone_keyvault_id
+  dns_zone_acr_id          = module.aml_vnet.dns_zone_acr_id
+  dns_zone_aml_api_id      = module.aml_vnet.dns_zone_aml_api_id
+  dns_zone_aml_notebooks_id = module.aml_vnet.dns_zone_aml_notebooks_id
+  
+  # Pass Log Analytics workspace for diagnostic settings
+  log_analytics_workspace_id = module.aml_vnet.log_analytics_workspace_id
+}
+
+# 3. Create registry (depends on VNet outputs)
+module "aml_registry" {
+  source = "./aml-registry-smi"
+  
+  # Core variables
+  purpose       = var.purpose
+  location      = var.location
+  location_code = var.location_code
+  random_string = var.random_string
+  sub_id        = data.azurerm_client_config.current.subscription_id
+  user_object_id = data.azurerm_client_config.current.object_id
+  tags          = var.tags
+  
+  # Use VNet module outputs instead of variables
+  subnet_id                    = module.aml_vnet.subnet_id
+  resource_group_name_dns      = module.aml_vnet.resource_group_name_dns
+  workload_vnet_location       = var.location
+  workload_vnet_location_code  = var.location_code
+  
+  # Pass managed identity IDs from VNet module
+  compute_cluster_identity_id  = module.aml_vnet.cc_identity_id
+  compute_cluster_principal_id = module.aml_vnet.cc_identity_principal_id
+  
+  # Pass DNS zone IDs from VNet module
+  dns_zone_blob_id     = module.aml_vnet.dns_zone_blob_id
+  dns_zone_file_id     = module.aml_vnet.dns_zone_file_id
+  dns_zone_keyvault_id = module.aml_vnet.dns_zone_keyvault_id
+  dns_zone_acr_id      = module.aml_vnet.dns_zone_acr_id
+  dns_zone_aml_api_id  = module.aml_vnet.dns_zone_aml_api_id
+  
+  # Pass Log Analytics workspace for diagnostic settings
+  log_analytics_workspace_id = module.aml_vnet.log_analytics_workspace_id
+}

@@ -5,7 +5,7 @@
 ##
 resource "azurerm_resource_group" "rgwork" {
 
-  name     = "rgaml${var.location_code}${var.random_string}"
+  name     = "rg-aml-ws-${var.purpose}-${var.location_code}"
   location = var.location
 
   tags = var.tags
@@ -13,40 +13,6 @@ resource "azurerm_resource_group" "rgwork" {
  
 ## Create a Log Analytics Workspace where resources in this deployment will send their diagnostic logs
 ##
-resource "azurerm_log_analytics_workspace" "log_analytics_workspace" {
-  name                = "law${var.purpose}${var.location_code}${var.random_string}"
-  location            = var.location
-  resource_group_name = azurerm_resource_group.rgwork.name
-
-  sku               = "PerGB2018"
-  retention_in_days = 30
-
-  tags = var.tags
-
-  lifecycle {
-    ignore_changes = [
-      tags["created_date"],
-      tags["created_by"]
-    ]
-  }
-}
-
-## Configure diagnostic settings for Log Analytics Workspace
-##
-resource "azurerm_monitor_diagnostic_setting" "law-diag-base" {
-  depends_on = [azurerm_log_analytics_workspace.log_analytics_workspace]
-
-  name                       = "diag-base"
-  target_resource_id         = azurerm_log_analytics_workspace.log_analytics_workspace.id
-  log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace.id
-
-  enabled_log {
-    category = "Audit"
-  }
-  enabled_log {
-    category = "SummaryLogs"
-  }
-}
 
 ##### Create resources required by AML workspace
 #####
@@ -54,13 +20,10 @@ resource "azurerm_monitor_diagnostic_setting" "law-diag-base" {
 ## Create Application Insights for AML Workspace
 ##
 resource "azurerm_application_insights" "aml-appins" {
-  depends_on = [
-    azurerm_log_analytics_workspace.log_analytics_workspace
-  ]
   name                = "${local.app_insights_prefix}${var.purpose}${var.location_code}${var.random_string}"
   location            = var.location
   resource_group_name = azurerm_resource_group.rgwork.name
-  workspace_id        = azurerm_log_analytics_workspace.log_analytics_workspace.id
+  workspace_id        = var.log_analytics_workspace_id
   application_type    = "other"
 }
 
@@ -73,7 +36,7 @@ module "container_registry" {
   location            = var.location
   location_code       = var.location_code
   resource_group_name = azurerm_resource_group.rgwork.name
-  law_resource_id     = azurerm_log_analytics_workspace.log_analytics_workspace.id
+  law_resource_id     = var.log_analytics_workspace_id
 
   tags = var.tags
 }
@@ -91,20 +54,20 @@ module "storage_account_default" {
   tags = var.tags
   
   # Identity controls
-  key_based_authentication = false
+  key_based_authentication = true
 
   # Networking controls
   allow_blob_public_access = false
   network_access_default = "Deny"
   network_trusted_services_bypass = [ 
-    "None"
+    "AzureServices"
    ]
   resource_access = [
     {
       endpoint_resource_id = "/subscriptions/${var.sub_id}/resourcegroups/*/providers/Microsoft.MachineLearningServices/workspaces/*"
     }
   ]
-  law_resource_id = azurerm_log_analytics_workspace.log_analytics_workspace.id
+  law_resource_id = var.log_analytics_workspace_id
 }
 
 ## Create Key Vault which will hold secrets for the AML workspace and assign user the Key Vault Administrator role over it
@@ -117,7 +80,7 @@ module "keyvault_aml" {
   location_code       = var.location_code
   resource_group_name = azurerm_resource_group.rgwork.name
   purpose             = var.purpose
-  law_resource_id     = azurerm_log_analytics_workspace.log_analytics_workspace.id
+  law_resource_id     = var.log_analytics_workspace_id
   tags                = var.tags
 
   kv_admin_object_id = var.user_object_id
@@ -330,98 +293,6 @@ resource "azapi_resource" "aml_workspace" {
   }
 }
 
-## Create diagnostic settings for AML workspace
-##
-resource "azurerm_monitor_diagnostic_setting" "aml-diag-base" {
-  depends_on = [
-    azapi_resource.aml_workspace,
-    azurerm_log_analytics_workspace.log_analytics_workspace
-  ]
-
-  name                       = "diag-base"
-  target_resource_id         = azapi_resource.aml_workspace.id
-  log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace.id
-
-  enabled_log {
-    category = "AmlComputeClusterEvent"
-  }
-  enabled_log {
-    category = "AmlComputeClusterNodeEvent"
-  }
-  enabled_log {
-    category = "AmlComputeJobEvent"
-  }
-  enabled_log {
-    category = "AmlComputeCpuGpuUtilization"
-  }
-  enabled_log {
-    category = "AmlRunStatusChangedEvent"
-  }
-  enabled_log {
-    category = "ModelsChangeEvent"
-  }
-  enabled_log {
-    category = "ModelsReadEvent"
-  }
-  enabled_log {
-    category = "ModelsActionEvent"
-  }
-  enabled_log {
-    category = "DeploymentReadEvent"
-  }
-  enabled_log {
-    category = "DeploymentEventACI"
-  }
-  enabled_log {
-    category = "DeploymentEventAKS"
-  }
-  enabled_log {
-    category = "InferencingOperationAKS"
-  }
-  enabled_log {
-    category = "InferencingOperationACI"
-  }
-  enabled_log {
-    category = "EnvironmentChangeEvent"
-  }
-  enabled_log {
-    category = "EnvironmentReadEvent"
-  }
-  enabled_log {
-    category = "DataLabelChangeEvent"
-  }
-  enabled_log {
-    category = "DataLabelReadEvent"
-  }
-  enabled_log {
-    category = "ComputeInstanceEvent"
-  }
-  enabled_log {
-    category = "DataStoreChangeEvent"
-  }
-  enabled_log {
-    category = "DataStoreReadEvent"
-  }
-  enabled_log {
-    category = "DataSetChangeEvent"
-  }
-  enabled_log {
-    category = "DataSetReadEvent"
-  }
-  enabled_log {
-    category = "PipelineChangeEvent"
-  }
-  enabled_log {
-    category = "PipelineReadEvent"
-  }
-  enabled_log {
-    category = "RunEvent"
-  }
-  enabled_log {
-    category = "RunReadEvent"
-  }
-}
-
 ##### Create a Private Endpoints workspace required resources including default storage account
 ##### Key Vault, and Container Registry
 
@@ -444,9 +315,7 @@ module "private_endpoint_st_default_blob" {
   subresource_name = "blob"
 
   subnet_id = var.subnet_id
-  private_dns_zone_ids = [
-    "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net"
-  ]
+  private_dns_zone_ids = [local.dns_zone_blob_id]
 }
 
 module "private_endpoint_st_default_file" {
@@ -466,9 +335,7 @@ module "private_endpoint_st_default_file" {
   subresource_name = "file"
 
   subnet_id = var.subnet_id
-  private_dns_zone_ids = [
-    "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.file.core.windows.net"
-  ]
+  private_dns_zone_ids = [local.dns_zone_file_id]
 }
 
 module "private_endpoint_st_default_table" {
@@ -488,9 +355,7 @@ module "private_endpoint_st_default_table" {
   subresource_name = "table"
 
   subnet_id = var.subnet_id
-  private_dns_zone_ids = [
-    "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.table.core.windows.net"
-  ]
+  private_dns_zone_ids = [local.dns_zone_table_id]
 }
 
 module "private_endpoint_st_default_queue" {
@@ -510,9 +375,7 @@ module "private_endpoint_st_default_queue" {
   subresource_name = "queue"
 
   subnet_id = var.subnet_id
-  private_dns_zone_ids = [
-    "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.queue.core.windows.net"
-  ]
+  private_dns_zone_ids = [local.dns_zone_queue_id]
 }
 
 module "private_endpoint_kv" {
@@ -533,9 +396,7 @@ module "private_endpoint_kv" {
 
 
   subnet_id = var.subnet_id
-  private_dns_zone_ids = [
-    "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net"
-  ]
+  private_dns_zone_ids = [local.dns_zone_keyvault_id]
 }
 
 module "private_endpoint_container_registry" {
@@ -555,9 +416,7 @@ module "private_endpoint_container_registry" {
   subresource_name = "registry"
 
   subnet_id = var.subnet_id
-  private_dns_zone_ids = [
-    "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.azurecr.io"
-  ]
+  private_dns_zone_ids = [local.dns_zone_acr_id]
 }
 
 ##### Create Private Endpoint for AML Workspace and the A record for the AML Workspace compute instances
@@ -583,8 +442,8 @@ module "private_endpoint_aml_workspace" {
 
   subnet_id = var.subnet_id
   private_dns_zone_ids = [
-    "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.api.azureml.ms",
-    "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.notebooks.azure.net"
+    local.dns_zone_aml_api_id,
+    local.dns_zone_aml_notebooks_id
   ]
 }
 
@@ -697,21 +556,192 @@ resource "azurerm_role_assignment" "file_perm_default_sa" {
   principal_id         = var.user_object_id
 }
 
-##### Outputs
+##### Create compute cluster role assignments
 #####
 
-output "workspace_id" {
-  description = "ID of the Azure ML workspace"
-  value       = azapi_resource.aml_workspace.id
+## Use the compute cluster managed identity passed from the VNet module
+## The managed identity IDs are always passed from the parent module
+##
+locals {
+  # Use the managed identity values passed from the VNet module
+  compute_cluster_identity_id = var.compute_cluster_identity_id
+  compute_cluster_principal_id = var.compute_cluster_principal_id
 }
 
-output "workspace_name" {
-  description = "Name of the Azure ML workspace"
-  value       = azapi_resource.aml_workspace.name
+## Assign AzureML Data Scientist role to compute identity for the workspace
+## This allows compute clusters to perform ML operations within the workspace
+##
+resource "azurerm_role_assignment" "compute_ml_data_scientist" {
+  depends_on = [
+    azapi_resource.aml_workspace
+  ]
+  
+  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}mldatascientist")
+  scope                = azapi_resource.aml_workspace.id  # Individual workspace resource
+  role_definition_name = "AzureML Data Scientist"
+  principal_id         = local.compute_cluster_principal_id
 }
 
-output "resource_group_name" {
-  description = "Name of the resource group containing the AML workspace"
-  value       = azurerm_resource_group.rgwork.name
+## Assign Key Vault Secrets User role to compute identity for workspace Key Vault
+## This allows compute clusters to access secrets needed for training
+##
+resource "azurerm_role_assignment" "compute_keyvault_secrets_user" {
+  depends_on = [
+    module.keyvault_aml
+  ]
+  
+  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}${module.keyvault_aml.name}secretsuser")
+  scope                = module.keyvault_aml.id  # Individual Key Vault resource
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = local.compute_cluster_principal_id
 }
+
+## Assign Storage Blob Data Contributor role to compute identity for workspace storage
+## This allows compute clusters to read/write training data and model artifacts
+##
+resource "azurerm_role_assignment" "compute_storage_blob_contributor" {
+  depends_on = [
+    module.storage_account_default
+  ]
+  
+  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}${module.storage_account_default.name}blobcontrib")
+  scope                = module.storage_account_default.id  # Individual storage account resource
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = local.compute_cluster_principal_id
+}
+
+## Assign Storage File Data Privileged Contributor role to compute identity for workspace storage
+## This allows compute instances using this managed identity to access workspace file shares and notebooks
+##
+resource "azurerm_role_assignment" "compute_storage_file_privileged_contributor" {
+  depends_on = [
+    module.storage_account_default
+  ]
+  
+  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}${module.storage_account_default.name}filepriv")
+  scope                = module.storage_account_default.id  # Individual storage account resource
+  role_definition_name = "Storage File Data Privileged Contributor"
+  principal_id         = local.compute_cluster_principal_id
+}
+
+##### Diagnostic Settings for Monitoring
+#####
+
+# Diagnostic settings for Application Insights
+resource "azurerm_monitor_diagnostic_setting" "appinsights_diagnostics" {
+  name                       = "${azurerm_application_insights.aml-appins.name}-diagnostics"
+  target_resource_id         = azurerm_application_insights.aml-appins.id
+  log_analytics_workspace_id = var.log_analytics_workspace_id
+
+  enabled_log {
+    category = "AppAvailabilityResults"
+  }
+
+  enabled_log {
+    category = "AppBrowserTimings"
+  }
+
+  enabled_log {
+    category = "AppDependencies"
+  }
+
+  enabled_log {
+    category = "AppEvents"
+  }
+
+  enabled_log {
+    category = "AppExceptions"
+  }
+
+  enabled_log {
+    category = "AppMetrics"
+  }
+
+  enabled_log {
+    category = "AppPageViews"
+  }
+
+  enabled_log {
+    category = "AppPerformanceCounters"
+  }
+
+  enabled_log {
+    category = "AppRequests"
+  }
+
+  enabled_log {
+    category = "AppSystemEvents"
+  }
+
+  enabled_log {
+    category = "AppTraces"
+  }
+
+  enabled_metric {
+    category = "AllMetrics"
+  }
+}
+
+# Azure ML workspace diagnostic settings with all supported log categories
+resource "azurerm_monitor_diagnostic_setting" "ml_workspace_diagnostics" {
+  name                       = "${azapi_resource.aml_workspace.name}-diagnostics"
+  target_resource_id         = azapi_resource.aml_workspace.id
+  log_analytics_workspace_id = var.log_analytics_workspace_id
+
+  # ML Workspace supported log categories based on Microsoft documentation
+  enabled_log {
+    category = "AmlComputeClusterEvent"
+  }
+  
+  enabled_log {
+    category = "AmlComputeClusterNodeEvent"
+  }
+  
+  enabled_log {
+    category = "AmlComputeJobEvent"
+  }
+  
+  enabled_log {
+    category = "AmlComputeCpuGpuUtilization"
+  }
+  
+  enabled_log {
+    category = "AmlRunStatusChangedEvent"
+  }
+  
+  enabled_log {
+    category = "ModelsChangeEvent"
+  }
+  
+  enabled_log {
+    category = "ModelsReadEvent"
+  }
+  
+  
+  enabled_log {
+    category = "DataSetChangeEvent"
+  }
+  
+  enabled_log {
+    category = "DataStoreChangeEvent"
+  }
+  
+  enabled_log {
+    category = "EnvironmentChangeEvent"
+  }
+  
+  enabled_log {
+    category = "EnvironmentReadEvent"
+  }
+  
+  enabled_log {
+    category = "ComputeInstanceEvent"
+  }
+
+  enabled_metric {
+    category = "AllMetrics"
+  }
+}
+
+
 

@@ -5,29 +5,9 @@
 ##
 resource "azurerm_resource_group" "rgwork" {
 
-  name     = "rgamlr${var.location_code}${var.random_string}"
+  name     = "rg-aml-reg-${var.purpose}-${var.location_code}"
   location = var.location
   tags = var.tags
-}
-
-## Create a Log Analytics Workspace
-##
-resource "azurerm_log_analytics_workspace" "log_analytics_workspace" {
-  name                = "law${var.purpose}${var.location_code}${var.random_string}"
-  location            = var.location
-  resource_group_name = azurerm_resource_group.rgwork.name
-
-  sku               = "PerGB2018"
-  retention_in_days = 30
-
-  tags = var.tags
-
-  lifecycle {
-    ignore_changes = [
-      tags["created_date"],
-      tags["created_by"]
-    ]
-  }
 }
 
 ##### Create the Azure Machine Learning Registry
@@ -119,11 +99,66 @@ module "private_endpoint_aml_registry" {
   resource_id      = azapi_resource.registry.id
   subresource_name = "amlregistry"
 
-  
-
   subnet_id = var.subnet_id
-  private_dns_zone_ids = [
-    "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.api.azureml.ms"
+  private_dns_zone_ids = [local.dns_zone_aml_api_id]
+}
+
+##### Create role assignments for registry access
+#####
+
+## Assign AzureML Registry User role to user account
+## This allows the user to read and use models from the registry
+##
+resource "azurerm_role_assignment" "registry_user_permission" {
+  depends_on = [
+    time_sleep.wait_registry_identity
   ]
+  
+  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${var.user_object_id}${azapi_resource.registry.name}registryuser")
+  scope                = azapi_resource.registry.id
+  role_definition_name = "AzureML Registry User"
+  principal_id         = var.user_object_id
+}
+
+## Use the compute cluster managed identity passed from the VNet module
+## The managed identity IDs are always passed from the parent module
+##
+locals {
+  # Use the managed identity values passed from the VNet module
+  compute_cluster_identity_id = var.compute_cluster_identity_id
+  compute_cluster_principal_id = var.compute_cluster_principal_id
+}
+
+## Assign AzureML Registry User role to compute cluster managed identity
+## This allows compute clusters to access models from the registry during training/inference
+##
+resource "azurerm_role_assignment" "compute_registry_user" {
+  depends_on = [
+    time_sleep.wait_registry_identity
+  ]
+  
+  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}${azapi_resource.registry.name}registryuser")
+  scope                = azapi_resource.registry.id
+  role_definition_name = "AzureML Registry User"
+  principal_id         = local.compute_cluster_principal_id
+}
+
+##### Diagnostic Settings for Monitoring
+#####
+
+# Azure ML Registry diagnostic settings with supported log categories
+resource "azurerm_monitor_diagnostic_setting" "registry_diagnostics" {
+  name                       = "${azapi_resource.registry.name}-diagnostics"
+  target_resource_id         = azapi_resource.registry.id
+  log_analytics_workspace_id = var.log_analytics_workspace_id
+
+  # ML Registry supported log categories based on Microsoft documentation
+  enabled_log {
+    category = "RegistryAssetReadEvent"
+  }
+  
+  enabled_log {
+    category = "RegistryAssetWriteEvent"
+  }
 }
 

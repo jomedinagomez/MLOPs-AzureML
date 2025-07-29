@@ -57,11 +57,11 @@ resource "azurerm_monitor_diagnostic_setting" "diag-base" {
   target_resource_id         = azurerm_storage_account.storage_account.id
   log_analytics_workspace_id = var.law_resource_id
 
-  metric {
+  enabled_metric {
     category = "Transaction"
   }
 
-  metric {
+  enabled_metric {
     category = "Capacity"
   }
 }

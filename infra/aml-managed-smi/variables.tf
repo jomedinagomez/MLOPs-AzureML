@@ -1,20 +1,20 @@
+variable "purpose" {
+  description = "Environment identifier (e.g., 'dev', 'prod', 'test')"
+  type        = string
+}
+
 variable "location" {
-  description = "The name of the location to provision the resources to"
+  description = "Azure region for all resources"
   type        = string
 }
 
 variable "location_code" {
-  description = "The location code to append to the resource name"
-  type        = string
-}
-
-variable "purpose" {
-  description = "The three character purpose of the resource"
+  description = "Short code for the region (e.g., 'we' for West Europe)"
   type        = string
 }
 
 variable "random_string" {
-  description = "The random string to append to the resource name"
+  description = "Unique string for resource naming"
   type        = string
 }
 
@@ -34,7 +34,7 @@ variable "subnet_id" {
 }
 
 variable "tags" {
-  description = "The tags to apply to the resource"
+  description = "Map of tags to apply to resources"
   type        = map(string)
 }
 
@@ -50,5 +50,69 @@ variable "workload_vnet_location" {
 
 variable "workload_vnet_location_code" {
   description = "The region code where the workload virtual network is located"
+  type        = string
+}
+
+# Optional DNS Zone IDs (for when using module outputs)
+variable "dns_zone_blob_id" {
+  description = "ID of the blob storage DNS zone"
+  type        = string
+  default     = null
+}
+
+variable "dns_zone_file_id" {
+  description = "ID of the file storage DNS zone"
+  type        = string
+  default     = null
+}
+
+variable "dns_zone_table_id" {
+  description = "ID of the table storage DNS zone"
+  type        = string
+  default     = null
+}
+
+variable "dns_zone_queue_id" {
+  description = "ID of the queue storage DNS zone"
+  type        = string
+  default     = null
+}
+
+variable "dns_zone_keyvault_id" {
+  description = "ID of the Key Vault DNS zone"
+  type        = string
+  default     = null
+}
+
+variable "dns_zone_acr_id" {
+  description = "ID of the Container Registry DNS zone"
+  type        = string
+  default     = null
+}
+
+variable "dns_zone_aml_api_id" {
+  description = "ID of the Azure ML API DNS zone"
+  type        = string
+  default     = null
+}
+
+variable "dns_zone_aml_notebooks_id" {
+  description = "ID of the Azure ML Notebooks DNS zone"
+  type        = string
+  default     = null
+}
+
+variable "compute_cluster_identity_id" {
+  description = "ID of the compute cluster managed identity from VNet module"
+  type        = string
+}
+
+variable "compute_cluster_principal_id" {
+  description = "Principal ID of the compute cluster managed identity from VNet module"
+  type        = string
+}
+
+variable "log_analytics_workspace_id" {
+  description = "Resource ID of the Log Analytics workspace for diagnostic settings"
   type        = string
 }

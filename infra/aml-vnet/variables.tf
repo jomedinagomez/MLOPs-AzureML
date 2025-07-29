@@ -1,6 +1,6 @@
 
 variable "purpose" {
-  description = "Purpose or environment tag (e.g., 'dev', 'prod')"
+  description = "Environment identifier (e.g., 'dev', 'prod', 'test')"
   type        = string
 }
 
@@ -32,4 +32,20 @@ variable "subnet_address_prefix" {
 variable "tags" {
   description = "Map of tags to apply to resources"
   type        = map(string)
+}
+
+variable "log_analytics_sku" {
+  description = "SKU for Log Analytics workspace"
+  type        = string
+  default     = "PerGB2018"
+}
+
+variable "log_analytics_retention_days" {
+  description = "Retention period in days for Log Analytics workspace"
+  type        = number
+  default     = 30
+  validation {
+    condition     = var.log_analytics_retention_days >= 30 && var.log_analytics_retention_days <= 730
+    error_message = "Log Analytics retention must be between 30 and 730 days."
+  }
 }
