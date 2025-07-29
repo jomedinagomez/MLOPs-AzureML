@@ -54,107 +54,39 @@ This infrastructure uses a **modular orchestration** approach. The deployment or
 
 ### Orchestration & Dependency Diagram
 ```mermaid
-graph TB
-    subgraph "Root Orchestration"
-        MAIN[Infrastructure Orchestrator<br/>main.tf<br/>🎯 Deploy from here]
+flowchart TD
+    subgraph RG1["rg-aml-vnet-{env}-{loc}"]
+        VNET[VNet & Subnets]
+        DNS[DNS Zones]
+        MI[Managed Identities]
     end
-    
-    subgraph "Foundation Layer: rg-aml-vnet-{environment}-{location-code}"
-        subgraph "Network Infrastructure"
-            VNET[Virtual Network<br/>10.1.0.0/16]
-            SUBNET[Private Subnet<br/>10.1.1.0/24]
-        end
-        
-        subgraph "DNS Infrastructure"
-            DNS[Private DNS Zones<br/>9 zones for Azure services]
-        end
-        
-        subgraph "Identity Management"
-            MI[Managed Identities<br/>Compute & Registry access]
-        end
-        
-        VNET --> SUBNET
-        DNS -.-> VNET
-        MI -.-> VNET
+    subgraph RG2["rg-aml-ws-{env}-{loc}"]
+        WS[ML Workspace]
+        SA[Storage Account]
+        KV[Key Vault]
+        CR[Container Registry]
+        AI[App Insights]
+        CC[Compute Cluster]
     end
-    
-    subgraph "Workspace Layer: rg-aml-ws-{environment}-{location-code}"
-        subgraph "Core ML Services"
-            WS[Azure ML Workspace<br/>Core ML platform]
-            AI[Application Insights<br/>Monitoring & telemetry]
-            CC[Compute Cluster<br/>Training infrastructure]
-        end
-        
-        subgraph "Storage & Security"
-            SA[Storage Account<br/>Data & artifacts]
-            KV[Key Vault<br/>Secrets management]
-            CR[Container Registry<br/>Custom images]
-        end
-        
-        subgraph "Private Connectivity"
-            PE1[Private Endpoints<br/>Storage, KV, ACR]
-        end
-        
-        subgraph "RBAC Configuration"
-            RBAC_WS[User & Identity Access<br/>ML Engineer roles]
-        end
-        
-        WS --> AI
-        WS --> CC
-        SA --> PE1
-        KV --> PE1
-        CR --> PE1
-        MI -.-> CC
+    subgraph RG3["rg-aml-reg-{env}-{loc}"]
+        REG[ML Registry]
+        LA[Log Analytics]
     end
-    
-    subgraph "Registry Layer: rg-aml-reg-{environment}-{location-code}"
-        subgraph "Centralized ML Assets"
-            REG[Azure ML Registry<br/>Model repository]
-            LA[Log Analytics<br/>Registry monitoring]
-        end
-        
-        subgraph "Registry Connectivity"
-            PE2[Registry Private Endpoint<br/>privatelink.api.azureml.ms]
-        end
-        
-        subgraph "Registry RBAC"
-            RBAC_REG[User & Identity Access<br/>Registry User roles]
-        end
-        
-        REG --> LA
-        REG --> PE2
+    subgraph RG4["rg-{registry-name} - Microsoft Managed"]
+        MSREG["Internal Registry Infra<br>Do Not Modify"]
     end
-    
-    subgraph "Microsoft-Managed Resource Group: rg-{registry-name}"
-        MGT[Internal Registry Components<br/>⚠️ Do Not Modify]
-        STOR_SYS[System Storage Account<br/>Auto-managed by Azure]
-        ACR_SYS[System Container Registry<br/>Auto-managed by Azure]
-        
-        REG -.-> MGT
-        MGT --> STOR_SYS
-        MGT --> ACR_SYS
-    end
-    
-    subgraph "External Dependencies"
-        WORKSPACE_CONSUMERS[ML Workspaces<br/>Registry consumers]
-        COMPUTE_ACCESS[Compute Clusters<br/>Registry access]
-    end
-    
-    %% Orchestration Dependencies
-    MAIN --> VNET
-    MAIN --> WS
-    MAIN --> REG
-    
-    %% Foundation Dependencies
-    SUBNET -.-> PE1
-    SUBNET -.-> PE2
-    DNS -.-> PE1
-    DNS -.-> PE2
-    
-    %% Cross-layer Access
-    REG -.-> WORKSPACE_CONSUMERS
-    MI -.-> COMPUTE_ACCESS
-    WS -.-> REG
+
+    VNET -->|subnet outputs| WS
+    DNS --> WS
+    MI --> CC
+    VNET --> REG
+    DNS --> REG
+    REG -.-> MSREG
+
+    style RG4 fill:#fff3cd,stroke:#ff9800,stroke-width:2px
+    style RG1 fill:#e3f2fd
+    style RG2 fill:#e8f5e9
+    style RG3 fill:#f3e5f5
 ```
 
 ### Microsoft-Managed Resource Groups

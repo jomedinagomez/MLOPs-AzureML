@@ -45,8 +45,8 @@ This module provides the secure networking foundation for Azure ML services:
 graph TB
     subgraph "User-Managed Resource Group: rg-aml-vnet-{environment}-{location-code}"
         subgraph "Network Infrastructure"
-            VNet[Virtual Network<br/>10.1.0.0/16<br/>Private Network Foundation]
-            Subnet[ML Subnet<br/>10.1.1.0/24<br/>Workload Isolation]
+            VNet[Virtual Network<br/>10.1.0.0/16]
+            Subnet[ML Subnet<br/>10.1.1.0/24]
         end
         
         subgraph "Private DNS Infrastructure"
@@ -62,45 +62,40 @@ graph TB
         end
         
         subgraph "Identity Management"
-            MI1[Compute Cluster Identity<br/>cluster-identity-name<br/>Training & Inference Access]
-            MI2[Online Endpoint Identity<br/>endpoint-identity-name<br/>Managed Endpoint Access]
-        end
-        
-        subgraph "VNet Integration"
-            LINKS[VNet Links<br/>DNS Zone Connections<br/>9 zone links for resolution]
+            MI1[Compute Cluster Identity<br/>Training & Inference Access]
+            MI2[Online Endpoint Identity<br/>Managed Endpoint Access]
         end
         
         VNet --> Subnet
-        DNS1 -.-> LINKS
-        DNS2 -.-> LINKS
-        DNS3 -.-> LINKS
-        DNS4 -.-> LINKS
-        DNS5 -.-> LINKS
-        DNS6 -.-> LINKS
-        DNS7 -.-> LINKS
-        DNS8 -.-> LINKS
-        DNS9 -.-> LINKS
-        LINKS -.-> VNet
+        DNS1 -.-> VNet
+        DNS2 -.-> VNet
+        DNS3 -.-> VNet
+        DNS4 -.-> VNet
+        DNS5 -.-> VNet
+        DNS6 -.-> VNet
+        DNS7 -.-> VNet
+        DNS8 -.-> VNet
+        DNS9 -.-> VNet
     end
     
     subgraph "External Dependencies"
-        WORKSPACE[ML Workspace Modules<br/>aml-managed-smi consumers]
-        REGISTRY[ML Registry Modules<br/>aml-registry-smi consumers]
-        ENDPOINTS[Private Endpoints<br/>Storage, KV, ACR, ML services]
+        WS[ML Workspaces<br/>aml-managed-smi consumers]
+        REG[ML Registry<br/>aml-registry-smi consumers]
+        PE[Private Endpoints<br/>Storage, KV, ACR, ML services]
     end
     
-    Subnet -.-> ENDPOINTS
-    DNS1 -.-> ENDPOINTS
-    DNS2 -.-> ENDPOINTS
-    DNS3 -.-> ENDPOINTS
-    DNS4 -.-> ENDPOINTS
-    DNS5 -.-> ENDPOINTS
-    DNS6 -.-> ENDPOINTS
-    DNS7 -.-> ENDPOINTS
-    MI1 -.-> WORKSPACE
-    MI2 -.-> WORKSPACE
-    VNet -.-> WORKSPACE
-    VNet -.-> REGISTRY
+    Subnet -.-> PE
+    DNS1 -.-> PE
+    DNS2 -.-> PE
+    DNS3 -.-> PE
+    DNS4 -.-> PE
+    DNS5 -.-> PE
+    DNS6 -.-> PE
+    DNS7 -.-> PE
+    MI1 -.-> WS
+    MI2 -.-> WS
+    VNet -.-> WS
+    VNet -.-> REG
 ```
 
 ## 📋 **Required Configuration**
