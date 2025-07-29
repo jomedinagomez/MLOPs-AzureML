@@ -406,4 +406,4 @@ aml-managed-smi/
 
 **Authors**: Jose Medina Gomez & Matt Felton  
 **Last Updated**: July 29, 2025  
-**Version**: 1.6.0 - Production-Ready Diagnostic Settings Deployment
+**Version**: 1.4.0 - Production-Ready Diagnostic Settings Deployment

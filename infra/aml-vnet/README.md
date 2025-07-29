@@ -33,8 +33,8 @@ graph TB
         end
         
         subgraph "Managed Identities"
-            MI1[{cluster-identity-name}<br/>Compute Cluster Identity]
-            MI2[{endpoint-identity-name}<br/>Online Endpoint Identity]
+            MI1[cluster-identity-name<br/>Compute Cluster Identity]
+            MI2[endpoint-identity-name<br/>Online Endpoint Identity]
         end
         
         VNet --> Subnet
@@ -398,4 +398,4 @@ All 9 private DNS zones are required for complete Azure ML functionality:
 
 **Authors**: Jose Medina Gomez & Matt Felton  
 **Last Updated**: July 29, 2025  
-**Version**: 1.6.0 - Production-Ready Diagnostic Settings Deployment
+**Version**: 1.4.0 - Production-Ready Diagnostic Settings Deployment

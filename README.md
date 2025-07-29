@@ -613,7 +613,7 @@ az role assignment list --scope <resource-scope>
 
 This section documents changes and updates to the project.
 
-### Version 1.6.0 (Latest)
+### Version 1.4.0 (Latest)
 - Diagnostic settings infrastructure deployed with monitoring enabled and validated for all supported Azure services
 - Updated all diagnostic settings to use only Microsoft-supported log categories and the `enabled_metric` syntax, removing deprecation warnings and deployment failures
 - Monitoring covers Azure ML Workspace (12 log categories), ML Registry (2 asset tracking categories), Virtual Network (VM protection alerts), Container Registry, Storage, Key Vault, and Application Insights (11 log categories)
@@ -735,7 +735,7 @@ We welcome contributions to improve this MLOps implementation:
 **📋 Project Information**
 - **Authors**: Jose Medina Gomez & Matt Felton
 - **Last Updated**: July 29, 2025
-- **Version**: 1.6.0
+- **Version**: 1.4.0
 - **License**: MIT License
 - **Repository**: [github.com/jomedinagomez/MLOPs-AzureML](https://github.com/jomedinagomez/MLOPs-AzureML)
 
