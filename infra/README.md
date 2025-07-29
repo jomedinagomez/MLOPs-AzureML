@@ -66,6 +66,7 @@ flowchart TD
     VNET --> REGISTRY
     WORKSPACE --> PRIVATEENDPOINT[modules/private-endpoint]
     REGISTRY --> PRIVATEENDPOINT
+
 ```
 
 ### Microsoft-Managed Resource Groups
