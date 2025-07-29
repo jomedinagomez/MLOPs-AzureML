@@ -16,9 +16,9 @@ This module is the **foundation** for all Azure ML infrastructure. It must be de
 ### Module Dependency Diagram
 ```mermaid
 flowchart TD
-    VNET[aml-vnet (Networking Foundation)] --> WORKSPACE[aml-managed-smi (ML Workspace)]
-    VNET --> REGISTRY[aml-registry-smi (ML Registry)]
-    VNET --> PRIVATEENDPOINT[modules/private-endpoint]
+    VNET["aml-vnet<br/>Networking Foundation"] --> WORKSPACE["aml-managed-smi<br/>ML Workspace"]
+    VNET --> REGISTRY["aml-registry-smi<br/>ML Registry"]
+    VNET --> PRIVATEENDPOINT["modules/private-endpoint"]
     WORKSPACE --> PRIVATEENDPOINT
     REGISTRY --> PRIVATEENDPOINT
 ```
@@ -43,38 +43,64 @@ This module provides the secure networking foundation for Azure ML services:
 
 ```mermaid
 graph TB
-    subgraph "Resource Group: {resource-group-name}"
-        VNet[Virtual Network<br/>10.1.0.0/16]
-        Subnet[ML Subnet<br/>10.1.1.0/24]
-        
-        subgraph "Private DNS Zones"
-            DNS1[privatelink.blob.core.windows.net]
-            DNS2[privatelink.file.core.windows.net]  
-            DNS3[privatelink.table.core.windows.net]
-            DNS4[privatelink.queue.core.windows.net]
-            DNS5[privatelink.vaultcore.azure.net]
-            DNS6[privatelink.azurecr.io]
-            DNS7[privatelink.api.azureml.ms]
-            DNS8[privatelink.notebooks.azure.net]
-            DNS9[instances.azureml.ms]
+    subgraph "User-Managed Resource Group: rg-aml-vnet-{environment}-{location-code}"
+        subgraph "Network Infrastructure"
+            VNet[Virtual Network<br/>10.1.0.0/16<br/>Private Network Foundation]
+            Subnet[ML Subnet<br/>10.1.1.0/24<br/>Workload Isolation]
         end
         
-        subgraph "Managed Identities"
-            MI1[cluster-identity-name<br/>Compute Cluster Identity]
-            MI2[endpoint-identity-name<br/>Online Endpoint Identity]
+        subgraph "Private DNS Infrastructure"
+            DNS1[privatelink.blob.core.windows.net<br/>Storage Blob Resolution]
+            DNS2[privatelink.file.core.windows.net<br/>Storage File Resolution]  
+            DNS3[privatelink.table.core.windows.net<br/>Storage Table Resolution]
+            DNS4[privatelink.queue.core.windows.net<br/>Storage Queue Resolution]
+            DNS5[privatelink.vaultcore.azure.net<br/>Key Vault Resolution]
+            DNS6[privatelink.azurecr.io<br/>Container Registry Resolution]
+            DNS7[privatelink.api.azureml.ms<br/>ML API Resolution]
+            DNS8[privatelink.notebooks.azure.net<br/>ML Notebooks Resolution]
+            DNS9[instances.azureml.ms<br/>ML Instances Resolution]
+        end
+        
+        subgraph "Identity Management"
+            MI1[Compute Cluster Identity<br/>cluster-identity-name<br/>Training & Inference Access]
+            MI2[Online Endpoint Identity<br/>endpoint-identity-name<br/>Managed Endpoint Access]
+        end
+        
+        subgraph "VNet Integration"
+            LINKS[VNet Links<br/>DNS Zone Connections<br/>9 zone links for resolution]
         end
         
         VNet --> Subnet
-        DNS1 -.-> VNet
-        DNS2 -.-> VNet
-        DNS3 -.-> VNet
-        DNS4 -.-> VNet
-        DNS5 -.-> VNet
-        DNS6 -.-> VNet
-        DNS7 -.-> VNet
-        DNS8 -.-> VNet
-        DNS9 -.-> VNet
+        DNS1 -.-> LINKS
+        DNS2 -.-> LINKS
+        DNS3 -.-> LINKS
+        DNS4 -.-> LINKS
+        DNS5 -.-> LINKS
+        DNS6 -.-> LINKS
+        DNS7 -.-> LINKS
+        DNS8 -.-> LINKS
+        DNS9 -.-> LINKS
+        LINKS -.-> VNet
     end
+    
+    subgraph "External Dependencies"
+        WORKSPACE[ML Workspace Modules<br/>aml-managed-smi consumers]
+        REGISTRY[ML Registry Modules<br/>aml-registry-smi consumers]
+        ENDPOINTS[Private Endpoints<br/>Storage, KV, ACR, ML services]
+    end
+    
+    Subnet -.-> ENDPOINTS
+    DNS1 -.-> ENDPOINTS
+    DNS2 -.-> ENDPOINTS
+    DNS3 -.-> ENDPOINTS
+    DNS4 -.-> ENDPOINTS
+    DNS5 -.-> ENDPOINTS
+    DNS6 -.-> ENDPOINTS
+    DNS7 -.-> ENDPOINTS
+    MI1 -.-> WORKSPACE
+    MI2 -.-> WORKSPACE
+    VNet -.-> WORKSPACE
+    VNet -.-> REGISTRY
 ```
 
 ## 📋 **Required Configuration**

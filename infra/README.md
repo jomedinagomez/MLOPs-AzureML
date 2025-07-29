@@ -54,56 +54,107 @@ This infrastructure uses a **modular orchestration** approach. The deployment or
 
 ### Orchestration & Dependency Diagram
 ```mermaid
-flowchart TD
+graph TB
     subgraph "Root Orchestration"
-        MAIN[main.tf<br/>Infrastructure Orchestrator<br/>🎯 Deploy from here]
+        MAIN[Infrastructure Orchestrator<br/>main.tf<br/>🎯 Deploy from here]
     end
     
-    subgraph RG1["rg-aml-vnet-{env}-{loc}"]
-        VNET[VNet & Subnets<br/>10.1.0.0/16]
-        DNS[Private DNS Zones<br/>9 zones for Azure services]
-        MI[Managed Identities<br/>Compute & Registry access]
+    subgraph "Foundation Layer: rg-aml-vnet-{environment}-{location-code}"
+        subgraph "Network Infrastructure"
+            VNET[Virtual Network<br/>10.1.0.0/16]
+            SUBNET[Private Subnet<br/>10.1.1.0/24]
+        end
+        
+        subgraph "DNS Infrastructure"
+            DNS[Private DNS Zones<br/>9 zones for Azure services]
+        end
+        
+        subgraph "Identity Management"
+            MI[Managed Identities<br/>Compute & Registry access]
+        end
+        
+        VNET --> SUBNET
+        DNS -.-> VNET
+        MI -.-> VNET
     end
     
-    subgraph RG2["rg-aml-ws-{env}-{loc}"]
-        WS[ML Workspace<br/>Core ML platform]
-        SA[Storage Account<br/>Data & artifacts]
-        KV[Key Vault<br/>Secrets management]
-        CR[Container Registry<br/>Custom images]
-        AI[Application Insights<br/>Monitoring]
-        CC[Compute Cluster<br/>Training infrastructure]
-        PE1[Private Endpoints<br/>Storage, KV, ACR]
+    subgraph "Workspace Layer: rg-aml-ws-{environment}-{location-code}"
+        subgraph "Core ML Services"
+            WS[Azure ML Workspace<br/>Core ML platform]
+            AI[Application Insights<br/>Monitoring & telemetry]
+            CC[Compute Cluster<br/>Training infrastructure]
+        end
+        
+        subgraph "Storage & Security"
+            SA[Storage Account<br/>Data & artifacts]
+            KV[Key Vault<br/>Secrets management]
+            CR[Container Registry<br/>Custom images]
+        end
+        
+        subgraph "Private Connectivity"
+            PE1[Private Endpoints<br/>Storage, KV, ACR]
+        end
+        
+        subgraph "RBAC Configuration"
+            RBAC_WS[User & Identity Access<br/>ML Engineer roles]
+        end
+        
+        WS --> AI
+        WS --> CC
+        SA --> PE1
+        KV --> PE1
+        CR --> PE1
+        MI -.-> CC
     end
     
-    subgraph RG3["rg-aml-reg-{env}-{loc}"]
-        REG[ML Registry<br/>Model repository]
-        LA[Log Analytics<br/>Registry monitoring]
-        PE2[Registry Private Endpoint<br/>API access]
+    subgraph "Registry Layer: rg-aml-reg-{environment}-{location-code}"
+        subgraph "Centralized ML Assets"
+            REG[Azure ML Registry<br/>Model repository]
+            LA[Log Analytics<br/>Registry monitoring]
+        end
+        
+        subgraph "Registry Connectivity"
+            PE2[Registry Private Endpoint<br/>privatelink.api.azureml.ms]
+        end
+        
+        subgraph "Registry RBAC"
+            RBAC_REG[User & Identity Access<br/>Registry User roles]
+        end
+        
+        REG --> LA
+        REG --> PE2
     end
     
-    subgraph RG4["rg-{registry-name} - Microsoft Managed"]
-        MSREG["Internal Registry Infrastructure<br/>⚠️ Do Not Modify"]
+    subgraph "Microsoft-Managed Resource Group: rg-{registry-name}"
+        MGT[Internal Registry Components<br/>⚠️ Do Not Modify]
+        STOR_SYS[System Storage Account<br/>Auto-managed by Azure]
+        ACR_SYS[System Container Registry<br/>Auto-managed by Azure]
+        
+        REG -.-> MGT
+        MGT --> STOR_SYS
+        MGT --> ACR_SYS
     end
-
-    %% Orchestration flow
+    
+    subgraph "External Dependencies"
+        WORKSPACE_CONSUMERS[ML Workspaces<br/>Registry consumers]
+        COMPUTE_ACCESS[Compute Clusters<br/>Registry access]
+    end
+    
+    %% Orchestration Dependencies
     MAIN --> VNET
     MAIN --> WS
     MAIN --> REG
     
-    %% Dependencies
-    VNET -->|subnet outputs| WS
-    DNS --> PE1
-    MI --> CC
-    VNET --> PE2
-    DNS --> PE2
-    REG -.-> MSREG
-
-    %% Styling
-    style RG4 fill:#fff3cd,stroke:#ff9800,stroke-width:2px
-    style RG1 fill:#e3f2fd
-    style RG2 fill:#e8f5e9
-    style RG3 fill:#f3e5f5
-    style MAIN fill:#f8f9fa,stroke:#6c757d,stroke-width:2px
+    %% Foundation Dependencies
+    SUBNET -.-> PE1
+    SUBNET -.-> PE2
+    DNS -.-> PE1
+    DNS -.-> PE2
+    
+    %% Cross-layer Access
+    REG -.-> WORKSPACE_CONSUMERS
+    MI -.-> COMPUTE_ACCESS
+    WS -.-> REG
 ```
 
 ### Microsoft-Managed Resource Groups
