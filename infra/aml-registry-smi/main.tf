@@ -143,6 +143,20 @@ resource "azurerm_role_assignment" "compute_registry_user" {
   principal_id         = local.compute_cluster_principal_id
 }
 
+## Assign Azure AI Enterprise Network Connection Approver role to workspace system-managed identity
+## This allows the workspace to create managed private endpoints to this registry
+##
+resource "azurerm_role_assignment" "workspace_network_connection_approver" {
+  depends_on = [
+    time_sleep.wait_registry_identity
+  ]
+  
+  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${var.workspace_principal_id}${azapi_resource.registry.name}netapprover")
+  scope                = azapi_resource.registry.id
+  role_definition_name = "Azure AI Enterprise Network Connection Approver"
+  principal_id         = var.workspace_principal_id
+}
+
 ##### Diagnostic Settings for Monitoring
 #####
 

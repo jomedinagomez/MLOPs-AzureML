@@ -81,6 +81,7 @@ flowchart TD
     MI --> CC
     VNET --> REG
     DNS --> REG
+    WS -->|workspace identity| REG
     REG -.-> MSREG
 
     style RG4 fill:#fff3cd,stroke:#ff9800,stroke-width:2px
@@ -94,6 +95,7 @@ flowchart TD
 
 ### Key Dependency Callouts
 - **aml-managed-smi** and **aml-registry-smi** both require outputs from **aml-vnet** (subnet, DNS, managed identities)
+- **aml-registry-smi** now also requires the workspace principal ID from **aml-managed-smi** for network connection approver permissions
 - All modules are orchestrated from the root `main.tf` for dependency management
 - Microsoft-managed resource groups are created automatically for the registry and are not managed by Terraform
 
@@ -102,7 +104,7 @@ flowchart TD
 **Key Dependencies:**
 1. **aml-vnet** creates networking foundation and managed identities
 2. **aml-managed-smi** consumes VNet outputs and managed identity references  
-3. **aml-registry-smi** consumes VNet outputs for private connectivity
+3. **aml-registry-smi** consumes VNet outputs for private connectivity AND workspace identity for network connection approver role
 4. All modules coordinate through root orchestration
 │   └── terraform.tfvars          # Registry configuration
 └── modules/                       # Reusable Terraform modules
@@ -207,10 +209,11 @@ Root Orchestration (main.tf)
 │   ├── Compute Cluster
 │   └── Role Assignments
 │
-└── 3. aml-registry (depends on aml-vnet)
+└── 3. aml-registry (depends on aml-vnet + aml-workspace)
     ├── Azure ML Registry
     ├── Log Analytics Workspace
-    └── Private Endpoint
+    ├── Private Endpoint
+    └── Cross-workspace permissions for managed private endpoints
 ```
 
 ### Resource Count
@@ -288,6 +291,7 @@ The infrastructure provides comprehensive outputs for integration:
 ### Identity & Access
 - **Managed Identities**: User-assigned identities for compute
 - **RBAC**: Least privilege role assignments
+- **Cross-Service Permissions**: Workspace can create managed private endpoints to registry
 - **Key Management**: Azure Key Vault for secrets
 
 ### Data Protection

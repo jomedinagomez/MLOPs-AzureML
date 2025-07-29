@@ -72,6 +72,8 @@ module "aml_workspace" {
   
   # Pass Log Analytics workspace for diagnostic settings
   log_analytics_workspace_id = module.aml_vnet.log_analytics_workspace_id
+  
+  depends_on = [module.aml_vnet]
 }
 
 # 3. Create registry (depends on VNet outputs)
@@ -97,7 +99,21 @@ module "aml_registry" {
   compute_cluster_identity_id  = module.aml_vnet.cc_identity_id
   compute_cluster_principal_id = module.aml_vnet.cc_identity_principal_id
   
+  # Pass workspace principal ID for network connection approver role
+  workspace_principal_id       = module.aml_workspace.workspace_principal_id
+  
   # Pass DNS zone IDs from VNet module
+  dns_zone_blob_id     = module.aml_vnet.dns_zone_blob_id
+  dns_zone_file_id     = module.aml_vnet.dns_zone_file_id
+  dns_zone_keyvault_id = module.aml_vnet.dns_zone_keyvault_id
+  dns_zone_acr_id      = module.aml_vnet.dns_zone_acr_id
+  dns_zone_aml_api_id  = module.aml_vnet.dns_zone_aml_api_id
+  
+  # Pass Log Analytics workspace for diagnostic settings
+  log_analytics_workspace_id = module.aml_vnet.log_analytics_workspace_id
+  
+  depends_on = [module.aml_vnet, module.aml_workspace]
+}
   dns_zone_blob_id     = module.aml_vnet.dns_zone_blob_id
   dns_zone_file_id     = module.aml_vnet.dns_zone_file_id
   dns_zone_keyvault_id = module.aml_vnet.dns_zone_keyvault_id

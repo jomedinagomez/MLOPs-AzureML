@@ -98,3 +98,8 @@ variable "log_analytics_workspace_id" {
   description = "Resource ID of the Log Analytics workspace for diagnostic settings"
   type        = string
 }
+
+variable "workspace_principal_id" {
+  description = "Principal ID of the ML workspace system-managed identity for cross-registry permissions"
+  type        = string
+}
