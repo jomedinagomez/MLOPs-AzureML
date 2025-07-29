@@ -8,57 +8,10 @@ This project demonstrates a **production-ready** Azure Machine Learning (ML) ope
 
 ### Infrastructure Components
 
-The infrastructure is deployed using **Terraform module orchestration** from the `infra` directory. The root orchestrati## Version 1.6.0 (Latest)
-**Production-Ready Diagnostic Settings Deployment**
 
-- **✅ Successful Production Deployment**: Successfully deployed comprehensive diagnostic settings infrastructure with all monitoring enabled
-- **🔧 Fixed Unsupported Categories**: Removed unsupported diagnostic log categories (`ModelDatasetEvent`, `InferencingOperationEvent`) that were causing deployment failures
-- **📊 Validated Supported Categories**: Confirmed all diagnostic settings use only Microsoft-documented supported log categories for each Azure service
-- **🚀 Conflict Resolution**: Resolved diagnostic setting conflicts by removing duplicate configurations that conflicted with existing module-managed settings
-- **🔍 Registry Metrics Fix**: Corrected Azure ML Registry diagnostic settings to exclude metrics (not supported) and focus on asset tracking logs
-- **✅ Complete Monitoring Coverage**: Successfully deployed monitoring for:
-  - **Azure ML Workspace**: 12 log categories (compute, jobs, models, datasets, environments)
-  - **Azure ML Registry**: 2 asset tracking categories (read/write events)
-  - **Virtual Network**: 1 security category (VM protection alerts)
-  - **Existing Services**: Container Registry, Storage, Key Vault already monitored via modules
-- **🏗️ Infrastructure Ready**: MLOps platform fully operational with enterprise-grade observability
+The infrastructure is deployed using **Terraform module orchestration** from the `infra` directory. The root orchestration coordinates three specialized modules with proper dependency management:
 
-### Version 1.5.1
-**Deprecated Syntax Fix**
 
-- **Fixed Deprecation Warnings**: Updated all diagnostic settings from deprecated `metric` syntax to modern `enabled_metric` syntax
-- **Provider Upgrade**: Upgraded AzureRM provider from v4.26.0 to v4.32.0 to support the new syntax
-- **Future-Proof Configuration**: Eliminated all deprecation warnings that would cause issues when AzureRM v5.0 is released
-- **Consistent Syntax**: All diagnostic settings now use the standardized `enabled_metric` block format
-- **No Functional Changes**: This is purely a syntax update that maintains all existing monitoring capabilities
-
-## Version 1.5.0
-**Major Diagnostic Settings Enhancement**
-
-- **Removed Unsupported Diagnostic Settings**: Eliminated all diagnostic settings with unsupported log categories that were causing deployment failures
-- **Comprehensive Research-Based Implementation**: Conducted thorough research of Microsoft documentation to identify supported diagnostic log categories for each Azure service
-- **Added ML Workspace Diagnostics**: Implemented comprehensive diagnostic settings for Azure ML workspace with 14 supported log categories:
-  - `AmlComputeClusterEvent`, `AmlComputeClusterNodeEvent`, `AmlComputeJobEvent`
-  - `AmlComputeCpuGpuUtilization`, `AmlRunStatusChangedEvent`
-  - `ModelsChangeEvent`, `ModelsReadEvent`, `ModelDatasetEvent`
-  - `DataSetChangeEvent`, `DataStoreChangeEvent`
-  - `EnvironmentChangeEvent`, `EnvironmentReadEvent`
-  - `InferencingOperationEvent`, `ComputeInstanceEvent`
-- **Added Container Registry Diagnostics**: Enabled comprehensive monitoring with supported log categories:
-  - `ContainerRegistryLoginEvents`, `ContainerRegistryRepositoryEvents`
-- **Added Key Vault Diagnostics**: Implemented security and compliance monitoring with:
-  - `AuditEvent`, `AzurePolicyEvaluationDetails`
-- **Added ML Registry Diagnostics**: Enabled asset tracking with supported categories:
-  - `RegistryAssetReadEvent`, `RegistryAssetWriteEvent`
-- **Enhanced Storage Account Diagnostics**: Added blob service diagnostics with:
-  - `StorageRead`, `StorageWrite`, `StorageDelete`
-- **Added VNet Diagnostics**: Implemented security monitoring with the only supported category:
-  - `VMProtectionAlerts`
-- **Enhanced Application Insights Diagnostics**: Maintained comprehensive monitoring with 11 log categories
-- **All Metrics Enabled**: Configured `AllMetrics` collection for all services to ensure complete performance monitoring
-- **Centralized Log Analytics**: All diagnostic data flows to centralized Log Analytics workspace for unified monitoring and alerting
-
-This version provides the highest level of diagnostic monitoring supported by Azure for each service type, ensuring comprehensive observability while maintaining deployment reliability.dinates three specialized modules with proper dependency management:
 
 #### 1. **Networking Foundation** (`aml-vnet`)
 - **Purpose**: Provides secure networking foundation for all ML services
@@ -95,37 +48,49 @@ This version provides the highest level of diagnostic monitoring supported by Az
 
 ### 🔄 **Module Dependencies & Orchestration**
 
+
 ```mermaid
-graph TD
-    A[Root main.tf] --> B[aml-vnet Module]
-    A --> C[aml-managed-smi Module]
-    A --> D[aml-registry-smi Module]
-    
-    B --> E[VNet & Subnets]
-    B --> F[DNS Zones]
-    B --> G[Managed Identities]
-    
-    C --> H[ML Workspace]
-    C --> I[Storage Account]
-    C --> J[Key Vault]
-    C --> K[Container Registry]
-    C --> L[Compute Cluster]
-    
-    D --> M[ML Registry]
-    D --> N[Log Analytics]
-    
-    G -.-> L
-    E -.-> H
-    F -.-> I
-    F -.-> J
-    F -.-> K
+flowchart TD
+    subgraph RG1["rg-aml-vnet-{env}-{loc}"]
+        VNET[VNet & Subnets]
+        DNS[DNS Zones]
+        MI[Managed Identities]
+    end
+    subgraph RG2["rg-aml-ws-{env}-{loc}"]
+        WS[ML Workspace]
+        SA[Storage Account]
+        KV[Key Vault]
+        CR[Container Registry]
+        AI[App Insights]
+        CC[Compute Cluster]
+    end
+    subgraph RG3["rg-aml-reg-{env}-{loc}"]
+        REG[ML Registry]
+        LA[Log Analytics]
+    end
+    subgraph RG4["rg-{registry-name}" (Microsoft Managed)]
+        MSREG[Internal Registry Infra\n(Do Not Modify)]
+    end
+
+    VNET -->|subnet outputs| WS
+    DNS --> WS
+    MI --> CC
+    VNET --> REG
+    DNS --> REG
+    REG -.-> MSREG
+
+    style RG4 fill:#fff3cd,stroke:#ff9800,stroke-width:2px
+    style RG1 fill:#e3f2fd
+    style RG2 fill:#e8f5e9
+    style RG3 fill:#f3e5f5
 ```
 
 **Dependency Flow:**
-1. `aml-vnet` creates networking foundation and managed identities
-2. `aml-managed-smi` uses VNet outputs and managed identity for workspace deployment
-3. `aml-registry-smi` uses VNet outputs for registry deployment
-4. All modules coordinate through root orchestration with proper dependency management
+1. `aml-vnet` creates networking foundation and managed identities in its own resource group
+2. `aml-managed-smi` uses VNet, DNS, and managed identity outputs for workspace and compute deployment in a separate resource group
+3. `aml-registry-smi` uses VNet and DNS outputs for registry deployment in its own resource group
+4. Azure automatically creates a Microsoft-managed resource group for internal registry infrastructure (do not modify)
+5. All modules are orchestrated from the root `main.tf` for proper dependency management
 
 ### 🚀 **Deployment Options**
 
@@ -642,48 +607,56 @@ az role assignment list --scope <resource-scope>
 
 ---
 
+
+
 ## Change Log
 
-*This section tracks changes and updates to the project.*
+This section documents changes and updates to the project.
 
-
+### Version 1.6.0 (Latest)
+- Diagnostic settings infrastructure deployed with monitoring enabled and validated for all supported Azure services
+- Updated all diagnostic settings to use only Microsoft-supported log categories and the `enabled_metric` syntax, removing deprecation warnings and deployment failures
+- Monitoring covers Azure ML Workspace (12 log categories), ML Registry (2 asset tracking categories), Virtual Network (VM protection alerts), Container Registry, Storage, Key Vault, and Application Insights (11 log categories)
+- Removed unsupported or duplicate diagnostic settings and upgraded AzureRM provider for compatibility
+- Adjusted ML Registry diagnostics to exclude unsupported metrics and focus on asset tracking logs
+- Platform is operational with centralized Log Analytics and validated monitoring for all major resource types
 
 ### Version 1.3.0
-- ✅ **Comprehensive Observability**: Implemented centralized Log Analytics workspace with diagnostic settings for all 12+ resource types
-- ✅ **Diagnostic Settings Consolidation**: Eliminated duplicate Log Analytics workspaces and centralized all diagnostic data to VNet module
-- ✅ **Azure Monitor Integration**: Configured proper private endpoint connectivity for Azure Monitor traffic and diagnostic logging
-- ✅ **Storage Account Security**: Updated trusted services bypass to allow Azure Monitor diagnostic settings service access
-- ✅ **Complete Log Coverage**: Added diagnostic settings for Azure ML workspace (24 categories), Application Insights (11 categories), Key Vault, Storage Account, Container Registry, and VNet
-- ✅ **Infrastructure Audit**: Performed comprehensive review of all resources to ensure complete diagnostic settings coverage
-- ✅ **Networking Validation**: Verified diagnostic log connectivity through private endpoint architecture
+- Centralized Log Analytics workspace with diagnostic settings for all major resource types
+- Consolidated diagnostic settings and removed duplicate Log Analytics workspaces
+- Configured private endpoint connectivity for Azure Monitor traffic and diagnostic logging
+- Updated trusted services bypass for Storage Account to allow Azure Monitor diagnostic settings service access
+- Added diagnostic settings for Azure ML workspace (24 categories), Application Insights (11 categories), Key Vault, Storage Account, Container Registry, and VNet
+- Reviewed all resources to ensure diagnostic settings coverage
+- Verified diagnostic log connectivity through private endpoint architecture
 
 ### Version 1.2.0
-- ✅ **Compute Instance Support**: Added complete support for Azure ML compute instances
-- ✅ **Enhanced RBAC**: Implemented Storage File Data Privileged Contributor role for managed identities
-- ✅ **File Share Access**: Enabled compute instances to access workspace file shares via managed identity
-- ✅ **Security Hardening**: Sanitized all real variable names from documentation for security compliance
-- ✅ **Architecture Documentation**: Enhanced Mermaid diagrams showing complete infrastructure relationships
-- ✅ **Troubleshooting Guides**: Added detailed debugging sections across all documentation
+- Added support for Azure ML compute instances
+- Implemented Storage File Data Privileged Contributor role for managed identities
+- Enabled compute instances to access workspace file shares via managed identity
+- Sanitized real variable names from documentation for security compliance
+- Enhanced Mermaid diagrams showing infrastructure relationships
+- Added detailed debugging sections across documentation
 
 ### Version 1.1.0
-- ✅ **Infrastructure Orchestration**: Implemented root-level module orchestration approach
-- ✅ **Module Dependencies**: Refactored to use module outputs as inputs for proper dependency management
-- ✅ **File Organization**: Moved all root Terraform files to `infra/` folder for better structure
-- ✅ **Enhanced Outputs**: Added comprehensive outputs.tf files to all modules (12+ outputs per module)
-- ✅ **DNS Zone Management**: Implemented conditional DNS zone logic with fallback support
-- ✅ **Private Endpoint Optimization**: Updated all private endpoints to use module outputs instead of variables
-- ✅ **Variable Validation**: Added input validation for GUIDs, CIDR blocks, and naming conventions
-- ✅ **Documentation Enhancement**: Created dedicated infra/README.md with deployment guidance
-- ✅ **Code Cleanup**: Removed duplicate files and consolidated configuration
+- Implemented root-level module orchestration
+- Refactored to use module outputs as inputs for dependency management
+- Moved all root Terraform files to `infra/` folder
+- Added outputs.tf files to all modules
+- Implemented conditional DNS zone logic with fallback support
+- Updated private endpoints to use module outputs
+- Added input validation for GUIDs, CIDR blocks, and naming conventions
+- Created infra/README.md with deployment guidance
+- Removed duplicate files and consolidated configuration
 
 ### Version 1.0.0
-- ✅ **Complete Infrastructure Foundation**: Deployed comprehensive Azure ML platform with private networking
-- ✅ **Three-Module Architecture**: Implemented aml-vnet, aml-managed-smi, and aml-registry-smi modules
-- ✅ **Advanced Security**: Configured managed identities, private endpoints, and RBAC
-- ✅ **Private Networking**: Implemented managed VNet with approved outbound-only configuration
-- ✅ **ML Pipeline Implementation**: Built 8-step taxi fare prediction pipeline with MLflow integration
-- ✅ **Compute Infrastructure**: Deployed auto-scaling compute cluster with user-assigned managed identity
-- ✅ **Registry Integration**: Established centralized model and component registry
+- Deployed Azure ML platform with private networking
+- Implemented aml-vnet, aml-managed-smi, and aml-registry-smi modules
+- Configured managed identities, private endpoints, and RBAC
+- Managed VNet with approved outbound-only configuration
+- Built 8-step taxi fare prediction pipeline with MLflow integration
+- Deployed auto-scaling compute cluster with user-assigned managed identity
+- Established centralized model and component registry
 
 ---
 
