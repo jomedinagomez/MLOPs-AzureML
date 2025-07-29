@@ -55,12 +55,12 @@ This infrastructure uses a **modular orchestration** approach. The deployment or
 ### Orchestration & Dependency Diagram
 ```mermaid
 flowchart TD
-    MAIN[Root main.tf (Orchestration)] --> VNET[aml-vnet (Networking Foundation)]
-    MAIN --> WORKSPACE[aml-managed-smi (ML Workspace)]
-    MAIN --> REGISTRY[aml-registry-smi (ML Registry)]
+    MAIN["Root main.tf<br/>Orchestration"] --> VNET["aml-vnet<br/>Networking Foundation"]
+    MAIN --> WORKSPACE["aml-managed-smi<br/>ML Workspace"]
+    MAIN --> REGISTRY["aml-registry-smi<br/>ML Registry"]
     VNET --> WORKSPACE
     VNET --> REGISTRY
-    WORKSPACE --> PRIVATEENDPOINT[modules/private-endpoint]
+    WORKSPACE --> PRIVATEENDPOINT["modules/private-endpoint"]
     REGISTRY --> PRIVATEENDPOINT
 ```
 
