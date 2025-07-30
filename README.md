@@ -31,7 +31,8 @@ The infrastructure is deployed using **Terraform module orchestration** from the
   - Azure Key Vault with private endpoints  
   - Azure Container Registry with private endpoints
   - Application Insights for monitoring
-  - Compute cluster with user-assigned managed identity
+  - Compute cluster (`cpu-cluster-uami`) with user-assigned managed identity
+  - Image build compute configuration for private ACR
   - Comprehensive RBAC configuration
 - **Resource Groups**: `rg-aml-ws-{environment}-{location-code}`
 - **Dependencies**: Uses `aml-vnet` outputs for networking and managed identities
@@ -376,11 +377,20 @@ Assigned to workspace system-managed identity for infrastructure operations:
 ## 🖥️ **Compute Resources**
 
 ### **Compute Cluster Configuration**
-- **Name**: `{compute-cluster-name}`
-- **VM Size**: Standard_DS3_v2 (4 vCPUs, 14 GB RAM)
-- **Scaling**: 0 to 4 nodes (auto-scale)
+- **Name**: `cpu-cluster-uami`
+- **VM Size**: Standard_F8s_v2 (8 vCPUs, 16 GB RAM)
+- **Scaling**: 2 to 4 nodes (auto-scale)
 - **Identity**: User-assigned managed identity
 - **Network**: Private subnet, no public IP
+- **Purpose**: ML training workloads and Docker image builds
+
+### **Image Build Configuration**
+Since the Azure Container Registry is behind a private endpoint, the workspace is configured to use the compute cluster for Docker image builds:
+
+- **Build Compute**: `cpu-cluster-uami`
+- **Purpose**: Builds custom Docker images when ACR is private
+- **Requirement**: Necessary for environment creation and custom images
+- **Configuration**: Automatically configured via Terraform
 
 ### **Compute Instance Support**
 The infrastructure supports compute instances with managed identity:
@@ -554,17 +564,42 @@ MLOPs-AzureML/
 
 ### Common Issues
 
-1. **Authorization Failures**
+1. **Key Vault Soft-Delete Conflicts**
+   - **Issue**: `409 Conflict` errors during deployment due to existing Key Vault names in soft-delete state
+   - **Cause**: Previous deployments may have left Key Vaults in soft-delete state (90-day retention)
+   - **Solutions**: 
+     
+     **Option A - Auto-Purge (Dev/Test)**: Enable automatic purging in `terraform.tfvars`:
+     ```hcl
+     enable_auto_purge = true  # NEVER use in production!
+     ```
+     
+     **Option B - Manual Purge**: 
+     ```bash
+     # List soft-deleted Key Vaults
+     az keyvault list-deleted --query "[].{Name:name, Location:properties.location, DeletionDate:properties.deletionDate}" --output table
+     
+     # Purge specific Key Vault (replace with actual name and location)
+     az keyvault purge --name kvdevcc002 --location canadacentral
+     ```
+     
+     **Option C - Cleanup Script**: Use the provided PowerShell script:
+     ```powershell
+     .\infra\cleanup.ps1  # Interactive cleanup with Key Vault purging
+     ```
+   - **Prevention**: Always purge Key Vaults when cleaning up test environments
+
+2. **Authorization Failures**
    - Verify RBAC role assignments
    - Check managed identity permissions
    - Ensure IP whitelisting is configured
 
-2. **Network Connectivity**
+3. **Network Connectivity**
    - Validate private endpoint connections
    - Check DNS resolution
    - Verify firewall rules
 
-3. **Pipeline Failures**
+4. **Pipeline Failures**
    - Check compute cluster status
    - Validate input data paths
    - Review component logs in Azure ML Studio

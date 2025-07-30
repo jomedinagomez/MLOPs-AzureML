@@ -213,3 +213,50 @@ resource "azurerm_monitor_diagnostic_setting" "vnet_diagnostics" {
     category = "AllMetrics"
   }
 }
+
+##### Log Analytics Workspace Cleanup
+#####
+
+# Automatic Log Analytics Workspace cleanup on destroy (configurable for dev/test environments)
+resource "null_resource" "log_analytics_cleanup" {
+  count = var.enable_auto_purge ? 1 : 0
+
+  # This runs when the resource is destroyed
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      $workspaceName = "${self.triggers.workspace_name}"
+      $resourceGroup = "${self.triggers.resource_group}"
+      
+      Write-Host "Force purging Log Analytics workspace: $workspaceName"
+      
+      try {
+        # Force purge the Log Analytics workspace to allow immediate recreation
+        az monitor log-analytics workspace delete --force true --workspace-name $workspaceName --resource-group $resourceGroup --yes 2>$null
+        if ($LASTEXITCODE -eq 0) {
+          Write-Host "✓ Log Analytics workspace force purged successfully"
+        } else {
+          Write-Host "⚠ Could not force purge workspace - it may already be deleted"
+        }
+      } catch {
+        Write-Host "⚠ Error during workspace purge: $($_.Exception.Message)"
+      }
+    EOT
+
+    interpreter = ["PowerShell", "-Command"]
+  }
+
+  depends_on = [azurerm_log_analytics_workspace.vnet_logs]
+
+  # Lifecycle management to prevent recreation during normal operations
+  lifecycle {
+    ignore_changes = all
+  }
+
+  triggers = {
+    workspace_name = azurerm_log_analytics_workspace.vnet_logs.name
+    resource_group = azurerm_log_analytics_workspace.vnet_logs.resource_group_name
+    workspace_id   = azurerm_log_analytics_workspace.vnet_logs.id
+    enable_purge   = var.enable_auto_purge
+  }
+}

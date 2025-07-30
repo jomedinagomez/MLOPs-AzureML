@@ -1,7 +1,7 @@
 ##### Create scaffolding
 #####
 
-## Create resource group the resources in this deployment will be deployed to
+## Create the resource group the resources in this deployment will be deployed to
 ##
 resource "azurerm_resource_group" "rgwork" {
 
@@ -10,7 +10,7 @@ resource "azurerm_resource_group" "rgwork" {
 
   tags = var.tags
 }
- 
+
 ## Create a Log Analytics Workspace where resources in this deployment will send their diagnostic logs
 ##
 
@@ -27,7 +27,7 @@ resource "azurerm_application_insights" "aml-appins" {
   application_type    = "other"
 }
 
-## Create an Azure Container Registry instance for AML Workspace
+## Create the Container Registry for the Azure Machine Learning workspace
 ##
 module "container_registry" {
   source              = "../modules/container-registry"
@@ -37,6 +37,7 @@ module "container_registry" {
   location_code       = var.location_code
   resource_group_name = azurerm_resource_group.rgwork.name
   law_resource_id     = var.log_analytics_workspace_id
+  enable_auto_purge   = var.enable_auto_purge
 
   tags = var.tags
 }
@@ -45,29 +46,32 @@ module "container_registry" {
 ##
 module "storage_account_default" {
 
-  source                   = "../modules/storage-account"
-  purpose                  = var.purpose
-  random_string            = var.random_string
-  location                 = var.location
-  location_code            = var.location_code
+  source              = "../modules/storage-account"
+  purpose             = var.purpose
+  random_string       = var.random_string
+  location            = var.location
+  location_code       = var.location_code
   resource_group_name = azurerm_resource_group.rgwork.name
-  tags = var.tags
-  
+  tags                = var.tags
+
   # Identity controls
   key_based_authentication = true
 
   # Networking controls
   allow_blob_public_access = false
-  network_access_default = "Deny"
-  network_trusted_services_bypass = [ 
+  network_access_default   = "Deny"
+  network_trusted_services_bypass = [
     "AzureServices"
-   ]
+  ]
   resource_access = [
     {
       endpoint_resource_id = "/subscriptions/${var.sub_id}/resourcegroups/*/providers/Microsoft.MachineLearningServices/workspaces/*"
     }
   ]
   law_resource_id = var.log_analytics_workspace_id
+
+  # Enable auto-purge for dev/test environments
+  enable_auto_purge = var.enable_auto_purge
 }
 
 ## Create Key Vault which will hold secrets for the AML workspace and assign user the Key Vault Administrator role over it
@@ -87,6 +91,9 @@ module "keyvault_aml" {
 
   firewall_default_action = "Deny"
   firewall_bypass         = "AzureServices"
+
+  # Enable auto-purge for dev/test environments
+  enable_auto_purge = var.enable_auto_purge
 }
 
 ##### Create the Azure Machine Learning Workspace and its child resources
@@ -139,10 +146,10 @@ resource "azapi_resource" "aml_workspace" {
         # Managed virtual network will block all outbound traffic unless explicitly allowed
         isolationMode = "AllowOnlyApprovedOutbound"
         # Use Azure Firewall Standard SKU to support FQDN-based rules
-        firewallSku   = "Standard"
+        firewallSku = "Standard"
 
         # Create a series of outbound rules to allow access to other private endpoints and FQDNs on the Internet
-        outboundRules = { 
+        outboundRules = {
           # Create required FQDN rules to support usage of Python package managers such as pip and conda
           AllowPypi = {
             type        = "FQDN"
@@ -171,34 +178,34 @@ resource "azapi_resource" "aml_workspace" {
           }
           # Create fqdn rules to allow for pulling Docker images like Python, Jupyter, and other images
           AllowDockerIo = {
-            type    = "FQDN"
+            type        = "FQDN"
             destination = "docker.io"
             category    = "UserDefined"
           }
           AllowDockerIoWildcard = {
-            type    = "FQDN"
+            type        = "FQDN"
             destination = "*.docker.io"
             category    = "UserDefined"
           }
           AllowDockerComWildcard = {
-            type    = "FQDN"
+            type        = "FQDN"
             destination = "*.docker.com"
             category    = "UserDefined"
           }
           AllowDockerCloudFlareProduction = {
-            type    = "FQDN"
+            type        = "FQDN"
             destination = "production.cloudflare.docker.com"
             category    = "UserDefined"
           }
 
           # Create fqdn rules to allow for using models from HuggingFace
           AllowCdnAuth0Com = {
-            type    = "FQDN"
+            type        = "FQDN"
             destination = "cdn.auth0.com"
             category    = "UserDefined"
           }
           AllowCdnHuggingFaceCo = {
-            type    = "FQDN"
+            type        = "FQDN"
             destination = "cdn-lfs.huggingface.co"
             category    = "UserDefined"
           }
@@ -314,7 +321,7 @@ module "private_endpoint_st_default_blob" {
   resource_id      = module.storage_account_default.id
   subresource_name = "blob"
 
-  subnet_id = var.subnet_id
+  subnet_id            = var.subnet_id
   private_dns_zone_ids = [local.dns_zone_blob_id]
 }
 
@@ -334,7 +341,7 @@ module "private_endpoint_st_default_file" {
   resource_id      = module.storage_account_default.id
   subresource_name = "file"
 
-  subnet_id = var.subnet_id
+  subnet_id            = var.subnet_id
   private_dns_zone_ids = [local.dns_zone_file_id]
 }
 
@@ -354,7 +361,7 @@ module "private_endpoint_st_default_table" {
   resource_id      = module.storage_account_default.id
   subresource_name = "table"
 
-  subnet_id = var.subnet_id
+  subnet_id            = var.subnet_id
   private_dns_zone_ids = [local.dns_zone_table_id]
 }
 
@@ -374,7 +381,7 @@ module "private_endpoint_st_default_queue" {
   resource_id      = module.storage_account_default.id
   subresource_name = "queue"
 
-  subnet_id = var.subnet_id
+  subnet_id            = var.subnet_id
   private_dns_zone_ids = [local.dns_zone_queue_id]
 }
 
@@ -395,7 +402,7 @@ module "private_endpoint_kv" {
   subresource_name = "vault"
 
 
-  subnet_id = var.subnet_id
+  subnet_id            = var.subnet_id
   private_dns_zone_ids = [local.dns_zone_keyvault_id]
 }
 
@@ -415,7 +422,7 @@ module "private_endpoint_container_registry" {
   resource_id      = module.container_registry.id
   subresource_name = "registry"
 
-  subnet_id = var.subnet_id
+  subnet_id            = var.subnet_id
   private_dns_zone_ids = [local.dns_zone_acr_id]
 }
 
@@ -458,14 +465,14 @@ resource "azurerm_private_dns_a_record" "aml_workspace_compute_instance" {
   zone_name           = "instances.azureml.ms"
   resource_group_name = var.resource_group_name_dns
   ttl                 = 10
-  records             = [
+  records = [
     module.private_endpoint_aml_workspace.private_endpoint_ip
   ]
 }
 
 ##### Create non-human role assignments
 #####
- 
+
 resource "time_sleep" "wait_aml_workspace_identities" {
   depends_on = [
     azapi_resource.aml_workspace
@@ -564,7 +571,7 @@ resource "azurerm_role_assignment" "file_perm_default_sa" {
 ##
 locals {
   # Use the managed identity values passed from the VNet module
-  compute_cluster_identity_id = var.compute_cluster_identity_id
+  compute_cluster_identity_id  = var.compute_cluster_identity_id
   compute_cluster_principal_id = var.compute_cluster_principal_id
 }
 
@@ -575,9 +582,9 @@ resource "azurerm_role_assignment" "compute_ml_data_scientist" {
   depends_on = [
     azapi_resource.aml_workspace
   ]
-  
+
   name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}mldatascientist")
-  scope                = azapi_resource.aml_workspace.id  # Individual workspace resource
+  scope                = azapi_resource.aml_workspace.id # Individual workspace resource
   role_definition_name = "AzureML Data Scientist"
   principal_id         = local.compute_cluster_principal_id
 }
@@ -589,9 +596,9 @@ resource "azurerm_role_assignment" "compute_keyvault_secrets_user" {
   depends_on = [
     module.keyvault_aml
   ]
-  
+
   name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}${module.keyvault_aml.name}secretsuser")
-  scope                = module.keyvault_aml.id  # Individual Key Vault resource
+  scope                = module.keyvault_aml.id # Individual Key Vault resource
   role_definition_name = "Key Vault Secrets User"
   principal_id         = local.compute_cluster_principal_id
 }
@@ -603,9 +610,9 @@ resource "azurerm_role_assignment" "compute_storage_blob_contributor" {
   depends_on = [
     module.storage_account_default
   ]
-  
+
   name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}${module.storage_account_default.name}blobcontrib")
-  scope                = module.storage_account_default.id  # Individual storage account resource
+  scope                = module.storage_account_default.id # Individual storage account resource
   role_definition_name = "Storage Blob Data Contributor"
   principal_id         = local.compute_cluster_principal_id
 }
@@ -617,9 +624,9 @@ resource "azurerm_role_assignment" "compute_storage_file_privileged_contributor"
   depends_on = [
     module.storage_account_default
   ]
-  
+
   name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}${module.storage_account_default.name}filepriv")
-  scope                = module.storage_account_default.id  # Individual storage account resource
+  scope                = module.storage_account_default.id # Individual storage account resource
   role_definition_name = "Storage File Data Privileged Contributor"
   principal_id         = local.compute_cluster_principal_id
 }
@@ -682,64 +689,198 @@ resource "azurerm_monitor_diagnostic_setting" "appinsights_diagnostics" {
   }
 }
 
-# Azure ML workspace diagnostic settings with all supported log categories
+# Azure ML workspace diagnostic settings with ALL supported log categories
 resource "azurerm_monitor_diagnostic_setting" "ml_workspace_diagnostics" {
   name                       = "${azapi_resource.aml_workspace.name}-diagnostics"
   target_resource_id         = azapi_resource.aml_workspace.id
   log_analytics_workspace_id = var.log_analytics_workspace_id
 
-  # ML Workspace supported log categories based on Microsoft documentation
+  # Compute-related log categories
   enabled_log {
     category = "AmlComputeClusterEvent"
   }
-  
+
   enabled_log {
     category = "AmlComputeClusterNodeEvent"
   }
-  
+
   enabled_log {
     category = "AmlComputeJobEvent"
   }
-  
+
   enabled_log {
     category = "AmlComputeCpuGpuUtilization"
   }
-  
-  enabled_log {
-    category = "AmlRunStatusChangedEvent"
-  }
-  
-  enabled_log {
-    category = "ModelsChangeEvent"
-  }
-  
-  enabled_log {
-    category = "ModelsReadEvent"
-  }
-  
-  
-  enabled_log {
-    category = "DataSetChangeEvent"
-  }
-  
-  enabled_log {
-    category = "DataStoreChangeEvent"
-  }
-  
-  enabled_log {
-    category = "EnvironmentChangeEvent"
-  }
-  
-  enabled_log {
-    category = "EnvironmentReadEvent"
-  }
-  
+
   enabled_log {
     category = "ComputeInstanceEvent"
   }
 
+  # Run and experiment-related log categories
+  enabled_log {
+    category = "AmlRunStatusChangedEvent"
+  }
+
+  enabled_log {
+    category = "RunEvent"
+  }
+
+  enabled_log {
+    category = "RunReadEvent"
+  }
+
+  # Data-related log categories
+  enabled_log {
+    category = "DataSetChangeEvent"
+  }
+
+  enabled_log {
+    category = "DataSetReadEvent"
+  }
+
+  enabled_log {
+    category = "DataStoreChangeEvent"
+  }
+
+  enabled_log {
+    category = "DataStoreReadEvent"
+  }
+
+  enabled_log {
+    category = "DataLabelChangeEvent"
+  }
+
+  enabled_log {
+    category = "DataLabelReadEvent"
+  }
+
+  # Model-related log categories
+  enabled_log {
+    category = "ModelsChangeEvent"
+  }
+
+  enabled_log {
+    category = "ModelsReadEvent"
+  }
+
+  enabled_log {
+    category = "ModelsActionEvent"
+  }
+
+  # Environment-related log categories
+  enabled_log {
+    category = "EnvironmentChangeEvent"
+  }
+
+  enabled_log {
+    category = "EnvironmentReadEvent"
+  }
+
+  # Pipeline-related log categories
+  enabled_log {
+    category = "PipelineChangeEvent"
+  }
+
+  enabled_log {
+    category = "PipelineReadEvent"
+  }
+
+  # Deployment and inference log categories
+  enabled_log {
+    category = "DeploymentReadEvent"
+  }
+
+  enabled_log {
+    category = "DeploymentEventACI"
+  }
+
+  enabled_log {
+    category = "DeploymentEventAKS"
+  }
+
+  enabled_log {
+    category = "InferencingOperationAKS"
+  }
+
+  enabled_log {
+    category = "InferencingOperationACI"
+  }
+
+  # All metrics
   enabled_metric {
     category = "AllMetrics"
+  }
+}
+
+##### Create Compute Cluster
+#####
+
+## Create compute cluster with user-assigned managed identity
+##
+resource "azapi_resource" "compute_cluster_uami" {
+  depends_on = [
+    azapi_resource.aml_workspace,
+    module.private_endpoint_aml_workspace
+  ]
+
+  type      = "Microsoft.MachineLearningServices/workspaces/computes@2024-10-01"
+  name      = "cpu-cluster-uami"
+  parent_id = azapi_resource.aml_workspace.id
+  location  = var.location
+
+  body = {
+    identity = {
+      type = "UserAssigned"
+      userAssignedIdentities = {
+        "${var.compute_cluster_identity_id}" = {}
+      }
+    }
+    properties = {
+      computeType = "AmlCompute"
+      properties = {
+        vmSize                      = "Standard_F8s_v2"
+        enableNodePublicIp          = false
+        isolatedNetwork             = false
+        osType                      = "Linux"
+        remoteLoginPortPublicAccess = "Disabled"
+        scaleSettings = {
+          maxNodeCount                = 4
+          minNodeCount                = 2
+          nodeIdleTimeBeforeScaleDown = "PT2M"
+        }
+      }
+      description = "CPU compute cluster with user-assigned managed identity for ML training workloads"
+    }
+  }
+
+  tags = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_date"],
+      tags["created_by"]
+    ]
+  }
+}
+
+##### Configure Image Build Compute
+#####
+
+## Configure workspace to use compute cluster for image builds since ACR is private
+##
+resource "azapi_update_resource" "workspace_image_build_config" {
+  depends_on = [
+    azapi_resource.aml_workspace,
+    azapi_resource.compute_cluster_uami
+  ]
+
+  type        = "Microsoft.MachineLearningServices/workspaces@2025-04-01-preview"
+  resource_id = azapi_resource.aml_workspace.id
+
+  body = {
+    properties = {
+      imageBuildCompute = azapi_resource.compute_cluster_uami.name
+    }
   }
 }
 

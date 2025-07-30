@@ -9,7 +9,7 @@ inputs:
   model_name: 'taxi-classification'
   endpoint_name: 'demo-classification'
   deployment_name: 'green'
-  registry: 'amlrdevcc002'
+  registry: 'amlrdevcc004'
 outputs: 
   pipeline_job_trained_model:
     mode: rw_mount

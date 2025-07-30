@@ -368,6 +368,68 @@ az role assignment list --scope <registry-resource-id>
 az ml registry show --name <registry-name>
 ```
 
+## 🔧 Troubleshooting
+
+### **Common Deployment Issues**
+
+#### **Registry Creation Conflicts**
+
+**Issue**: Registry deployment fails due to soft-deleted Azure resources.
+
+**Note**: While this module doesn't directly create Key Vaults, it depends on the workspace module which does. If you're seeing Key Vault conflicts:
+
+**Solution**: Purge any soft-deleted Key Vaults before deploying the entire infrastructure:
+```bash
+# Check for soft-deleted Key Vaults that might conflict
+az keyvault list-deleted --query "[].{Name:name, Location:properties.location}" --output table
+
+# Purge if needed (coordinate with workspace module deployment)
+az keyvault purge --name kvdevcc002 --location canadacentral
+```
+
+#### **Private Endpoint Connectivity**
+
+**Issue**: Registry not accessible from workspace through private endpoint.
+
+**Solutions**:
+- Verify DNS zone links exist: `az network private-dns zone list --resource-group {dns-rg}`
+- Check private endpoint approval: `az network private-endpoint list --resource-group {registry-rg}`
+- Validate outbound rules in workspace managed VNet
+
+#### **RBAC Permission Issues**
+
+**Issue**: Users or compute clusters cannot access registry.
+
+**Solutions**:
+- Verify role assignments: `az role assignment list --scope {registry-id}`
+- Check managed identity principal IDs match workspace compute
+- Ensure proper dependency chain between workspace and registry modules
+
+### **Diagnostic Commands**
+
+```bash
+# Check registry status
+az ml registry show --name {registry-name} --resource-group {resource-group}
+
+# Verify private endpoint connections
+az network private-endpoint list --resource-group {resource-group} --query '[].{Name:name, State:privateLinkServiceConnections[0].privateLinkServiceConnectionState.status}'
+
+# Monitor registry logs
+az monitor activity-log list --resource-group {resource-group} --start-time {start-time}
+
+# Check DNS resolution
+nslookup {registry-name}.api.azureml.ms
+```
+
+### **Cleanup Considerations**
+
+⚠️ **Important**: This registry may contain valuable ML assets (models, components, environments).
+
+**Before cleanup**:
+1. Export/backup important models and components
+2. Coordinate with teams using shared registry
+3. Verify no production workspaces depend on registry assets
+
 ## Clean Up
 
 To remove all resources:

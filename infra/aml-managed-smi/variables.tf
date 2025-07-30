@@ -116,3 +116,9 @@ variable "log_analytics_workspace_id" {
   description = "Resource ID of the Log Analytics workspace for diagnostic settings"
   type        = string
 }
+
+variable "enable_auto_purge" {
+  description = "Enable automatic purging of Key Vault on destroy (useful for dev/test environments)"
+  type        = bool
+  default     = false
+}

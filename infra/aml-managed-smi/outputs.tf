@@ -55,3 +55,13 @@ output "container_registry_name" {
   description = "Name of the Container Registry"
   value       = module.container_registry.name
 }
+
+output "compute_cluster_uami_id" {
+  description = "ID of the CPU compute cluster with user-assigned managed identity"
+  value       = azapi_resource.compute_cluster_uami.id
+}
+
+output "compute_cluster_uami_name" {
+  description = "Name of the CPU compute cluster with user-assigned managed identity"
+  value       = azapi_resource.compute_cluster_uami.name
+}

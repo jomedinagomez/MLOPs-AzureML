@@ -7,7 +7,7 @@ resource "azurerm_resource_group" "rgwork" {
 
   name     = "rg-aml-reg-${var.purpose}-${var.location_code}"
   location = var.location
-  tags = var.tags
+  tags     = var.tags
 }
 
 ##### Create the Azure Machine Learning Registry
@@ -87,8 +87,8 @@ module "private_endpoint_aml_registry" {
     azapi_resource.registry
   ]
 
-  source              = "../modules/private-endpoint"
-  
+  source = "../modules/private-endpoint"
+
   random_string       = var.random_string
   location            = var.workload_vnet_location
   location_code       = var.workload_vnet_location_code
@@ -99,7 +99,7 @@ module "private_endpoint_aml_registry" {
   resource_id      = azapi_resource.registry.id
   subresource_name = "amlregistry"
 
-  subnet_id = var.subnet_id
+  subnet_id            = var.subnet_id
   private_dns_zone_ids = [local.dns_zone_aml_api_id]
 }
 
@@ -113,7 +113,7 @@ resource "azurerm_role_assignment" "registry_user_permission" {
   depends_on = [
     time_sleep.wait_registry_identity
   ]
-  
+
   name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${var.user_object_id}${azapi_resource.registry.name}registryuser")
   scope                = azapi_resource.registry.id
   role_definition_name = "AzureML Registry User"
@@ -125,7 +125,7 @@ resource "azurerm_role_assignment" "registry_user_permission" {
 ##
 locals {
   # Use the managed identity values passed from the VNet module
-  compute_cluster_identity_id = var.compute_cluster_identity_id
+  compute_cluster_identity_id  = var.compute_cluster_identity_id
   compute_cluster_principal_id = var.compute_cluster_principal_id
 }
 
@@ -136,7 +136,7 @@ resource "azurerm_role_assignment" "compute_registry_user" {
   depends_on = [
     time_sleep.wait_registry_identity
   ]
-  
+
   name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}${azapi_resource.registry.name}registryuser")
   scope                = azapi_resource.registry.id
   role_definition_name = "AzureML Registry User"
@@ -150,7 +150,7 @@ resource "azurerm_role_assignment" "workspace_network_connection_approver" {
   depends_on = [
     time_sleep.wait_registry_identity
   ]
-  
+
   name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${var.workspace_principal_id}${azapi_resource.registry.name}netapprover")
   scope                = azapi_resource.registry.id
   role_definition_name = "Azure AI Enterprise Network Connection Approver"
@@ -170,9 +170,161 @@ resource "azurerm_monitor_diagnostic_setting" "registry_diagnostics" {
   enabled_log {
     category = "RegistryAssetReadEvent"
   }
-  
+
   enabled_log {
     category = "RegistryAssetWriteEvent"
   }
 }
+
+##### Diagnostic Settings for Microsoft-Managed Registry Resources
+#####
+
+# Note: Registry managed resources are created by Azure and their resource IDs
+# are not immediately available through the azapi_resource output.
+# We use null_resource with Azure CLI to configure diagnostic settings after
+# the registry and its managed resources are fully provisioned.
+
+# Configure diagnostic settings for Microsoft-managed registry resources
+resource "null_resource" "registry_managed_resources_diagnostics" {
+  depends_on = [
+    azapi_resource.registry,
+    time_sleep.wait_registry_identity
+  ]
+
+  # Configure diagnostics when the resource is created/updated
+  provisioner "local-exec" {
+    command = <<-EOT
+      $registryName = "${azapi_resource.registry.name}"
+      $resourceGroup = "${azurerm_resource_group.rgwork.name}"
+      $workspaceId = "${var.log_analytics_workspace_id}"
+      
+      Write-Host "Configuring diagnostic settings for registry managed resources: $registryName"
+      
+      # Retry until all resources are configured (max 10 minutes)
+      $maxAttempts = 20
+      $attempt = 1
+      $storageAccountConfigured = $false
+      $blobConfigured = $false
+      $fileConfigured = $false
+      $queueConfigured = $false
+      $tableConfigured = $false
+      $acrConfigured = $false
+      
+      while (($attempt -le $maxAttempts) -and (-not ($storageAccountConfigured -and $blobConfigured -and $fileConfigured -and $queueConfigured -and $tableConfigured -and $acrConfigured))) {
+        Write-Host "Attempt $attempt/$maxAttempts - Checking for managed resources..."
+        
+        # Configure storage account diagnostics (metrics only)
+        if (-not $storageAccountConfigured) {
+          # Look for managed resource group following pattern: azureml-rg-{registryName}_{guid}
+          $managedRgPattern = "azureml-rg-$registryName"
+          $managedRgs = az group list --query "[?starts_with(name, '$managedRgPattern')].name" --output tsv 2>$null
+          
+          foreach ($rg in $managedRgs) {
+            if ($rg) {
+              Write-Host "Checking managed resource group: $rg"
+              $storage = az storage account list --resource-group $rg --query "[0].id" --output tsv 2>$null
+              if ($storage) {
+                Write-Host "Found managed storage account: $storage"
+                # Storage account only supports metrics, not logs
+                az monitor diagnostic-settings create --name "managed-storage-account-diagnostics" --resource $storage --workspace $workspaceId --metrics '[{"category":"Transaction","enabled":true},{"category":"Capacity","enabled":true}]' 2>$null
+                if ($LASTEXITCODE -eq 0) { 
+                  $storageAccountConfigured = $true
+                  Write-Host "✓ Storage account diagnostics configured"
+                }
+                
+                # Configure blob service diagnostics (logs and metrics)
+                if (-not $blobConfigured) {
+                  $blobService = "$storage/blobServices/default"
+                  az monitor diagnostic-settings create --name "managed-blob-diagnostics" --resource $blobService --workspace $workspaceId --logs '[{"category":"StorageRead","enabled":true},{"category":"StorageWrite","enabled":true},{"category":"StorageDelete","enabled":true}]' --metrics '[{"category":"Transaction","enabled":true},{"category":"Capacity","enabled":true}]' 2>$null
+                  if ($LASTEXITCODE -eq 0) { 
+                    $blobConfigured = $true
+                    Write-Host "✓ Blob service diagnostics configured"
+                  }
+                }
+                
+                # Configure file service diagnostics (logs and metrics)
+                if (-not $fileConfigured) {
+                  $fileService = "$storage/fileServices/default"
+                  az monitor diagnostic-settings create --name "managed-file-diagnostics" --resource $fileService --workspace $workspaceId --logs '[{"category":"StorageRead","enabled":true},{"category":"StorageWrite","enabled":true},{"category":"StorageDelete","enabled":true}]' --metrics '[{"category":"Transaction","enabled":true},{"category":"Capacity","enabled":true}]' 2>$null
+                  if ($LASTEXITCODE -eq 0) { 
+                    $fileConfigured = $true
+                    Write-Host "✓ File service diagnostics configured"
+                  }
+                }
+                
+                # Configure queue service diagnostics (logs and metrics)
+                if (-not $queueConfigured) {
+                  $queueService = "$storage/queueServices/default"
+                  az monitor diagnostic-settings create --name "managed-queue-diagnostics" --resource $queueService --workspace $workspaceId --logs '[{"category":"StorageRead","enabled":true},{"category":"StorageWrite","enabled":true},{"category":"StorageDelete","enabled":true}]' --metrics '[{"category":"Transaction","enabled":true},{"category":"Capacity","enabled":true}]' 2>$null
+                  if ($LASTEXITCODE -eq 0) { 
+                    $queueConfigured = $true
+                    Write-Host "✓ Queue service diagnostics configured"
+                  }
+                }
+                
+                # Configure table service diagnostics (logs and metrics)
+                if (-not $tableConfigured) {
+                  $tableService = "$storage/tableServices/default"
+                  az monitor diagnostic-settings create --name "managed-table-diagnostics" --resource $tableService --workspace $workspaceId --logs '[{"category":"StorageRead","enabled":true},{"category":"StorageWrite","enabled":true},{"category":"StorageDelete","enabled":true}]' --metrics '[{"category":"Transaction","enabled":true},{"category":"Capacity","enabled":true}]' 2>$null
+                  if ($LASTEXITCODE -eq 0) { 
+                    $tableConfigured = $true
+                    Write-Host "✓ Table service diagnostics configured"
+                  }
+                }
+                
+                break
+              }
+            }
+          }
+        }
+        
+        # Configure ACR diagnostics  
+        if (-not $acrConfigured) {
+          # Look for managed resource group following pattern: azureml-rg-{registryName}_{guid}
+          $managedRgPattern = "azureml-rg-$registryName"
+          $managedRgs = az group list --query "[?starts_with(name, '$managedRgPattern')].name" --output tsv 2>$null
+          
+          foreach ($rg in $managedRgs) {
+            if ($rg) {
+              $acr = az acr list --resource-group $rg --query "[0].id" --output tsv 2>$null
+              if ($acr) {
+                Write-Host "Found managed ACR: $acr"
+                az monitor diagnostic-settings create --name "managed-acr-diagnostics" --resource $acr --workspace $workspaceId --logs '[{"category":"ContainerRegistryRepositoryEvents","enabled":true},{"category":"ContainerRegistryLoginEvents","enabled":true}]' --metrics '[{"category":"AllMetrics","enabled":true}]' 2>$null
+                if ($LASTEXITCODE -eq 0) { 
+                  $acrConfigured = $true
+                  Write-Host "✓ ACR diagnostics configured"
+                  break
+                }
+              }
+            }
+          }
+        }
+        
+        if ($storageAccountConfigured -and $blobConfigured -and $fileConfigured -and $queueConfigured -and $tableConfigured -and $acrConfigured) {
+          Write-Host "✓ All diagnostics configured successfully"
+          break
+        }
+        
+        $attempt++
+        if ($attempt -le $maxAttempts) {
+          Start-Sleep -Seconds 30
+        }
+      }
+      
+      if (-not ($storageAccountConfigured -and $blobConfigured -and $fileConfigured -and $queueConfigured -and $tableConfigured -and $acrConfigured)) {
+        Write-Host "⚠ Timeout: Not all diagnostics could be configured"
+        exit 1
+      }
+    EOT
+
+    interpreter = ["PowerShell", "-Command"]
+  }
+
+  triggers = {
+    registry_id  = azapi_resource.registry.id
+    workspace_id = var.log_analytics_workspace_id
+  }
+}
+
+
 

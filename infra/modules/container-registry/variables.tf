@@ -2,13 +2,13 @@
 variable "bypass_network_rules" {
   description = "Determines whether trusted Azure services are allowed to bypass the service firewall. Set to AzureServices or None"
   type        = string
-  default = "AzureServices"
+  default     = "AzureServices"
 }
 
 variable "default_network_action" {
   description = "The default network action for the resource. Set to either Allow or Deny"
   type        = string
-  default = "Deny"
+  default     = "Deny"
 }
 
 variable "law_resource_id" {
@@ -50,4 +50,10 @@ variable "resource_group_name" {
 variable "tags" {
   description = "The tags to apply to the resource"
   type        = map(string)
+}
+
+variable "enable_auto_purge" {
+  description = "Enable automatic purging of Container Registry on destroy (useful for dev/test environments)"
+  type        = bool
+  default     = false
 }

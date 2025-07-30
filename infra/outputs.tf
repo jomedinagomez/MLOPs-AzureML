@@ -20,13 +20,13 @@ output "resource_group_name_dns" {
 output "dns_zone_ids" {
   description = "Map of all DNS zone IDs"
   value = {
-    blob         = module.aml_vnet.dns_zone_blob_id
-    file         = module.aml_vnet.dns_zone_file_id
-    table        = module.aml_vnet.dns_zone_table_id
-    queue        = module.aml_vnet.dns_zone_queue_id
-    keyvault     = module.aml_vnet.dns_zone_keyvault_id
-    acr          = module.aml_vnet.dns_zone_acr_id
-    aml_api      = module.aml_vnet.dns_zone_aml_api_id
+    blob          = module.aml_vnet.dns_zone_blob_id
+    file          = module.aml_vnet.dns_zone_file_id
+    table         = module.aml_vnet.dns_zone_table_id
+    queue         = module.aml_vnet.dns_zone_queue_id
+    keyvault      = module.aml_vnet.dns_zone_keyvault_id
+    acr           = module.aml_vnet.dns_zone_acr_id
+    aml_api       = module.aml_vnet.dns_zone_aml_api_id
     aml_notebooks = module.aml_vnet.dns_zone_aml_notebooks_id
   }
 }

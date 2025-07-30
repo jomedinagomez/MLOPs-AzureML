@@ -360,6 +360,65 @@ az identity show --name "${purpose}-mi-cluster" --resource-group <dns-resource-g
 az monitor activity-log list --resource-group <resource-group>
 ```
 
+## 🔧 Troubleshooting
+
+### **Common Deployment Issues**
+
+#### **Key Vault Soft-Delete Conflicts**
+
+**Issue**: Deployment fails with `409 Conflict` for Key Vault diagnostic settings:
+```
+Error: A resource with the ID ".../Microsoft.KeyVault/vaults/kvdevcc002/providers/Microsoft.Insights/diagnosticSettings/kvdevcc002-diagnostics" already exists
+```
+
+**Root Cause**: Azure Key Vaults use soft-delete protection. Previous deployments may have left Key Vaults in soft-deleted state.
+
+**Solution**: Purge the soft-deleted Key Vault before deployment:
+```bash
+# List soft-deleted Key Vaults in your subscription
+az keyvault list-deleted --query "[].{Name:name, Location:properties.location, DeletionDate:properties.deletionDate}" --output table
+
+# Purge the conflicting Key Vault (replace with actual name and location)
+az keyvault purge --name kvdevcc002 --location canadacentral
+```
+
+**Prevention**: Always purge Key Vaults when cleaning up test environments.
+
+#### **Managed Identity Dependencies**
+
+**Issue**: Compute cluster fails to deploy due to missing managed identity.
+
+**Solution**: Ensure `aml-vnet` module is deployed first and outputs are properly referenced:
+```hcl
+compute_cluster_identity_id  = var.compute_cluster_identity_id
+compute_cluster_principal_id = var.compute_cluster_principal_id
+```
+
+#### **Private Endpoint Connection Issues**
+
+**Issue**: Services not accessible through private endpoints.
+
+**Solutions**:
+- Verify DNS zone links exist in the VNet
+- Check private endpoint approval status
+- Validate firewall rules allow Azure services
+
+### **Diagnostic Commands**
+
+```bash
+# Check Key Vault status
+az keyvault show --name {key-vault-name} --query "{Name:name, State:properties.provisioningState}"
+
+# Verify managed identity assignment
+az ml compute show --name cpu-cluster-uami --workspace-name {workspace-name} --resource-group {resource-group}
+
+# Check private endpoint connections
+az network private-endpoint list --resource-group {resource-group-name}
+
+# Monitor workspace deployment
+az ml workspace show --name {workspace-name} --resource-group {resource-group}
+```
+
 ## Clean Up
 
 To remove all resources:

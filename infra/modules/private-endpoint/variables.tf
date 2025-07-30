@@ -5,7 +5,7 @@ variable "location" {
 
 variable "location_code" {
   description = "The location code to append to the resource name"
-  type = string
+  type        = string
 }
 
 variable "private_dns_zone_ids" {

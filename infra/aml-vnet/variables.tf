@@ -49,3 +49,13 @@ variable "log_analytics_retention_days" {
     error_message = "Log Analytics retention must be between 30 and 730 days."
   }
 }
+
+variable "enable_auto_purge" {
+  description = "Enable automatic purging of Log Analytics workspace on destroy (useful for dev/test environments)"
+  type        = bool
+  default     = false
+  validation {
+    condition     = var.enable_auto_purge == true || var.enable_auto_purge == false
+    error_message = "Enable auto purge must be true or false."
+  }
+}
