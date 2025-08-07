@@ -12,6 +12,9 @@ inputs:
     type: string
   register_job_status:
     type: uri_folder
+  registry:
+    type: string
+    optional: true
 environment:
       conda_file: ../../environment/train/conda.yaml
       image: mcr.microsoft.com/azureml/openmpi5.0-ubuntu24.04:latest
@@ -22,4 +25,5 @@ command: >-
   --endpoint_name ${{inputs.endpoint_name}} 
   --deployment_name ${{inputs.deployment_name}} 
   --register_job_status ${{inputs.register_job_status}} 
+  $[[--registry ${{inputs.registry}}]] 
 # </component>

@@ -118,13 +118,12 @@ jobs:
     outputs:
       register_output:
 
-# Deployment job is commented out for now
-
-# deployws_job:
-#   type: command
-#   component: ../src/components/deploy.yaml
-#   inputs:
-#     model_name: ${{parent.inputs.model_name}}
-#     endpoint_name: ${{parent.inputs.endpoint_name}}
-#     deployment_name: ${{parent.inputs.deployment_name}}
-#     register_job_status: ${{parent.jobs.registerws_job.outputs.register_output}}
+  deployex_job:
+    type: command
+    component: ../src/components/deploy.yaml
+    inputs:
+      model_name: ${{parent.inputs.model_name}}
+      endpoint_name: ${{parent.inputs.endpoint_name}}
+      deployment_name: ${{parent.inputs.deployment_name}}
+      registry: ${{parent.inputs.registry}}
+      register_job_status: ${{parent.jobs.registerex_job.outputs.register_output}}

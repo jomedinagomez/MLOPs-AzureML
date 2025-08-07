@@ -23,6 +23,7 @@ parser.add_argument("--model_name", type=str, help="Model_name_to_register")
 parser.add_argument("--endpoint_name", type=str, help="Name of Endpoint")
 parser.add_argument("--deployment_name", type=str, help="Name of Deployment")
 parser.add_argument("--register_job_status", type=str, help="Name of score report")
+parser.add_argument("--registry", type=str, required=False, help="Registry name to get model from")
 
 args = parser.parse_args()
 
@@ -58,14 +59,25 @@ print("Initializing MLclient")
 model_name = args.model_name
 print("Model Name: ", model_name)
 
+# Determine which client to use for model retrieval
+if args.registry:
+    print(f"Using external registry: {args.registry}")
+    # Create registry client for model retrieval
+    ml_client_model = MLClient(credential=credential, registry_name=args.registry)
+    print(f"Getting model from registry: {args.registry}")
+else:
+    print("Using workspace for model retrieval")
+    # Use workspace client for model retrieval
+    ml_client_model = ml_client
+
 # Let's pick the latest version of the model
 latest_model_version = max(
-    [int(m.version) for m in ml_client.models.list(name=model_name)]
+    [int(m.version) for m in ml_client_model.models.list(name=model_name)]
 )
 
-print("Model Name: ", latest_model_version)
+print("Latest Model Version: ", latest_model_version)
 
-model = ml_client.models.get(name=model_name, version=latest_model_version)
+model = ml_client_model.models.get(name=model_name, version=latest_model_version)
 
 # define an online endpoint
 endpoint = ManagedOnlineEndpoint(

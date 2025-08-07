@@ -18,6 +18,16 @@ variable "random_string" {
   type        = string
 }
 
+variable "vnet_address_space" {
+  description = "Address space for the virtual network"
+  type        = string
+}
+
+variable "subnet_address_prefix" {
+  description = "Address prefix for the subnet"
+  type        = string
+}
+
 variable "resource_group_name_dns" {
   description = "The name of the resource group where the Private DNS Zones exist"
   type        = string

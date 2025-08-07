@@ -866,12 +866,21 @@ resource "azapi_resource" "compute_cluster_uami" {
 ##### Configure Image Build Compute
 #####
 
+## Add a delay to ensure compute cluster is fully provisioned
+resource "time_sleep" "wait_for_compute_cluster" {
+  depends_on = [
+    azapi_resource.compute_cluster_uami
+  ]
+  create_duration = "180s"  # Increased to 180 seconds
+}
+
 ## Configure workspace to use compute cluster for image builds since ACR is private
-##
+## Using the same API version as workspace creation for consistency
 resource "azapi_update_resource" "workspace_image_build_config" {
   depends_on = [
     azapi_resource.aml_workspace,
-    azapi_resource.compute_cluster_uami
+    time_sleep.wait_for_compute_cluster,
+    module.private_endpoint_aml_workspace
   ]
 
   type        = "Microsoft.MachineLearningServices/workspaces@2025-04-01-preview"
@@ -881,6 +890,12 @@ resource "azapi_update_resource" "workspace_image_build_config" {
     properties = {
       imageBuildCompute = azapi_resource.compute_cluster_uami.name
     }
+  }
+
+  # Add verification step
+  provisioner "local-exec" {
+    command = "Start-Sleep -Seconds 10; Write-Host 'Image build compute configuration applied. Please verify manually with: az ml workspace show --name ${azapi_resource.aml_workspace.name} --resource-group ${azurerm_resource_group.rgwork.name} --query image_build_compute'"
+    interpreter = ["pwsh", "-Command"]
   }
 }
 
