@@ -1,7 +1,7 @@
 locals {
-  # Standard naming convention for networking resources
-  vnet_resource_group_prefix = "rg-aml-vnet"
-  vnet_prefix                = "vnet-aml"
-  subnet_prefix              = "subnet-aml"
-  log_analytics_prefix       = "log-aml"
+  # Dynamic naming convention using specific resource prefixes
+  vnet_resource_group_prefix = "rg-${var.prefix}-vnet"
+  vnet_prefix                = var.resource_prefixes.vnet
+  subnet_prefix              = var.resource_prefixes.subnet
+  log_analytics_prefix       = var.resource_prefixes.log_analytics
 }

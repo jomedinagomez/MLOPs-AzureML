@@ -1,3 +1,22 @@
+variable "prefix" {
+  description = "Base prefix for all resource names to ensure uniqueness and consistency"
+  type        = string
+}
+
+variable "resource_prefixes" {
+  description = "Specific prefixes for each resource type"
+  type = object({
+    vnet               = string
+    subnet             = string
+    workspace          = string
+    registry           = string
+    storage            = string
+    container_registry = string
+    key_vault          = string
+    log_analytics      = string
+  })
+}
+
 variable "allow_blob_public_access" {
   description = "Allow public access of blob containers if specified on the container"
   type        = bool

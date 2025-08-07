@@ -1,4 +1,23 @@
 
+variable "prefix" {
+  description = "Base prefix for all resource names to ensure uniqueness and consistency"
+  type        = string
+}
+
+variable "resource_prefixes" {
+  description = "Specific prefixes for each resource type"
+  type = object({
+    vnet               = string
+    subnet             = string
+    workspace          = string
+    registry           = string
+    storage            = string
+    container_registry = string
+    key_vault          = string
+    log_analytics      = string
+  })
+}
+
 variable "purpose" {
   description = "Environment identifier (e.g., 'dev', 'prod', 'test')"
   type        = string

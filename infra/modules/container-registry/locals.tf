@@ -1,6 +1,6 @@
 locals {
-  # Standard naming convention for relevant resources
-  acr_name = "acr"
+  # Dynamic naming convention using specific resource prefixes
+  acr_name = var.resource_prefixes.container_registry
 
   # Resource specific settings
   sku_name               = "Premium"

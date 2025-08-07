@@ -31,6 +31,8 @@ resource "azurerm_application_insights" "aml-appins" {
 ##
 module "container_registry" {
   source              = "../modules/container-registry"
+  prefix              = var.prefix
+  resource_prefixes   = var.resource_prefixes
   purpose             = var.purpose
   random_string       = var.random_string
   location            = var.location
@@ -47,6 +49,8 @@ module "container_registry" {
 module "storage_account_default" {
 
   source              = "../modules/storage-account"
+  prefix              = var.prefix
+  resource_prefixes   = var.resource_prefixes
   purpose             = var.purpose
   random_string       = var.random_string
   location            = var.location
@@ -79,6 +83,8 @@ module "storage_account_default" {
 module "keyvault_aml" {
 
   source              = "../modules/key-vault"
+  prefix              = var.prefix
+  resource_prefixes   = var.resource_prefixes
   random_string       = var.random_string
   location            = var.location
   location_code       = var.location_code

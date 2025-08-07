@@ -39,6 +39,8 @@ data "azurerm_client_config" "current" {}
 module "aml_vnet" {
   source = "./aml-vnet"
 
+  prefix                = var.prefix
+  resource_prefixes     = var.resource_prefixes
   purpose               = var.purpose
   location              = var.location
   location_code         = var.location_code
@@ -54,6 +56,8 @@ module "aml_workspace" {
   source = "./aml-managed-smi"
 
   # Core variables
+  prefix                  = var.prefix
+  resource_prefixes       = var.resource_prefixes
   purpose                 = var.purpose
   location                = var.location
   location_code           = var.location_code
@@ -96,6 +100,8 @@ module "aml_registry" {
   source = "./aml-registry-smi"
 
   # Core variables
+  prefix                      = var.prefix
+  resource_prefixes           = var.resource_prefixes
   purpose                     = var.purpose
   location                    = var.location
   location_code               = var.location_code
