@@ -11,14 +11,14 @@ This guide provides step-by-step instructions for deploying the Azure ML platfor
 3. **Permissions** to create service principals in Azure AD
 4. **Subscription** with sufficient quota for Azure ML resources
 
-### One-Command Development Deployment
+### One-Command Full Deployment (Dev + Prod + Hub)
 
 ```bash
 # Clone and deploy development environment
 git clone <repository-url>
 cd MLOPs-AzureML/infra
 terraform init
-terraform apply -var-file="environments/dev.tfvars" -auto-approve
+terraform apply -auto-approve
 ```
 
 ## 📋 Step-by-Step Deployment
@@ -30,14 +30,14 @@ cd infra
 terraform init
 ```
 
-### Step 2: Deploy Development Environment
+### Step 2: Deploy the Full Platform
 
 ```bash
 # Plan the deployment
-terraform plan -var-file="environments/dev.tfvars"
+terraform plan
 
 # Apply the deployment
-terraform apply -var-file="environments/dev.tfvars"
+terraform apply
 ```
 
 **What gets created:**
@@ -60,25 +60,8 @@ terraform output -json service_principal_auth_instructions
 # Save these values securely for CI/CD pipeline setup
 ```
 
-### Step 4: Update Production Variables (Optional)
-
-If deploying production, update cross-environment values in `environments/prod.tfvars`:
-
-```bash
-# Get dev environment outputs
-DEV_REGISTRY_RG=$(terraform output resource_group_name_registry)
-DEV_REGISTRY_NAME=$(terraform output registry_name)
-DEV_WORKSPACE_PRINCIPAL=$(terraform output workspace_principal_id)
-
-# Update prod.tfvars with these values
-```
-
-### Step 5: Deploy Production Environment (Optional)
-
-```bash
-# Deploy production with cross-environment access
-terraform apply -var-file="environments/prod.tfvars"
-```
+### Step 4: Production is included
+No separate production apply is required. The root `main.tf` deploys dev and prod together, including hub-and-spoke networking.
 
 ## Configuration Options
 

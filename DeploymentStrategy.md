@@ -398,7 +398,7 @@ To support the asset promotion workflow while maintaining security boundaries, s
 
 **Development Compute Cluster UAMI**
 - **Identity**: `{dev-compute-uami-name}` (lives in dev resource group)
-- **Scope**: Development environment only
+- **Scope**: Dev + Prod + Hub (single apply from root main)
 - **Purpose**: Run training jobs, experimentation, model development
 
 **Production Compute Cluster UAMI**

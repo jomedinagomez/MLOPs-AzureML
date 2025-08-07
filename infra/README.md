@@ -8,48 +8,31 @@ This Azure ML platform follows the deployment strategy with **complete environme
 
 ### Service Principal Strategy (Updated)
 
-The service principal is created **independently** before any environment deployment and has permissions across **all 6 resource groups** (3 dev + 3 prod) as per the deployment strategy:
+The service principal is created by the root `main.tf` during deployment and is granted permissions across **all 7 resource groups** (3 dev + 3 prod + 1 hub) as per the deployment strategy:
 
 ```
 Service Principal: sp-aml-deployment-platform
-├── Scope: All 6 resource groups across both environments
+├── Scope: 7 resource groups across dev, prod, and hub
 ├── Permissions per resource group:
 │   ├── Contributor: Deploy ML infrastructure
 │   ├── User Access Administrator: Configure RBAC  
 │   └── Network Contributor: Configure networking
-└── Created: Before any environment deployment
+└── Created and assigned by root main.tf
 ```
 
 ## Deployment Order
 
-### Phase 1: Service Principal Creation (First)
+### Single Apply (Dev + Prod + Hub)
 
-1. **Create Service Principal** (independent step):
-   ```bash
-   cd infra/service-principal
-   terraform init
-   terraform plan
-   terraform apply
-   ```
+1. Run from `infra/` to deploy both environments and hub in one go:
+  ```bash
+  cd infra
+  terraform init
+  terraform plan
+  terraform apply
+  ```
 
-   **Outputs**: Service Principal credentials for CI/CD pipeline configuration
-
-### Phase 2: Environment Deployment
-
-2. **Deploy Development Environment**:
-   ```bash
-   cd infra
-   terraform init
-   terraform plan -var-file="environments/dev.tfvars"
-   terraform apply -var-file="environments/dev.tfvars"
-   ```
-
-3. **Deploy Production Environment**:
-   ```bash
-   cd infra  
-   terraform plan -var-file="terraform.tfvars.prod"
-   terraform apply -var-file="terraform.tfvars.prod"
-   ```
+  Root `main.tf` creates the service principal, all 7 resource groups, VNets, workspaces, registries, hub network, peering, RBAC, and outbound rules in a single run.
 
 ## Key Benefits
 
@@ -59,7 +42,7 @@ Service Principal: sp-aml-deployment-platform
 **CI/CD Ready**: SP credentials available immediately for pipeline configuration  
 **Environment Agnostic**: Same SP works for both dev and prod deployments  
 
-This approach aligns perfectly with the deployment strategy requirement for a single service principal managing all 6 resource groups across both environments.
+This approach aligns with the deployment strategy requirement for a single service principal managing all resource groups across both environments and the hub.
 1. **aml-vnet**: Deploys networking, DNS, and managed identities (foundation for all other modules)
 2. **aml-managed-smi**: Deploys ML workspace, storage, Key Vault, ACR, compute, and private endpoints. Consumes outputs from `aml-vnet`.
 3. **aml-registry-smi**: Deploys ML registry, Log Analytics, and private endpoint. Consumes outputs from `aml-vnet` and workspace identity from `aml-managed-smi`.
@@ -872,7 +855,7 @@ Use the provided PowerShell script for safe, interactive cleanup:
 # Interactive cleanup with confirmations
 .\cleanup.ps1
 
-# Force cleanup without prompts (dev environments only)
+# Force cleanup without prompts (use with care)
 .\cleanup.ps1 -Force
 
 # Only purge Key Vaults without destroying infrastructure

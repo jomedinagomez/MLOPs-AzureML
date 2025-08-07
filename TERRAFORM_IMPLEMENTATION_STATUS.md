@@ -98,11 +98,11 @@ Users can now deploy using environment-specific configurations:
 ```bash
 # Development deployment
 terraform plan -var-file="terraform.tfvars.dev"
-terraform apply -var-file="terraform.tfvars.dev"
+terraform apply
 
 # Production deployment  
 terraform plan -var-file="terraform.tfvars.prod"
-terraform apply -var-file="terraform.tfvars.prod"
+// Production is deployed in the same apply from root main.tf
 ```
 
 ### Cross-Environment Setup
@@ -148,8 +148,8 @@ The Terraform templates are now fully aligned with the deployment strategy and r
 
 ## 📚 NEXT STEPS
 
-1. **Test Deployment**: Deploy dev environment first using `terraform.tfvars.dev`
+1. **Test Deployment**: Plan and apply from root to deploy dev, prod, and hub together
 2. **Validate Functionality**: Confirm workspace creation and basic operations
-3. **Deploy Production**: Deploy prod environment using `terraform.tfvars.prod`
+3. **Deploy Production**: Included in the single apply
 4. **Enable Cross-Environment**: Configure cross-environment variables for asset promotion
 5. **Documentation**: Update operational procedures based on new configuration

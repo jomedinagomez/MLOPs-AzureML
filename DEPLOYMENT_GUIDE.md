@@ -40,10 +40,10 @@ az ad sp create-for-rbac \
 - `User Access Administrator` - Configure RBAC for managed identities
 - `Network Contributor` - Configure virtual networks and private endpoints
 
-### 3. Environment Configuration Files
-Create separate Terraform variable files for each environment:
+### 3. Environment Configuration
+Use a single `terraform.tfvars` for both environments (root main deploys dev, prod, and hub together):
 
-**Development Environment** (`terraform.tfvars.dev`):
+**Root Variables** (`terraform.tfvars`):
 ```hcl
 # Base configuration
 prefix        = "aml"
@@ -64,66 +64,17 @@ resource_prefixes = {
   log_analytics      = "amllog"
 }
 
-# Development networking
-vnet_address_space    = "10.1.0.0/16"
-subnet_address_prefix = "10.1.1.0/24"
-
-# Development-specific settings (leveraging your auto-purge implementation)
-enable_auto_purge = true  # CRITICAL: Allows comprehensive auto-purge on destroy
-
-# Resource tagging
 tags = {
-  environment  = "dev"
   project      = "ml-platform"
   created_by   = "terraform"
   owner        = "ml-team"
-  cost_center  = "dev-ml"
   created_date = "2025-08-07"
 }
 ```
 
-**Production Environment** (`terraform.tfvars.prod`):
-```hcl
-# Base configuration
-prefix        = "aml"
-purpose       = "prod"
-location      = "canadacentral"
-location_code = "cc"
-naming_suffix = "01"  # Same suffix as dev for consistency
+## 🚀 Deployment (Dev + Prod + Hub in one run)
 
-# Resource prefixes (same as dev for consistency)
-resource_prefixes = {
-  vnet               = "vnet-aml"
-  subnet             = "subnet-aml"
-  workspace          = "amlws"
-  registry           = "amlreg"
-  storage            = "amlst"
-  container_registry = "amlacr"
-  key_vault          = "amlkv"
-  log_analytics      = "amllog"
-}
-
-# Production networking (different CIDR)
-vnet_address_space    = "10.2.0.0/16"
-subnet_address_prefix = "10.2.1.0/24"
-
-# Production-specific settings (leveraging your auto-purge protection)
-enable_auto_purge = false  # CRITICAL: Prevents accidental deletion of production resources
-
-# Resource tagging
-tags = {
-  environment  = "prod"
-  project      = "ml-platform"
-  created_by   = "terraform"
-  owner        = "ml-team"
-  cost_center  = "prod-ml"
-  created_date = "2025-08-07"
-}
-```
-
-## 🚀 Phase 1: Development Environment Deployment
-
-### Step 1.1: Deploy Development Infrastructure
+### Step 1: Deploy Infrastructure
 ```bash
 # Navigate to infrastructure directory
 cd c:\Users\jomedin\Documents\MLOPs-AzureML\infra
@@ -131,23 +82,22 @@ cd c:\Users\jomedin\Documents\MLOPs-AzureML\infra
 # Initialize Terraform (if not already done)
 terraform init
 
-# Update your existing terraform.tfvars with naming_suffix = "01"
-# Your existing file already has most configurations ready
-
-# Plan development deployment using your existing terraform.tfvars
-terraform plan -var-file="terraform.tfvars" -out="dev.tfplan"
-
-# Review the plan carefully, then apply
-terraform apply "dev.tfplan"
+# Plan and apply the full platform (dev, prod, hub)
+terraform plan -out="full.tfplan"
+terraform apply "full.tfplan"
 
 # Save outputs for reference
-terraform output > dev-outputs.txt
+terraform output > deployment-outputs.txt
 ```
 
-**Expected Resource Groups Created:**
-- `rg-aml-vnet-dev-cc01` - Networking, Key Vault, shared resources, managed identities
-- `rg-aml-ws-dev-cc` - Workspace, Storage, Container Registry, Application Insights
-- `rg-aml-reg-dev-cc` - Registry resources
+**Expected Resource Groups Created (7):**
+- `rg-aml-vnet-dev-cc01` - Dev networking, shared resources
+- `rg-aml-ws-dev-cc01` - Dev workspace resources
+- `rg-aml-reg-dev-cc01` - Dev registry resources
+- `rg-aml-vnet-prod-cc01` - Prod networking, shared resources
+- `rg-aml-ws-prod-cc01` - Prod workspace resources
+- `rg-aml-reg-prod-cc01` - Prod registry resources
+- `rg-aml-hub-cc01` - Hub network
 
 **Pre-configured Features in Your Templates:**
 - ✅ **Log Analytics Workspace**: `amllogdevcc01` (automatically configured)
@@ -201,24 +151,9 @@ echo "   - Endpoint UAMI: AcrPull, Storage Blob Data Reader, Registry User"
 az role assignment list --assignee "$DEV_COMPUTE_MI" --scope "/subscriptions/5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25/resourceGroups/rg-aml-ws-dev-cc" --output table
 ```
 
-## 🏭 Phase 2: Production Environment Deployment
-
-### Step 2.1: Deploy Production Infrastructure
-```bash
-# Plan production deployment with different variables
-terraform plan -var-file="terraform.tfvars.prod" -out="prod.tfplan"
-
-# Review the plan - ensure no conflicts with dev resources
-terraform apply "prod.tfplan"
-
-# Save production outputs
-terraform output > prod-outputs.txt
-```
-
-**Expected Production Resource Groups:**
-- `rg-aml-vnet-prod-cc001` - Production networking and shared resources
-- `rg-aml-ws-prod-cc` - Production workspace resources
-- `rg-aml-reg-prod-cc` - Production registry resources
+## Notes
+- Separate per-environment applies are no longer needed. Root `main.tf` deploys both environments and hub in one run.
+- Cross-environment RBAC and outbound rules are created automatically by `main.tf`.
 
 ### Step 2.2: Configure Production RBAC
 ```bash

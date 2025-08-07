@@ -625,8 +625,8 @@ terraform init
 # Plan development deployment
 terraform plan -var-file="terraform.tfvars.dev" -out="dev.tfplan"
 
-# Apply development deployment
-terraform apply "dev.tfplan"
+# Apply full platform deployment (dev + prod + hub)
+terraform apply "full.tfplan"
 
 # Get outputs for production reference
 terraform output > ../outputs/dev-outputs.json
@@ -637,8 +637,7 @@ terraform output > ../outputs/dev-outputs.json
 # Plan production deployment (after dev is complete)
 terraform plan -var-file="terraform.tfvars.prod" -out="prod.tfplan"
 
-# Apply production deployment
-terraform apply "prod.tfplan"
+// No separate production apply required; included in full.tfplan
 
 # Verify cross-environment connectivity
 terraform output

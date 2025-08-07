@@ -72,7 +72,7 @@ terraform destroy
 # Interactive cleanup with confirmations
 .\cleanup_comprehensive.ps1
 
-# Force cleanup (dev environments only)
+# Force cleanup (use with care)
 .\cleanup_comprehensive.ps1 -Force
 
 # Only purge soft-deleted resources

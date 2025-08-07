@@ -4,14 +4,10 @@
 
 ### Initial Deployment
 ```powershell
-# Deploy both environments with RBAC
-.\Deploy-AzureMLPlatform.ps1 -Environment both -Force
-
-# Deploy development only
-.\Deploy-AzureMLPlatform.ps1 -Environment dev
-
-# Deploy production only (after dev is deployed)
-.\Deploy-AzureMLPlatform.ps1 -Environment prod
+# Terraform (recommended): deploy dev + prod + hub in one run
+cd .\infra
+terraform init
+terraform apply
 ```
 
 ### Verification Commands
