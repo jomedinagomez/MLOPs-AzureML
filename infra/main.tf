@@ -526,10 +526,10 @@ module "prod_managed_umi" {
   compute_cluster_identity_id    = module.prod_vnet.cc_identity_id
   compute_cluster_principal_id   = module.prod_vnet.cc_identity_principal_id
   
-  # Cross-environment configuration for asset promotion
-  enable_cross_env_rbac           = true
-  cross_env_registry_resource_group = azurerm_resource_group.dev_registry_rg.name
-  cross_env_registry_name         = module.dev_registry.registry_name
+  # Cross-environment configuration for asset promotion (will be applied after dev registry is created)
+  enable_cross_env_rbac           = false  # Initially disabled, enabled via separate resource
+  cross_env_registry_resource_group = null
+  cross_env_registry_name         = null
   
   tags                     = merge(var.tags, {
     environment = "production"

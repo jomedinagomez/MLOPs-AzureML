@@ -1,123 +1,94 @@
-# MLOPs-AzureML Empty File Cleanup Script
-# This script safely removes empty files and folders while preserving important structure
+# MLOps Azure ML - Empty Files and Folders Cleanup Script
+# This script safely removes empty files and folders while preserving Git structure
 
-Write-Host "🧹 MLOPs-AzureML Workspace Cleanup" -ForegroundColor Green
-Write-Host "========================================" -ForegroundColor Green
-
-# Set location
-Set-Location "c:\Users\jomedin\Documents\MLOPs-AzureML"
-
-# Files to definitely keep even if empty (important for structure)
-$KeepFiles = @(
-    "terraform.tfstate",  # Terraform state - NEVER delete
-    ".gitkeep",          # Git folder structure
-    "__init__.py"        # Python package structure
+param(
+    [switch]$WhatIf = $false,
+    [switch]$Verbose = $false
 )
 
-# Get all empty files
-$EmptyFiles = Get-ChildItem -Recurse -File | Where-Object { $_.Length -eq 0 }
+$rootPath = "C:\Users\jomedin\Documents\MLOPs-AzureML"
 
-Write-Host "Found $($EmptyFiles.Count) empty files" -ForegroundColor Yellow
+Write-Host "MLOps Azure ML - Empty Files and Folders Cleanup" -ForegroundColor Green
+Write-Host "Root Path: $rootPath" -ForegroundColor Yellow
 
-# Categorize files
-$SafeToDelete = @()
-$KeepThese = @()
-
-foreach ($file in $EmptyFiles) {
-    $filename = $file.Name
-    $keep = $false
-    
-    foreach ($keepPattern in $KeepFiles) {
-        if ($filename -like $keepPattern) {
-            $keep = $true
-            break
-        }
-    }
-    
-    if ($keep) {
-        $KeepThese += $file
-    } else {
-        $SafeToDelete += $file
-    }
+if ($WhatIf) {
+    Write-Host "Running in WhatIf mode - no files will be deleted" -ForegroundColor Cyan
 }
 
-Write-Host "`n📋 ANALYSIS RESULTS:" -ForegroundColor Cyan
-Write-Host "Files safe to delete: $($SafeToDelete.Count)" -ForegroundColor Green
-Write-Host "Files to keep (important): $($KeepThese.Count)" -ForegroundColor Yellow
-
-if ($SafeToDelete.Count -gt 0) {
-    Write-Host "`n🗑️  FILES SAFE TO DELETE:" -ForegroundColor Green
-    foreach ($file in $SafeToDelete) {
-        $relativePath = $file.FullName.Replace("c:\Users\jomedin\Documents\MLOPs-AzureML\", "")
-        Write-Host "  ❌ $relativePath" -ForegroundColor Red
-    }
+# Find and handle empty files
+Write-Host "`nScanning for empty files..." -ForegroundColor Yellow
+$emptyFiles = Get-ChildItem -Path $rootPath -Recurse -Force -File | Where-Object { 
+    $_.Length -eq 0 -and 
+    $_.FullName -notlike "*\.git\*" -and
+    $_.Name -ne ".gitkeep" -and
+    $_.Name -ne ".gitignore"
 }
 
-if ($KeepThese.Count -gt 0) {
-    Write-Host "`n🛡️  FILES TO KEEP (IMPORTANT):" -ForegroundColor Yellow
-    foreach ($file in $KeepThese) {
-        $relativePath = $file.FullName.Replace("c:\Users\jomedin\Documents\MLOPs-AzureML\", "")
-        Write-Host "  ✅ $relativePath" -ForegroundColor Green
-    }
-}
-
-Write-Host "`n🤔 Do you want to proceed with deletion? (y/N): " -ForegroundColor Cyan -NoNewline
-$response = Read-Host
-
-if ($response -eq 'y' -or $response -eq 'Y') {
-    Write-Host "`n🗑️  Deleting empty files..." -ForegroundColor Yellow
+if ($emptyFiles.Count -gt 0) {
+    Write-Host "Found $($emptyFiles.Count) empty files:" -ForegroundColor Red
     
-    $deleteCount = 0
-    foreach ($file in $SafeToDelete) {
-        try {
-            Remove-Item $file.FullName -Force
-            $relativePath = $file.FullName.Replace("c:\Users\jomedin\Documents\MLOPs-AzureML\", "")
-            Write-Host "  ✅ Deleted: $relativePath" -ForegroundColor Green
-            $deleteCount++
-        }
-        catch {
-            $relativePath = $file.FullName.Replace("c:\Users\jomedin\Documents\MLOPs-AzureML\", "")
-            Write-Host "  ❌ Failed to delete: $relativePath - $($_.Exception.Message)" -ForegroundColor Red
-        }
-    }
-    
-    Write-Host "`n✨ Cleanup complete! Deleted $deleteCount files." -ForegroundColor Green
-    
-    # Now check for empty directories
-    Write-Host "`n🔍 Checking for empty directories..." -ForegroundColor Cyan
-    $EmptyDirs = Get-ChildItem -Recurse -Directory | Where-Object { 
-        (Get-ChildItem $_.FullName -Recurse | Measure-Object).Count -eq 0 
-    }
-    
-    if ($EmptyDirs.Count -gt 0) {
-        Write-Host "Found $($EmptyDirs.Count) empty directories:" -ForegroundColor Yellow
-        foreach ($dir in $EmptyDirs) {
-            $relativePath = $dir.FullName.Replace("c:\Users\jomedin\Documents\MLOPs-AzureML\", "")
-            Write-Host "  📁 $relativePath" -ForegroundColor Blue
+    foreach ($file in $emptyFiles) {
+        $relativePath = $file.FullName.Replace($rootPath, "").TrimStart('\')
+        
+        if ($Verbose -or $WhatIf) {
+            Write-Host "  - $relativePath" -ForegroundColor Gray
         }
         
-        Write-Host "`n🤔 Remove empty directories too? (y/N): " -ForegroundColor Cyan -NoNewline
-        $dirResponse = Read-Host
-        
-        if ($dirResponse -eq 'y' -or $dirResponse -eq 'Y') {
-            foreach ($dir in $EmptyDirs) {
-                try {
-                    Remove-Item $dir.FullName -Force
-                    $relativePath = $dir.FullName.Replace("c:\Users\jomedin\Documents\MLOPs-AzureML\", "")
-                    Write-Host "  ✅ Removed directory: $relativePath" -ForegroundColor Green
-                }
-                catch {
-                    $relativePath = $dir.FullName.Replace("c:\Users\jomedin\Documents\MLOPs-AzureML\", "")
-                    Write-Host "  ❌ Failed to remove: $relativePath - $($_.Exception.Message)" -ForegroundColor Red
-                }
+        if (-not $WhatIf) {
+            try {
+                Remove-Item $file.FullName -Force
+                Write-Host "    Deleted: $relativePath" -ForegroundColor Green
+            }
+            catch {
+                Write-Host "    Failed to delete: $relativePath - $($_.Exception.Message)" -ForegroundColor Red
             }
         }
-    } else {
-        Write-Host "No empty directories found. ✨" -ForegroundColor Green
     }
-    
 } else {
-    Write-Host "`n❌ Cleanup cancelled. No files were deleted." -ForegroundColor Yellow
+    Write-Host "No empty files found." -ForegroundColor Green
 }
 
-Write-Host "`n🎉 Cleanup process completed!" -ForegroundColor Green
+# Find and handle empty directories (excluding Git directories)
+Write-Host "`nScanning for empty directories..." -ForegroundColor Yellow
+$emptyDirs = Get-ChildItem -Path $rootPath -Recurse -Force -Directory | Where-Object { 
+    $_.FullName -notlike "*\.git\*" -and
+    (Get-ChildItem $_.FullName -Force | Measure-Object).Count -eq 0 
+}
+
+if ($emptyDirs.Count -gt 0) {
+    Write-Host "Found $($emptyDirs.Count) empty directories:" -ForegroundColor Red
+    
+    # Sort by depth (deepest first) to avoid issues with parent/child relationships
+    $sortedDirs = $emptyDirs | Sort-Object { ($_.FullName -split '\\').Count } -Descending
+    
+    foreach ($dir in $sortedDirs) {
+        $relativePath = $dir.FullName.Replace($rootPath, "").TrimStart('\')
+        
+        if ($Verbose -or $WhatIf) {
+            Write-Host "  - $relativePath" -ForegroundColor Gray
+        }
+        
+        if (-not $WhatIf) {
+            try {
+                Remove-Item $dir.FullName -Force -Recurse
+                Write-Host "    Deleted: $relativePath" -ForegroundColor Green
+            }
+            catch {
+                Write-Host "    Failed to delete: $relativePath - $($_.Exception.Message)" -ForegroundColor Red
+            }
+        }
+    }
+} else {
+    Write-Host "No empty directories found." -ForegroundColor Green
+}
+
+# Summary
+Write-Host "`nCleanup Summary:" -ForegroundColor Yellow
+if ($WhatIf) {
+    Write-Host "  Would delete: $($emptyFiles.Count) files and $($emptyDirs.Count) directories" -ForegroundColor Cyan
+    Write-Host "  Run without -WhatIf to perform actual deletion" -ForegroundColor Cyan
+} else {
+    Write-Host "  Processed: $($emptyFiles.Count) files and $($emptyDirs.Count) directories" -ForegroundColor Green
+}
+
+Write-Host "`nCleanup complete!" -ForegroundColor Green

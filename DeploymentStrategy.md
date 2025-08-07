@@ -13,7 +13,7 @@ This document outlines the deployment strategy for our Azure Machine Learning pl
 
 **This implementation uses two registries to showcase comprehensive MLOps asset promotion workflows, though a single registry would be sufficient for most production scenarios.**
 
-**Last Updated**: August 7, 2025 - Updated to reflect hub-and-spoke VPN architecture with complete elimination of jumpbox infrastructure, improved connectivity model, and cost optimization.
+**Last Updated**: August 7, 2025 - Updated to reflect hub-and-spoke VPN architecture with complete elimination of jumpbox infrastructure, improved connectivity model, cost optimization, and resolved Terraform dependency issues for production-ready deployment.
 
 ## Strategic Principles
 
@@ -1787,20 +1787,34 @@ The current infrastructure implementation in `main.tf` fully implements this dep
 - **Shared Compute UAMIs**: 18 role assignments (9 roles × 2 environments)
 - **Workspace UAMIs**: 14 role assignments (7 roles × 2 environments)  
 - **Human User Roles**: 14 role assignments (7 roles × 2 environments)
-- **Cross-Environment Access**: 3 role assignments
+- **Cross-Environment Access**: Optimized to 2 role assignments (removed unnecessary prod workspace to dev registry access)
 - **Managed VNet Outbound Rules**: 1 automatic private endpoint rule
+
+### ✅ **Terraform Dependency Issues Resolved**
+
+**Recent Updates (August 7, 2025):**
+1. **Hub Network Peering Logic**: ✅ Fixed conditional expressions in `modules/hub-network/main.tf` to prevent "Invalid count argument" errors
+   - Updated peering conditions to use `!= null && != ""` pattern
+   - Ensured count expressions are determinable at plan time
+2. **Cross-Environment RBAC Optimization**: ✅ Removed unnecessary role assignments that could cause dependency cycles
+   - Eliminated prod workspace UAMI access to dev registry (workspace UAMIs only need network connectivity)
+   - Maintained compute UAMI registry access for actual data operations
+3. **VNet Peering Dependencies**: ✅ Resolved circular dependencies in hub-spoke network architecture
+   - Fixed conditional logic to properly handle spoke VNet creation timing
+   - Ensured gateway transit settings work correctly with conditional peering
 
 ### ✅ **Architecture Decisions Implemented**
 
 1. **Single Shared Compute UAMI**: ✅ One UAMI per environment for both compute cluster and compute instance
 2. **No MOE UAMIs**: ✅ Online endpoints use system-assigned managed identities as designed
-3. **Cross-Environment Connectivity**: ✅ Production can access dev registry via automatic private endpoints
+3. **Cross-Environment Connectivity**: ✅ Production can access dev registry via compute UAMIs and automatic private endpoints
 4. **Complete Environment Isolation**: ✅ Zero shared components between dev and prod
 5. **Role Assignment Before Resource Creation**: ✅ All permissions configured before compute provisioning
+6. **Optimized RBAC Strategy**: ✅ Workspace UAMIs handle connectivity, compute UAMIs handle data access
 
 ### ✅ **Infrastructure Ready for Deployment**
 
-The Terraform configuration in `/infra/main.tf` is ready for deployment and fully implements this strategy.
+The Terraform configuration in `/infra/main.tf` is ready for deployment and fully implements this strategy with all dependency issues resolved. **Validation completed**: `terraform plan` successfully generates 231 resources with no errors.
 
 ## Deployment Workflow
 

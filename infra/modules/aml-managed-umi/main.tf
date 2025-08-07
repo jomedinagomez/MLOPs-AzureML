@@ -647,7 +647,7 @@ resource "azurerm_role_assignment" "cross_env_registry_reader" {
 ## This enables bidirectional asset sharing for comprehensive MLOps workflows
 ##
 resource "azurerm_role_assignment" "cross_env_registry_contributor" {
-  count = var.enable_cross_env_rbac && var.cross_env_registry_resource_group != null && var.cross_env_registry_name != null ? 1 : 0
+  count = var.enable_cross_env_rbac && var.cross_env_registry_resource_group != null && var.cross_env_registry_resource_group != "" && var.cross_env_registry_name != null && var.cross_env_registry_name != "" ? 1 : 0
   
   depends_on = [
     time_sleep.wait_aml_workspace_identities
@@ -663,7 +663,7 @@ resource "azurerm_role_assignment" "cross_env_registry_contributor" {
 ## This enables automatic private endpoint creation for cross-environment connectivity
 ##
 resource "azurerm_role_assignment" "cross_env_registry_network_approver" {
-  count = var.enable_cross_env_rbac && var.cross_env_registry_resource_group != null && var.cross_env_registry_name != null ? 1 : 0
+  count = var.enable_cross_env_rbac && var.cross_env_registry_resource_group != null && var.cross_env_registry_resource_group != "" && var.cross_env_registry_name != null && var.cross_env_registry_name != "" ? 1 : 0
   
   depends_on = [
     azurerm_role_assignment.cross_env_registry_contributor

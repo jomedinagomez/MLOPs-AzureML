@@ -76,8 +76,6 @@ resource "azurerm_virtual_network_gateway" "vpn_gateway" {
 
 # VNet Peering to Dev Environment
 resource "azurerm_virtual_network_peering" "hub_to_dev" {
-  count = var.dev_vnet_id != "" ? 1 : 0
-  
   name                      = "peer-hub-to-dev"
   resource_group_name       = var.resource_group_name
   virtual_network_name      = azurerm_virtual_network.hub_vnet.name
@@ -96,8 +94,6 @@ resource "azurerm_virtual_network_peering" "hub_to_dev" {
 
 # VNet Peering to Prod Environment
 resource "azurerm_virtual_network_peering" "hub_to_prod" {
-  count = var.prod_vnet_id != "" ? 1 : 0
-  
   name                      = "peer-hub-to-prod"
   resource_group_name       = var.resource_group_name
   virtual_network_name      = azurerm_virtual_network.hub_vnet.name
