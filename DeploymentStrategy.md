@@ -2,7 +2,18 @@
 
 ## Overview
 
-This document outlines the deployment strategy for our Azure Machine Learning platform, focusing on complete isolation between development and production environments with zero shared components. **This implementation uses two registries to showcase comprehensive MLOps asset promotion workflows, though a single registry would be sufficient for most production scenarios.**
+This document outlines the deployment strategy for our Azure Machine Learning platform, featuring **hub-and-spoke VPN architecture** with complete isolation between development and production environments. The implementation eliminates traditional jumpbox infrastructure in favor of certificate-based VPN connectivity, providing superior user experience and significant cost savings while maintaining enterprise security standards.
+
+**Key Architecture Features:**
+- **Hub-and-Spoke Network**: Centralized VPN Gateway with isolated dev/prod spokes
+- **Zero VM Infrastructure**: No jumpboxes, bastion hosts, or maintenance overhead
+- **Certificate-Based VPN**: Secure Point-to-Site connectivity for development teams
+- **Complete Environment Isolation**: Dev and prod environments remain fully segregated
+- **Cost Optimized**: ~$140-290/month savings compared to traditional jumpbox models
+
+**This implementation uses two registries to showcase comprehensive MLOps asset promotion workflows, though a single registry would be sufficient for most production scenarios.**
+
+**Last Updated**: August 7, 2025 - Updated to reflect hub-and-spoke VPN architecture with complete elimination of jumpbox infrastructure, improved connectivity model, and cost optimization.
 
 ## Strategic Principles
 
@@ -13,7 +24,15 @@ This document outlines the deployment strategy for our Azure Machine Learning pl
 - **Governance**: Clear ownership and access control per environment
 - **Demonstration Purpose**: Two-registry architecture showcases full MLOps promotion capabilities
 
-### 2. Infrastructure as Code
+### 2. Hub-and-Spoke Network Architecture
+- **Centralized Connectivity**: Single VPN Gateway serves all environments
+- **Cost Optimization**: Eliminates expensive jumpbox and bastion infrastructure
+- **Enhanced User Experience**: Native local development tools instead of RDP sessions
+- **Automatic Reconnection**: VPN maintains persistent connectivity across sessions
+- **Multi-User Support**: Multiple team members can connect simultaneously
+- **Environment Isolation**: Spokes cannot communicate directly with each other
+
+### 3. Infrastructure as Code
 - **Terraform Modules**: Reusable modules for consistent deployment across environments
 - **Environment-Specific Configurations**: Separate terraform.tfvars for each environment
 - **Version Control**: All infrastructure changes tracked and reviewed
@@ -27,13 +46,15 @@ Our infrastructure uses resource-specific prefixes for maximum flexibility:
 ```terraform
 resource_prefixes = {
   vnet               = "vnet-aml"
-  subnet             = "subnet-aml"
-  workspace          = "amlws"
-  registry           = "amlreg"
-  storage            = "amlst"
-  container_registry = "amlacr"
-  key_vault          = "amlkv"
-  log_analytics      = "amllog"
+  subnet             = "snet-aml"
+  workspace          = "mlw"
+  registry           = "mlr"
+  storage            = "st"
+  container_registry = "cr"
+  key_vault          = "kv"
+  log_analytics      = "log"
+  vpn_gateway        = "vpn-gateway"
+  public_ip          = "pip"
 }
 ```
 
@@ -56,10 +77,17 @@ enable_auto_purge = true | false # Dev: true, Prod: false (CRITICAL)
 - **Production**: `vnet_address_space = "10.2.0.0/16"`, `subnet_address_prefix = "10.2.1.0/24"`
 
 **Generated Resource Examples:**
-- VNet: `vnet-{prefix}{env}{location_code}{random}` / `vnet-{prefix}{env}{location_code}{random}`
-- Workspace: `{prefix}ws{env}{location_code}{random}` / `{prefix}ws{env}{location_code}{random}`
-- Storage: `{prefix}st{env}{location_code}{random}` / `{prefix}st{env}{location_code}{random}`
-- Resource Groups: `rg-{prefix}-vnet-{env}-{location_code}{random}` / `rg-{prefix}-vnet-{env}-{location_code}{random}`
+- VNet: `vnet-aml-{env}-{location_code}{random}` 
+- Workspace: `mlw{env}{location_code}{random}`
+- Storage: `st{env}{location_code}{random}`
+- Container Registry: `cr{env}{location_code}{random}`
+- Key Vault: `kv{env}{location_code}{random}`
+- Registry: `mlr{env}{location_code}{random}`
+- VPN Gateway: `vpn-gateway-hub-{location_code}{random}`
+- Hub VNet: `vnet-hub-{location_code}{random}`
+- Resource Groups: 
+  - Environment: `rg-{prefix}-{component}-{env}-{location_code}{random}`
+  - Hub: `rg-{prefix}-hub-{location_code}{random}`
 
 ## Architecture Decisions
 
@@ -98,41 +126,96 @@ Both Dev and Prod:
 - Simplified monitoring: Single region to monitor for service health
 - Easier troubleshooting: Consistent region-specific behaviors
 
-### C. Network Isolation Strategy
+### C. Hub-and-Spoke Network Architecture
 
 ```
-Development Network:
+Hub Network (Shared Connectivity):
+├── VNet: 10.0.0.0/16
+├── Gateway Subnet: 10.0.1.0/24
+├── VPN Gateway: Point-to-Site connectivity
+├── Client Address Pool: 172.16.0.0/24
+└── Certificate-based authentication
+
+Development Spoke:
 ├── VNet: 10.1.0.0/16
 ├── Subnet: 10.1.1.0/24
+├── Peering: Hub ↔ Dev (with gateway transit)
 └── Private DNS Zones: Dev-specific instances
 
-Production Network:
+Production Spoke:
 ├── VNet: 10.2.0.0/16
 ├── Subnet: 10.2.1.0/24
+├── Peering: Hub ↔ Prod (with gateway transit)
 └── Private DNS Zones: Prod-specific instances
 
-Connectivity: NONE (complete air-gap by design)
+Cross-Environment Connectivity: NONE
+└── Spokes cannot communicate directly (hub prevents spoke-to-spoke traffic)
 ```
 
 **Benefits:**
-- Maximum security isolation through parameterization
-- No risk of cross-environment network pollution
-- Independent DNS resolution per environment
-- Clear security boundaries maintained by module design
+- **Cost Optimization**: ~$140-290/month savings vs jumpbox + bastion model
+- **Better User Experience**: Native local development tools instead of RDP sessions
+- **Unified Connectivity**: Single VPN connection provides access to both environments
+- **Automatic Reconnection**: VPN automatically reconnects after sleep/restart
+- **Multiple Users**: Multiple team members can connect simultaneously
+- **No VM Management**: Zero virtual machine infrastructure to maintain
+- **Enhanced Security**: Certificate-based authentication with no exposed RDP ports
+- **Environment Isolation**: Spokes remain completely isolated from each other
+
+### D. Workspace Access Strategy
+
+**VPN-Based Access Model**
+```
+Client Machine (Local Development):
+├── VPN Client: Azure Point-to-Site VPN
+├── Certificate: Self-signed client certificate (installed locally)
+├── IP Pool: 172.16.0.0/24 (assigned dynamically)
+└── DNS: Azure Private DNS resolution for *.api.azureml.ms
+
+Connectivity Flow:
+1. Connect to Azure ML Hub VPN
+2. Automatic routing to dev spoke (10.1.0.0/16) or prod spoke (10.2.0.0/16)
+3. Private DNS resolution for Azure ML workspace endpoints
+4. Direct access to Azure ML Studio and APIs without jumpbox
+
+Development Tools Support:
+├── VS Code: Direct connection to Azure ML workspace
+├── Azure CLI: Native ml extension support
+├── Python SDK: Full Azure ML SDK functionality
+├── Jupyter: Local Jupyter connects to remote compute
+└── Azure ML Studio: Browser access via private endpoints
+```
+
+**Cost Comparison**
+| **Solution** | **Monthly Cost** | **User Experience** | **Management Overhead** |
+|--------------|------------------|-------------------|------------------------|
+| **Hub VPN** (Current) | ~$50-85/month | ✅ Native local tools | ✅ Minimal (no VMs) |
+| Jumpbox + Bastion | ~$290/month | ❌ RDP browser sessions | ❌ High (VM patching, monitoring) |
+
+**Connection Workflow**
+1. **Certificate Setup**: Generate and install VPN client certificates
+2. **VPN Client**: Download and install Azure VPN client from portal
+3. **Connect**: One-click connection to "Azure ML Hub VPN"
+4. **Access**: Direct access to both dev and prod Azure ML workspaces
+5. **Develop**: Use local tools (VS Code, PyCharm, etc.) with full ML capabilities
 
 ## Identity and Access Management
 
 ### Service Principal Strategy
-A single service principal will be used for all infrastructure deployments across all 6 resource groups:
+A single service principal is used for all infrastructure deployments across all 7 resource groups:
 
 ```
 Deployment Service Principal:
-├── Name: "sp-aml-deployment-{environment}"
-├── Scope: All 6 resource groups (RG level permissions)
+├── Name: "sp-aml-deployment-platform"
+├── Scope: All 7 resource groups (RG level permissions)
 ├── Roles: 
-│   ├── Contributor (on all 6 resource groups): Deploy ML workspace, storage accounts, and compute resources - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/privileged#contributor)
-│   ├── User Access Administrator (on all 6 resource groups): Configure RBAC for managed identities and user access - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/privileged#user-access-administrator)
-│   └── Network Contributor (on all 6 resource groups): Configure secure networking for ML workspace isolation - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/networking#network-contributor)
+│   ├── Contributor (on all 7 resource groups): Deploy ML workspace, storage accounts, compute resources, and VPN Gateway - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/privileged#contributor)
+│   ├── User Access Administrator (on all 7 resource groups): Configure RBAC for managed identities and user access - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/privileged#user-access-administrator)
+│   └── Network Contributor (on all 7 resource groups): Configure secure networking, VPN Gateway, and hub-spoke peering - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/networking#network-contributor)
+├── Resource Groups:
+│   ├── Development: rg-aml-vnet-dev-*, rg-aml-ws-dev-*, rg-aml-reg-dev-*
+│   ├── Production: rg-aml-vnet-prod-*, rg-aml-ws-prod-*, rg-aml-reg-prod-*
+│   └── Hub Network: rg-aml-hub-* (VPN Gateway and hub-spoke connectivity)
 └── Purpose: Terraform deployments via CI/CD pipelines
 ```
 
@@ -147,11 +230,13 @@ Workspace UAMI:
 ├── Roles:
 │   ├── Azure AI Administrator (on resource group): Configure workspace settings and AI services integration - [Learn more](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-assign-roles?view=azureml-api-2#troubleshooting)
 │   ├── Azure AI Enterprise Network Connection Approver (on resource group): Enable secure connectivity and cross-environment sharing - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/ai-machine-learning#azure-ai-enterprise-network-connection-approver)
-│   ├── Azure AI Enterprise Network Connection Approver (on registry): Enable cross-environment model sharing - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/ai-machine-learning#azure-ai-enterprise-network-connection-approver)
+│   ├── Azure AI Enterprise Network Connection Approver (on registries): Enable cross-environment private endpoint creation for outbound rules - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/ai-machine-learning#azure-ai-enterprise-network-connection-approver)
 │   ├── Storage Blob Data Contributor (on default storage account): Manage workspace artifacts and datasets - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/storage#storage-blob-data-contributor)
 │   ├── Storage Blob Data Owner (on default storage account): Complete workspace storage management and permissions - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/storage#storage-blob-data-owner)
-│   ├── AzureML Registry User (on registry): Access and use shared models, components, and environments - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/ai-machine-learning#azureml-registry-user)
 │   └── Reader (on private endpoints for storage accounts): Monitor and validate secure storage connectivity - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/general#reader)
+│   
+│   Note: Workspace UAMIs do NOT have AzureML Registry User roles - they only create network connections,
+│         not access registry data directly. Registry access is handled by compute UAMIs and human users.
 
 Registry SMI (System-Assigned Managed Identity):
 ├── Identity Type: System-Assigned (Azure ML Registries do not support user-assigned managed identities)
@@ -192,6 +277,56 @@ Online Endpoints:
 3. **Role Assignment Timing**: All role assignments are configured before compute resource creation to ensure proper permissions are in place when resources are provisioned.
 
 4. **Module Parameter Passing**: The VNet module creates the shared compute UAMI and passes the identity ID and principal ID to both workspace and registry modules for proper role assignment configuration.
+
+## Network Security and Compliance
+
+### Security Architecture
+
+**Zero Trust Network Model**
+```
+External Access:
+├── VPN Gateway: Certificate-based authentication only
+├── No Public Endpoints: All Azure ML resources are private
+├── No RDP/SSH: Zero virtual machine infrastructure
+└── Certificate Management: Self-signed certificates with manual distribution
+
+Internal Network Segmentation:
+├── Hub Network (10.0.0.0/16): VPN Gateway and routing only
+├── Dev Spoke (10.1.0.0/16): Development workloads only
+├── Prod Spoke (10.2.0.0/16): Production workloads only
+└── Cross-Spoke Traffic: Blocked by design (no direct peering)
+
+Azure ML Private Endpoints:
+├── Workspace APIs: *.api.azureml.ms
+├── Workspace UI: *.ml.azure.com
+├── Storage Accounts: *.blob.core.windows.net
+├── Container Registries: *.azurecr.io
+└── Key Vaults: *.vault.azure.net
+```
+
+**Compliance Features**
+- **Data Residency**: All data remains in Canada Central region
+- **Encryption in Transit**: All communication over private endpoints with TLS 1.2+
+- **Encryption at Rest**: Azure-managed keys for all storage services
+- **Access Logging**: Azure Activity Log tracks all management operations
+- **Network Isolation**: No internet-facing endpoints for ML workspaces
+- **Identity Integration**: Azure AD authentication for all human access
+
+**Security Monitoring**
+```
+Azure Monitor Integration:
+├── VPN Gateway Logs: Connection and authentication events
+├── Private Endpoint Monitoring: DNS resolution and connectivity
+├── Azure ML Audit Logs: Workspace access and operations
+├── Resource Group Activity: All infrastructure changes
+└── Cost Management: Spending anomaly detection
+
+Compliance Reports:
+├── Network Security Groups: Traffic flow analysis
+├── Private DNS Zones: Resolution audit trails  
+├── Key Vault Access: Secret and certificate usage
+└── Role Assignment Changes: Permission modifications
+```
 
 ### Human User RBAC
 
@@ -276,11 +411,15 @@ Production Environment Resources:
 ├── Azure AI Enterprise Network Connection Approver (on {prod-registry}): Enable cross-environment model sharing
 ├── Storage Blob Data Contributor (on {prod-storage-account}): Manage workspace artifacts and datasets
 ├── Storage Blob Data Owner (on {prod-storage-account}): Complete workspace storage management and permissions
-├── AzureML Registry User (on {prod-registry}): Access and use shared models, components, and environments
 └── Reader (on private endpoints for {prod-storage-account}): Monitor and validate secure storage connectivity
 
 Cross-Environment Access (REQUIRED for Automatic Private Endpoint Creation):
 └── Azure AI Enterprise Network Connection Approver (on {dev-registry}): Enable automatic private endpoint creation for outbound rules
+
+NO DATA ACCESS to Registries:
+├── {dev-registry}: No AzureML Registry User role (only network connection approver)
+├── {prod-registry}: No AzureML Registry User role (only network connection approver)
+└── Registry data access is handled by compute UAMIs and human users
 
 NO WRITE ACCESS to Development Environment:
 ├── {dev-storage-account}: No access
@@ -290,14 +429,22 @@ NO WRITE ACCESS to Development Environment:
 
 **Critical Permission**: The production workspace UAMI requires `Azure AI Enterprise Network Connection Approver` on the dev registry to automatically create private endpoints when outbound rules are configured. This permission enables the managed VNet to establish secure connectivity without manual intervention.
 
+**Important Note**: Workspace UAMIs do NOT have `AzureML Registry User` roles. They only create network connectivity through private endpoints. Actual registry data access is provided through compute UAMIs and human user accounts.
+
 #### Cross-Environment Access Justification
 
-The production UAMI requires `AzureML Registry User` access to the development registry (`{dev-registry}`) to support the documented asset promotion patterns:
+The production **compute** UAMI requires `AzureML Registry User` access to the development registry (`{dev-registry}`) to support the documented asset promotion patterns:
 
 1. **Environment References**: Access environments promoted from dev using references like:
    ```
    azureml://registries/{dev-registry}/environments/inference-env/versions/1.0
    ```
+
+2. **Docker Image Access**: The `AzureML Registry User` role provides access to environment metadata and automatically handles access to associated Docker images stored in the registry's Microsoft-managed ACR.
+
+3. **Model Lineage**: Maintain complete lineage tracking for models that originated in development and were promoted through the dev registry.
+
+**Important Distinction**: Only **compute UAMIs** and **human users** have `AzureML Registry User` roles for data access. **Workspace UAMIs** only have `Azure AI Enterprise Network Connection Approver` roles to create private endpoint connections, following the principle of separation of concerns.
 
 2. **Docker Image Access**: The `AzureML Registry User` role provides access to environment metadata and automatically handles access to associated Docker images stored in the registry's Microsoft-managed ACR.
 
@@ -376,7 +523,6 @@ resource "azapi_resource" "prod_workspace_to_dev_registry_outbound_rule" {
 ├── Azure AI Enterprise Network Connection Approver (on {dev-registry})
 ├── Storage Blob Data Contributor (on {dev-storage-account})
 ├── Storage Blob Data Owner (on {dev-storage-account})
-├── AzureML Registry User (on {dev-registry})
 └── Reader (on private endpoints for {dev-storage-account})
 
 {prod-compute-uami-name}:
@@ -405,7 +551,6 @@ resource "azapi_resource" "prod_workspace_to_dev_registry_outbound_rule" {
 ├── Azure AI Enterprise Network Connection Approver (on {prod-registry})
 ├── Storage Blob Data Contributor (on {prod-storage-account})
 ├── Storage Blob Data Owner (on {prod-storage-account})
-├── AzureML Registry User (on {prod-registry})
 └── Reader (on private endpoints for {prod-storage-account})
 
 {dev-compute-uami-name}:
@@ -1656,6 +1801,101 @@ The current infrastructure implementation in `main.tf` fully implements this dep
 ### ✅ **Infrastructure Ready for Deployment**
 
 The Terraform configuration in `/infra/main.tf` is ready for deployment and fully implements this strategy.
+
+## Deployment Workflow
+
+### Prerequisites
+
+1. **Azure Subscription**: Valid Azure subscription with sufficient permissions
+2. **Terraform**: Version 1.5+ installed locally
+3. **Azure CLI**: Latest version with `az login` completed
+4. **PowerShell**: For certificate generation script
+
+### Deployment Steps
+
+**Step 1: Generate VPN Certificates**
+```powershell
+# Navigate to infrastructure directory
+cd infra
+
+# Generate self-signed certificates for VPN
+.\generate_vpn_certificates.ps1
+
+# Copy the generated certificate data to terraform.tfvars
+# (Script will output the certificate data to copy)
+```
+
+**Step 2: Configure Variables**
+```hcl
+# Update terraform.tfvars with your settings
+subscription_id = "your-subscription-id"
+prefix = "aml"
+location = "canadacentral"
+location_code = "cc"
+
+# Add the generated VPN certificate data
+vpn_root_certificate_data = "MIIC5jCCAc4CAQAwDQYJKoZI..."  # From script output
+
+# Optional: Assign user roles automatically
+assign_user_roles = true
+```
+
+**Step 3: Deploy Infrastructure**
+```bash
+# Initialize Terraform
+terraform init
+
+# Validate configuration
+terraform validate
+
+# Plan deployment
+terraform plan
+
+# Apply infrastructure (deploys all 7 resource groups and hub-spoke network)
+terraform apply
+```
+
+**Step 4: Configure VPN Access**
+```powershell
+# Install client certificate (double-click VPNClientCert.pfx from script)
+# Download VPN client from Azure Portal:
+# 1. Go to Azure Portal → VPN Gateways → vpn-gateway-hub-*
+# 2. Click "Point-to-site configuration"
+# 3. Download "VPN client"
+# 4. Extract and run WindowsAmd64/VpnClientSetupAmd64.exe
+
+# Connect to VPN
+# 1. Open Windows VPN settings
+# 2. Connect to "Azure ML Hub VPN"
+# 3. Access Azure ML workspaces via private endpoints
+```
+
+**Step 5: Verify Deployment**
+```powershell
+# Test VPN connectivity
+Test-NetConnection 10.1.0.4 -Port 443  # Dev workspace
+Test-NetConnection 10.2.0.4 -Port 443  # Prod workspace
+
+# Test Azure ML access
+az ml workspace show --name mlwdevcc* --resource-group rg-aml-ws-dev-cc*
+az ml workspace show --name mlwprodcc* --resource-group rg-aml-ws-prod-cc*
+```
+
+### Cost Management
+
+**Monthly Cost Estimates** (Canada Central):
+- **VPN Gateway (VpnGw2)**: ~$50-85/month
+- **Development Environment**: ~$200-300/month (compute-dependent)
+- **Production Environment**: ~$200-300/month (compute-dependent)
+- **Hub Network**: ~$20-30/month (minimal baseline)
+
+**Total Platform Cost**: ~$470-715/month (vs ~$760-1005/month with jumpbox model)
+
+**Cost Optimization Strategies**:
+- Stop compute clusters when not in use
+- Use auto-scaling for compute instances
+- Leverage spot instances for non-critical workloads
+- Monitor storage consumption and implement lifecycle policies
 
 ## References
 

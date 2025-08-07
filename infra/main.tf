@@ -178,6 +178,17 @@ resource "azurerm_resource_group" "prod_registry_rg" {
   })
 }
 
+# Hub Network Resource Group
+resource "azurerm_resource_group" "hub_network_rg" {
+  name     = "rg-${var.prefix}-hub-${var.location_code}${random_string.main.result}"
+  location = var.location
+  tags = merge(var.tags, {
+    environment = "shared"
+    purpose     = "hub"
+    component   = "network"
+  })
+}
+
 # ===============================
 # STEP 3: SERVICE PRINCIPAL RBAC
 # ===============================
@@ -326,6 +337,31 @@ resource "azurerm_role_assignment" "sp_prod_registry_network_contributor" {
   principal_id         = azuread_service_principal.deployment_sp.object_id
 
   depends_on = [azurerm_resource_group.prod_registry_rg]
+}
+
+# Hub Network Service Principal Permissions
+resource "azurerm_role_assignment" "sp_hub_network_contributor" {
+  scope                = azurerm_resource_group.hub_network_rg.id
+  role_definition_name = "Contributor"
+  principal_id         = azuread_service_principal.deployment_sp.object_id
+
+  depends_on = [azurerm_resource_group.hub_network_rg]
+}
+
+resource "azurerm_role_assignment" "sp_hub_network_user_access_admin" {
+  scope                = azurerm_resource_group.hub_network_rg.id
+  role_definition_name = "User Access Administrator"
+  principal_id         = azuread_service_principal.deployment_sp.object_id
+
+  depends_on = [azurerm_resource_group.hub_network_rg]
+}
+
+resource "azurerm_role_assignment" "sp_hub_network_network_contributor" {
+  scope                = azurerm_resource_group.hub_network_rg.id
+  role_definition_name = "Network Contributor"
+  principal_id         = azuread_service_principal.deployment_sp.object_id
+
+  depends_on = [azurerm_resource_group.hub_network_rg]
 }
 
 # ===============================
@@ -813,5 +849,87 @@ resource "azurerm_role_assignment" "user_prod_registry_user" {
 
   depends_on = [
     module.prod_registry
+  ]
+}
+
+# ===============================
+# STEP 8: HUB-AND-SPOKE NETWORK
+# ===============================
+
+# Hub Network Module
+module "hub_network" {
+  source = "./modules/hub-network"
+  
+  prefix                         = var.prefix
+  location                       = var.location
+  location_code                  = var.location_code
+  random_string                  = random_string.main.result
+  resource_group_name            = azurerm_resource_group.hub_network_rg.name
+  
+  hub_vnet_address_space         = "10.0.0.0/16"
+  gateway_subnet_address_prefix  = "10.0.1.0/24"
+  vpn_client_address_space       = "172.16.0.0/24"
+  vpn_root_certificate_data      = var.vpn_root_certificate_data
+  vpn_gateway_sku                = "VpnGw2"
+  
+  # VNet peering configuration
+  dev_vnet_id                    = module.dev_vnet.vnet_id
+  prod_vnet_id                   = module.prod_vnet.vnet_id
+  dev_vnet_name                  = module.dev_vnet.vnet_name
+  prod_vnet_name                 = module.prod_vnet.vnet_name
+  dev_vnet_resource_group        = azurerm_resource_group.dev_vnet_rg.name
+  prod_vnet_resource_group       = azurerm_resource_group.prod_vnet_rg.name
+  
+  tags = merge(var.tags, {
+    environment = "shared"
+    purpose     = "hub"
+  })
+  
+  depends_on = [
+    azurerm_role_assignment.sp_hub_network_contributor,
+    azurerm_role_assignment.sp_hub_network_user_access_admin,
+    azurerm_role_assignment.sp_hub_network_network_contributor,
+    module.dev_vnet,
+    module.prod_vnet
+  ]
+}
+
+# Dev Spoke to Hub Peering
+module "dev_spoke_peering" {
+  source = "./modules/spoke-peering"
+  
+  spoke_vnet_name              = module.dev_vnet.vnet_name
+  spoke_resource_group_name    = azurerm_resource_group.dev_vnet_rg.name
+  hub_vnet_id                  = module.hub_network.hub_vnet_id
+  peering_name                 = "peer-dev-to-hub"
+  
+  allow_virtual_network_access = true
+  allow_forwarded_traffic      = true
+  allow_gateway_transit        = false
+  use_remote_gateways         = true
+  
+  depends_on = [
+    module.hub_network,
+    module.dev_vnet
+  ]
+}
+
+# Prod Spoke to Hub Peering
+module "prod_spoke_peering" {
+  source = "./modules/spoke-peering"
+  
+  spoke_vnet_name              = module.prod_vnet.vnet_name
+  spoke_resource_group_name    = azurerm_resource_group.prod_vnet_rg.name
+  hub_vnet_id                  = module.hub_network.hub_vnet_id
+  peering_name                 = "peer-prod-to-hub"
+  
+  allow_virtual_network_access = true
+  allow_forwarded_traffic      = true
+  allow_gateway_transit        = false
+  use_remote_gateways         = true
+  
+  depends_on = [
+    module.hub_network,
+    module.prod_vnet
   ]
 }

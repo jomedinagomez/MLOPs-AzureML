@@ -69,3 +69,15 @@ variable "resource_prefixes" {
     log_analytics      = "log"
   }
 }
+
+variable "vpn_root_certificate_data" {
+  description = "Base64 encoded root certificate data for P2S VPN authentication (without BEGIN/END certificate markers)"
+  type        = string
+  sensitive   = true
+  default     = ""
+  
+  validation {
+    condition     = var.vpn_root_certificate_data == "" || can(base64decode(var.vpn_root_certificate_data))
+    error_message = "The vpn_root_certificate_data must be a valid base64 encoded string."
+  }
+}

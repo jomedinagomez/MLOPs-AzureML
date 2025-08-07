@@ -197,3 +197,28 @@ output "platform_deployment_summary" {
     }
   }
 }
+
+# ===============================
+# HUB NETWORK OUTPUTS
+# ===============================
+
+output "hub_network_info" {
+  description = "Hub network connectivity information"
+  value = var.vpn_root_certificate_data != "" ? {
+    hub_vnet_id              = module.hub_network.hub_vnet_id
+    hub_vnet_address_space   = module.hub_network.hub_vnet_address_space
+    vpn_gateway_public_ip    = module.hub_network.vpn_gateway_public_ip
+    vpn_client_address_space = module.hub_network.vpn_client_address_space
+    connection_info = {
+      gateway_address = module.hub_network.vpn_gateway_public_ip
+      client_address_pool = module.hub_network.vpn_client_address_space
+      dev_vnet_access = "10.1.0.0/16"
+      prod_vnet_access = "10.2.0.0/16"
+    }
+  } : null
+}
+
+output "vpn_gateway_public_ip" {
+  description = "Public IP address of the VPN Gateway for client configuration"
+  value       = var.vpn_root_certificate_data != "" ? module.hub_network.vpn_gateway_public_ip : null
+}

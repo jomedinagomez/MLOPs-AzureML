@@ -966,181 +966,90 @@ terraform apply
 - **Documentation**: Keep README updated
 - **Testing**: Validate before applying
 
-## �️ **Creating Windows Jump Box for Private Network Access**
+## 🔒 **VPN Access to Private Azure ML Workspace**
 
-Since the Azure ML workspace is deployed with private networking only, you need a Windows jump box within the VNet to access the workspace. Here are the Azure CLI commands to create the jump box:
+Since the Azure ML workspace is deployed with private networking only, you connect via the **Hub-and-Spoke VPN Gateway** (no jumpbox needed!).
 
-### **Prerequisites**
-Set these variables before running the commands:
-```bash
-# Configuration Variables - Modify these values
-RESOURCE_GROUP="rg-aml-vnet-dev-cc"           # VNet resource group name
-VM_NAME="ml-jumpbox-win"                      # Desired VM name
-VNET_NAME="vnet-amldevcc004"                  # VNet name from Terraform outputs
-SUBNET_NAME="subnet-amldevcc004"              # Subnet name from Terraform outputs
-LOCATION="canadacentral"                      # Azure region
-VM_SIZE="Standard_D4s_v3"                     # VM size (4 vCPUs, 16 GB RAM)
-VM_USERNAME="azureuser"                       # VM admin username
-VM_PASSWORD="P@ssw0rd123!"                    # VM admin password (change this!)
-BASTION_NAME="bastion-amldev"                 # Bastion host name
-BASTION_PIP_NAME="bastion-pip"                # Bastion public IP name
+### **VPN Connection Setup**
 
-# VM Image Options (choose one):
-# Option 1: Data Science VM (Recommended) - Includes VS Code, Python, Jupyter, etc.
-VM_IMAGE="microsoft-dsvm:dsvm-win-2022:winserver-2022:latest"
-
-# Option 2: Visual Studio Community VM - Includes VS, VS Code, development tools
-# VM_IMAGE="MicrosoftVisualStudio:visualstudio2022:vs-2022-comm-latest-ws2022:latest"
-
-# Option 3: Plain Windows Server (minimal, requires manual tool installation)
-# VM_IMAGE="MicrosoftWindowsServer:WindowsServer:2022-datacenter-g2:latest"
-```
-
-### **Step 1: Create Windows VM**
-```bash
-# Create Windows VM with development tools (using DSVM image)
-az vm create \
-  --resource-group $RESOURCE_GROUP \
-  --name $VM_NAME \
-  --image $VM_IMAGE \
-  --size $VM_SIZE \
-  --admin-username $VM_USERNAME \
-  --admin-password $VM_PASSWORD \
-  --vnet-name $VNET_NAME \
-  --subnet $SUBNET_NAME \
-  --public-ip-address "" \
-  --nsg "" \
-  --location $LOCATION \
-  --authentication-type password \
-  --os-disk-size-gb 128
-```
-
-### **VM Image Comparison**
-| **Image Type** | **What's Included** | **Best For** |
-|----------------|-------------------|--------------|
-| **Data Science VM (DSVM)** | VS Code, Python, Jupyter, Git, Azure CLI, Docker | **Recommended** - Ready for ML development |
-| **Visual Studio Community** | VS 2022, VS Code, .NET, Git, development tools | .NET development + ML work |
-| **Windows Server** | Minimal - requires manual installation | Cost-conscious, custom setups |
-
-### **Step 2: Create Azure Bastion Subnet**
-```bash
-# Create AzureBastionSubnet (required name)
-az network vnet subnet create \
-  --resource-group $RESOURCE_GROUP \
-  --vnet-name $VNET_NAME \
-  --name "AzureBastionSubnet" \
-  --address-prefixes "10.1.2.0/26"
-```
-
-### **Step 3: Create Public IP for Bastion**
-```bash
-# Create public IP for Bastion host
-az network public-ip create \
-  --resource-group $RESOURCE_GROUP \
-  --name $BASTION_PIP_NAME \
-  --sku Standard \
-  --location $LOCATION
-```
-
-### **Step 4: Create Azure Bastion Host**
-```bash
-# Create Bastion host for secure RDP access
-az network bastion create \
-  --resource-group $RESOURCE_GROUP \
-  --name $BASTION_NAME \
-  --public-ip-address $BASTION_PIP_NAME \
-  --vnet-name $VNET_NAME \
-  --location $LOCATION
-```
-
-### **Step 5: Remove VM Public IP (Security)**
-```bash
-# Remove any public IP from VM for security
-az vm update \
-  --resource-group $RESOURCE_GROUP \
-  --name $VM_NAME \
-  --remove networkProfile.networkInterfaces[0].ipConfigurations[0].publicIpAddress
-```
-
-### **Connection Instructions**
-1. Go to [Azure Portal](https://portal.azure.com)
-2. Navigate to Virtual Machines → `$VM_NAME`
-3. Click "Connect" → "Connect via Bastion"
-4. Enter credentials: `$VM_USERNAME` / `$VM_PASSWORD`
-5. Browser RDP session opens
-
-### **Jump Box Setup Commands**
-Once connected to the Windows VM:
-
-#### **For Data Science VM (DSVM) - Recommended**
-The DSVM comes pre-installed with most tools, just need Azure ML extension:
+**Step 1: Generate VPN Certificates**
 ```powershell
-# Azure CLI is already installed, just add ML extension
+# Run the certificate generation script (created during deployment)
+.\generate_vpn_certificates.ps1
+```
+
+**Step 2: Add Certificate to terraform.tfvars**
+```hcl
+# Add the generated certificate data
+vpn_root_certificate_data = "MIIC5jCCAc4CAQAwDQYJKoZI..."  # From script output
+```
+
+**Step 3: Deploy Hub Network**
+```bash
+terraform init
+terraform apply -target="module.hub_network"
+```
+
+**Step 4: Install Client Certificate**
+1. Double-click the generated `VPNClientCert.pfx` file
+2. Follow the installation wizard
+3. Install to "Current User" → "Personal" store
+
+**Step 5: Download VPN Client**
+1. Go to Azure Portal → VPN Gateways → `vpn-gateway-hub`
+2. Click "Point-to-site configuration"
+3. Download "VPN client"
+4. Extract and run `WindowsAmd64/VpnClientSetupAmd64.exe`
+
+**Step 6: Connect**
+1. Open Windows VPN settings
+2. Connect to "Azure ML Hub VPN"
+3. Now you can access private Azure ML workspace!
+
+### **Access Your Azure ML Workspace**
+Once connected to VPN:
+```powershell
+# Install Azure CLI and ML extension locally
 az extension add --name ml
 
-# Login and configure defaults
+# Login and configure
 az login
 az configure --defaults group=rg-aml-ws-dev-cc workspace=amldevcc004
 
-# Test workspace access
-az ml workspace show --name amldevcc004 --resource-group rg-aml-ws-dev-cc
+# Test access
+az ml workspace show
 az ml compute list
+
+# Submit pipeline
+az ml job create --file pipelines/taxi-fare-train-pipeline.yaml
 ```
 
-#### **For Visual Studio Community VM**
+### **Connection Benefits**
+- ✅ **No VM costs** (~$140-290/month savings vs jumpbox)
+- ✅ **Better performance** (direct connection vs RDP)
+- ✅ **Use local tools** (VS Code, PyCharm, etc.)
+- ✅ **Automatic reconnection** after sleep/restart
+- ✅ **Multiple users** can connect simultaneously
+
+### **Troubleshooting VPN**
 ```powershell
-# Install Azure CLI (if not present)
-winget install Microsoft.AzureCLI
+# Check VPN status
+Get-VpnConnection
 
-# Install Azure ML Extension
-az extension add --name ml
+# Reconnect if needed
+rasdial "Azure ML Hub VPN"
 
-# Login and configure defaults
-az login
-az configure --defaults group=rg-aml-ws-dev-cc workspace=amldevcc004
+# Test connectivity to private resources
+Test-NetConnection 10.1.0.4 -Port 443  # Azure ML workspace
 ```
 
-#### **For Plain Windows Server**
-```powershell
-# Install Azure CLI
-$ProgressPreference = 'SilentlyContinue'; Invoke-WebRequest -Uri https://aka.ms/installazurecliwindows -OutFile .\AzureCLI.msi; Start-Process msiexec.exe -Wait -ArgumentList '/I AzureCLI.msi /quiet'; rm .\AzureCLI.msi
+### **Cost Comparison**
+| **Solution** | **Monthly Cost** | **User Experience** |
+|--------------|------------------|-------------------|
+| **Hub VPN** (Current) | ~$50-85/month | ✅ Native local tools |
+| Jumpbox + Bastion | ~$290/month | ❌ RDP browser sessions |
 
-# Install Azure ML Extension
-az extension add --name ml
-
-# Install VS Code (optional)
-winget install Microsoft.VisualStudioCode
-
-# Install Python (optional)
-winget install Python.Python.3.11
-
-# Login and configure defaults
-az login
-az configure --defaults group=rg-aml-ws-dev-cc workspace=amldevcc004
-```
-
-### **Resource Cleanup**
-When no longer needed:
-```bash
-# Delete VM
-az vm delete --resource-group $RESOURCE_GROUP --name $VM_NAME --yes
-
-# Delete Bastion (optional)
-az network bastion delete --resource-group $RESOURCE_GROUP --name $BASTION_NAME
-az network public-ip delete --resource-group $RESOURCE_GROUP --name $BASTION_PIP_NAME
-
-# Delete Bastion subnet (optional)
-az network vnet subnet delete --resource-group $RESOURCE_GROUP --vnet-name $VNET_NAME --name "AzureBastionSubnet"
-```
-
-### **Cost Optimization**
-- **Stop VM when not in use**: `az vm deallocate --resource-group $RESOURCE_GROUP --name $VM_NAME`
-- **Start VM when needed**: `az vm start --resource-group $RESOURCE_GROUP --name $VM_NAME`
-- **Estimated monthly costs** (if running 24/7):
-  - Windows VM (Standard_D4s_v3): ~$140/month
-  - Azure Bastion: ~$150/month
-
-## �🔗 Related Documentation
+## 🔗 Related Documentation
 
 - [Main Project README](../README.md)
 - [Azure ML Documentation](https://docs.microsoft.com/azure/machine-learning/)
