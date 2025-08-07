@@ -56,10 +56,10 @@ enable_auto_purge = true | false # Dev: true, Prod: false (CRITICAL)
 - **Production**: `vnet_address_space = "10.2.0.0/16"`, `subnet_address_prefix = "10.2.1.0/24"`
 
 **Generated Resource Examples:**
-- VNet: `vnet-amldevcc01` / `vnet-amlprodcc01`
-- Workspace: `amlwsdevcc01` / `amlwsprodcc01`
-- Storage: `amlstdevcc01` / `amlstprodcc01`
-- Resource Groups: `rg-aml-vnet-dev-cc01` / `rg-aml-vnet-prod-cc01`
+- VNet: `vnet-{prefix}{env}{location_code}{random}` / `vnet-{prefix}{env}{location_code}{random}`
+- Workspace: `{prefix}ws{env}{location_code}{random}` / `{prefix}ws{env}{location_code}{random}`
+- Storage: `{prefix}st{env}{location_code}{random}` / `{prefix}st{env}{location_code}{random}`
+- Resource Groups: `rg-{prefix}-vnet-{env}-{location_code}{random}` / `rg-{prefix}-vnet-{env}-{location_code}{random}`
 
 ## Architecture Decisions
 
@@ -192,6 +192,109 @@ Data Engineers/Scientists:
     └── Azure ML Registry User (on registry): Access organization-wide ML assets and promote models - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/ai-machine-learning#azureml-registry-user)
 ```
 
+### Cross-Environment Permissions
+
+To support the asset promotion workflow while maintaining security boundaries, specific cross-environment permissions are required for compute cluster User-Assigned Managed Identities (UAMIs).
+
+#### Environment-Specific UAMI Identities
+
+**Development Compute Cluster UAMI**
+- **Identity**: `{dev-compute-uami-name}` (lives in dev resource group)
+- **Scope**: Development environment only
+- **Purpose**: Run training jobs, experimentation, model development
+
+**Production Compute Cluster UAMI**
+- **Identity**: `{prod-compute-uami-name}` (lives in prod resource group)  
+- **Scope**: Production environment + limited dev registry access
+- **Purpose**: Run inference jobs, model deployment, production workloads
+
+#### Development UAMI Permissions (`{dev-compute-uami-name}`)
+
+```
+Development Environment Resources ONLY:
+├── Storage Account ({dev-storage-account}): Storage Blob Data Contributor
+├── Azure ML Workspace ({dev-workspace}): AzureML Data Scientist
+├── Azure ML Registry ({dev-registry}): AzureML Registry User
+├── Key Vault ({dev-key-vault}): Key Vault Secrets User
+└── Any workspace-managed ACR: AcrPull + AcrPush
+
+NO ACCESS to Production Environment:
+├── {prod-storage-account}: No access
+├── {prod-workspace}: No access  
+├── {prod-registry}: No access
+└── {prod-key-vault}: No access
+```
+
+**Security Principle**: Complete isolation from production to prevent any development workloads from affecting production systems.
+
+#### Production UAMI Permissions (`{prod-compute-uami-name}`)
+
+```
+Production Environment Resources:
+├── Storage Account ({prod-storage-account}): Storage Blob Data Contributor
+├── Azure ML Workspace ({prod-workspace}): AzureML Data Scientist
+├── Azure ML Registry ({prod-registry}): AzureML Registry User  
+├── Key Vault ({prod-key-vault}): Key Vault Secrets User
+└── Any workspace-managed ACR: AcrPull
+
+Cross-Environment Access (READ-ONLY):
+└── Dev Azure ML Registry ({dev-registry}): AzureML Registry User
+
+NO WRITE ACCESS to Development Environment:
+├── {dev-storage-account}: No access
+├── {dev-workspace}: No access
+└── {dev-key-vault}: No access
+```
+
+**Security Principle**: Minimal cross-environment access following the principle of least privilege. Production can read promoted assets from dev registry but cannot modify development resources.
+
+#### Cross-Environment Access Justification
+
+The production UAMI requires `AzureML Registry User` access to the development registry (`{dev-registry}`) to support the documented asset promotion patterns:
+
+1. **Environment References**: Access environments promoted from dev using references like:
+   ```
+   azureml://registries/{dev-registry}/environments/inference-env/versions/1.0
+   ```
+
+2. **Docker Image Access**: The `AzureML Registry User` role provides access to environment metadata and automatically handles access to associated Docker images stored in the registry's Microsoft-managed ACR.
+
+3. **Model Lineage**: Maintain complete lineage tracking for models that originated in development and were promoted through the dev registry.
+
+#### Registry Access Notes
+
+- **Microsoft-Managed Resources**: Azure ML Registries create Microsoft-managed resource groups with their own ACR and storage. These resources are not directly manageable for RBAC assignments.
+- **Automatic Access**: The `AzureML Registry User` role on the registry service automatically provides access to associated container images through Azure ML's internal service mechanisms.
+- **No Direct ACR Permissions Needed**: Unlike workspace-managed ACRs, registry-managed ACRs are accessed automatically when you have appropriate registry permissions.
+
+#### RBAC Assignment Summary
+
+**Development Resource Group** (`{dev-resource-group}`):
+```
+{dev-compute-uami-name}:
+├── AzureML Data Scientist (on {dev-workspace})
+├── AzureML Registry User (on {dev-registry})  
+├── Storage Blob Data Contributor (on {dev-storage-account})
+└── Key Vault Secrets User (on {dev-key-vault})
+
+{prod-compute-uami-name}:
+└── AzureML Registry User (on {dev-registry}) # Cross-environment read access
+```
+
+**Production Resource Group** (`{prod-resource-group}`):
+```
+{prod-compute-uami-name}:
+├── AzureML Data Scientist (on {prod-workspace})
+├── AzureML Registry User (on {prod-registry})
+├── Storage Blob Data Contributor (on {prod-storage-account})  
+└── Key Vault Secrets User (on {prod-key-vault})
+
+{dev-compute-uami-name}:
+└── No access to any production resources
+```
+
+This configuration ensures complete environment isolation while enabling the necessary cross-environment asset access for production deployments using promoted development assets.
+
 ## Asset Promotion Strategy
 
 ### Overview
@@ -291,22 +394,22 @@ credential = DefaultAzureCredential()
 ml_client_dev_workspace = MLClient(
     credential=credential,
     subscription_id="your-subscription-id",
-    resource_group_name="rg-aml-vnet-dev-cc01", 
-    workspace_name="amlwsdevcc01"
+    resource_group_name="{dev-resource-group}", 
+    workspace_name="{dev-workspace}"
 )
 
 # Development registry client
 ml_client_dev_registry = MLClient(
     credential=credential,
     subscription_id="your-subscription-id",
-    registry_name="amlregdevcc01"
+    registry_name="{dev-registry}"
 )
 
 # Production registry client  
 ml_client_prod_registry = MLClient(
     credential=credential,
     subscription_id="your-subscription-id",
-    registry_name="amlregprodcc01"
+    registry_name="{prod-registry}"
 )
 
 # ============================================================================
@@ -333,7 +436,7 @@ print("\nStep 2: Sharing model to development registry...")
 shared_model = ml_client_dev_workspace.models.share(
     name="taxi-fare-model",
     version="1.0",
-    registry_name="amlregdevcc01"
+    registry_name="{dev-registry}"
 )
 print(f"Model shared to dev registry: {shared_model.name} v{shared_model.version}")
 
@@ -345,7 +448,7 @@ print("\nStep 3: Promoting model to production registry...")
 model_prod = Model(
     name="taxi-fare-model", 
     version="1.0",
-    path="azureml://registries/amlregdevcc01/models/taxi-fare-model/versions/1.0",
+    path="azureml://registries/{dev-registry}/models/taxi-fare-model/versions/1.0",
     description="Production taxi fare model (promoted from dev)",
     tags={"stage": "production", "promoted_from": "dev_registry"}
 )
@@ -357,8 +460,8 @@ print(f"Model promoted to prod registry: {prod_model.name} v{prod_model.version}
 # STEP 5: Verification
 # ============================================================================
 print("\nVerification:")
-print(f"Dev Registry Model: azureml://registries/amlregdevcc01/models/taxi-fare-model/versions/1.0")
-print(f"Prod Registry Model: azureml://registries/amlregprodcc01/models/taxi-fare-model/versions/1.0")
+print(f"Dev Registry Model: azureml://registries/{dev-registry}/models/taxi-fare-model/versions/1.0")
+print(f"Prod Registry Model: azureml://registries/{prod-registry}/models/taxi-fare-model/versions/1.0")
 ```
 
 #### **2. Reference Data Assets**
@@ -397,7 +500,7 @@ print("\nStep 2: Sharing data to development registry...")
 shared_data = ml_client_dev_workspace.data.share(
     name="validation-dataset",
     version="1.0", 
-    registry_name="amlregdevcc01"
+    registry_name="{dev-registry}"
 )
 print(f"Data shared to dev registry: {shared_data.name} v{shared_data.version}")
 
@@ -409,7 +512,7 @@ print("\nStep 3: Promoting data to production registry...")
 prod_data = Data(
     name="validation-dataset",
     version="1.0",
-    path="azureml://registries/amlregdevcc01/data/validation-dataset/versions/1.0",
+    path="azureml://registries/{dev-registry}/data/validation-dataset/versions/1.0",
     type=AssetTypes.URI_FOLDER,
     description="Production validation dataset (promoted from dev)",
     tags={"data_type": "validation", "stage": "production"}
@@ -422,8 +525,8 @@ print(f"Data promoted to prod registry: {prod_data_created.name} v{prod_data_cre
 # STEP 4: Verification
 # ============================================================================
 print("\nVerification:")
-print(f"Dev Registry Data: azureml://registries/amlregdevcc01/data/validation-dataset/versions/1.0")
-print(f"Prod Registry Data: azureml://registries/amlregprodcc01/data/validation-dataset/versions/1.0")
+print(f"Dev Registry Data: azureml://registries/{dev-registry}/data/validation-dataset/versions/1.0")
+print(f"Prod Registry Data: azureml://registries/{prod-registry}/data/validation-dataset/versions/1.0")
 ```
 
 #### **3. Environment Images**
@@ -538,13 +641,13 @@ print("=" * 50)
 ```
 
 **Physical Docker Image Location:**
-- **Stays in**: `amlregdevcc01.azurecr.io` (dev registry's ACR)
+- **Stays in**: `{dev-registry}.azurecr.io` (dev registry's ACR)
 - **Does NOT get copied** to prod registry's ACR  
 - **Does NOT get rebuilt**
 
 **What Gets Created in Production:**
 - **Environment metadata record** (name, version, description, tags)
-- **Reference to the Docker image URI** (`amlregdevcc01.azurecr.io/environments/my-env:1.0`)
+- **Reference to the Docker image URI** (`{dev-registry}.azurecr.io/environments/my-env:1.0`)
 - **Same image, different environment record**
 
 **Result**: Both dev registry and prod workspace environments point to the **same physical Docker image** stored in the dev registry's ACR.
@@ -556,7 +659,7 @@ prod_env = ml_client_prod_workspace.environments.get("my-docker-env", "1.0")
 
 print(f"Dev registry image:  {dev_env.image}")
 print(f"Prod workspace image: {prod_env.image}")
-# Both will show: amlregdevcc01.azurecr.io/environments/my-docker-env:1.0
+# Both will show: {dev-registry}.azurecr.io/environments/my-docker-env:1.0
 
 print("Same physical Docker image, different environment records")
 print("No image duplication - efficient storage usage")
@@ -580,8 +683,8 @@ from azure.ai.ml.entities import Environment, BuildContext
 ml_client_prod_workspace = MLClient(
     credential=credential,
     subscription_id="your-subscription-id", 
-    resource_group_name="rg-aml-vnet-prod-cc01",
-    workspace_name="amlwsprodcc01"
+    resource_group_name="{prod-resource-group}",
+    workspace_name="{prod-workspace}"
 )
 
 # ============================================================================
@@ -606,7 +709,7 @@ print("\nStep 2A: Sharing conda environment to dev registry...")
 shared_conda_env = ml_client_dev_workspace.environments.share(
     name="inference-env-conda",
     version="1.0",
-    registry_name="amlregdevcc01"
+    registry_name="{dev-registry}"
 )
 print(f"Conda environment shared to registry: {shared_conda_env.name}")
 
@@ -631,7 +734,7 @@ print("\nStep 2B: Sharing docker environment to dev registry...")
 shared_docker_env = ml_client_dev_workspace.environments.share(
     name="inference-env-docker", 
     version="1.0",
-    registry_name="amlregdevcc01"
+    registry_name="{dev-registry}"
 )
 print(f"Docker environment shared to registry: {shared_docker_env.name}")
 
@@ -654,8 +757,8 @@ print("   This is due to ACR public access being disabled in managed VNet setup"
 print("   Solution: Reference dev registry environments from production deployments")
 
 # Use dev registry references directly in production
-conda_prod_reference = "azureml://registries/amlregdevcc01/environments/inference-env-conda/versions/1.0"
-docker_prod_reference = "azureml://registries/amlregdevcc01/environments/inference-env-docker/versions/1.0"
+conda_prod_reference = "azureml://registries/{dev-registry}/environments/inference-env-conda/versions/1.0"
+docker_prod_reference = "azureml://registries/{dev-registry}/environments/inference-env-docker/versions/1.0"
 
 print(f"Conda Production Reference: {conda_prod_reference}")
 print(f"Docker Production Reference: {docker_prod_reference}")
@@ -833,11 +936,11 @@ print("  OPTION 2 (ALTERNATIVE): Recreate environments in production workspace")
 print("")
 print("Environment References for Production Use:")
 print("Conda Environment:")
-print(f"  Option 1 - Dev Registry Reference: azureml://registries/amlregdevcc01/environments/inference-env-conda/versions/1.0")
+print(f"  Option 1 - Dev Registry Reference: azureml://registries/{dev-registry}/environments/inference-env-conda/versions/1.0")
 print(f"  Option 2 - Prod Workspace: inference-env-conda:1.0")
 
 print("\nDocker Environment:")
-print(f"  Option 1 - Dev Registry Reference: azureml://registries/amlregdevcc01/environments/inference-env-docker/versions/1.0")
+print(f"  Option 1 - Dev Registry Reference: azureml://registries/{dev-registry}/environments/inference-env-docker/versions/1.0")
 print(f"  Option 2 - Prod Workspace: inference-env-docker:1.0")
 print("")
 print("RECOMMENDED: Use Option 1 (dev registry references) for simplicity and lineage")
@@ -955,7 +1058,7 @@ Our managed VNet configuration introduces specific constraints for asset sharing
    - **Technical Reason**: Private registries cannot build container images when ACR public access is disabled
    - **Impact**: Environment promotion requires alternative strategies
    - **Mitigation Options**:
-     - **RECOMMENDED**: Reference dev registry environments via `azureml://registries/amlregdevcc01/...` URIs
+     - **RECOMMENDED**: Reference dev registry environments via `azureml://registries/{dev-registry}/...` URIs
      - **ALTERNATIVE**: Recreate environments in production workspace using image references
      - **FALLBACK**: Store environment YAML definitions in version control and rebuild from source
    - **Reference**: [Network Isolation with Registries](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-registry-network-isolation#create-assets-in-registry-from-local-files)
@@ -1021,7 +1124,7 @@ dev_deployment = ManagedOnlineDeployment(
     name="dev-deployment",
     endpoint_name="dev-taxi-endpoint",
     model=f"azureml:{model_details.name}:{model_details.version}",
-    environment="azureml://registries/amlregdevcc01/environments/inference-env:1.0",
+    environment="azureml://registries/{dev-registry}/environments/inference-env:1.0",
     instance_type="Standard_DS2_v2",
     instance_count=1
 )
@@ -1045,7 +1148,7 @@ print(f"✓ Model promoted: {model_prod.name}")
 print("Step 2B: Setting up environment references for production...")
 # IMPORTANT: Cannot create environments in private prod registry
 # Must reference dev registry environments or recreate in prod workspace
-env_prod_ref = "azureml://registries/amlregdevcc01/environments/inference-env:1.0"
+env_prod_ref = "azureml://registries/{dev-registry}/environments/inference-env:1.0"
 print(f"✓ Environment reference (dev registry): {env_prod_ref}")
 print("   Note: Referencing dev registry due to private registry limitations")
 
@@ -1150,14 +1253,14 @@ print(f"  Deployment: prod-deployment")
    shared_model = ml_client_dev_workspace.models.share(
        name="taxi-fare-model",
        version="1.0", 
-       registry_name="amlregdevcc01"
+       registry_name="{dev-registry}"
    )
    
    # Promote model to production registry (manual approval gate)
    prod_model = Model(
        name="taxi-fare-model",
        version="1.0",
-       path="azureml://registries/amlregdevcc01/models/taxi-fare-model/versions/1.0"
+       path="azureml://registries/{dev-registry}/models/taxi-fare-model/versions/1.0"
    )
    ml_client_prod_registry.models.create_or_update(prod_model)
    ```
@@ -1178,12 +1281,12 @@ print(f"  Deployment: prod-deployment")
    shared_env = ml_client_dev_workspace.environments.share(
        name="inference-env",
        version="1.0",
-       registry_name="amlregdevcc01"
+       registry_name="{dev-registry}"
    )
    
    # 3. Choose production strategy:
    # Option A: Reference dev registry directly (fastest)
-   direct_ref = "azureml://registries/amlregdevcc01/environments/inference-env/versions/1.0"
+   direct_ref = "azureml://registries/{dev-registry}/environments/inference-env/versions/1.0"
    
    # Option B: Copy to prod registry (registry isolation)
    env_from_dev = ml_client_dev_registry.environments.get("inference-env", "1.0")
