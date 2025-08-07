@@ -12,8 +12,13 @@ output "workspace_name" {
 }
 
 output "workspace_principal_id" {
-  description = "Principal ID of the Azure ML workspace system-managed identity"
-  value       = azapi_resource.aml_workspace.output.identity.principalId
+  description = "Principal ID of the Azure ML workspace user-assigned managed identity"
+  value       = azurerm_user_assigned_identity.workspace_identity.principal_id
+}
+
+output "workspace_identity_id" {
+  description = "Resource ID of the workspace user-assigned managed identity"
+  value       = azurerm_user_assigned_identity.workspace_identity.id
 }
 
 output "resource_group_name" {

@@ -1,0 +1,46 @@
+# Base prefix for all resources
+prefix = "aml"
+
+# Specific prefixes for each resource type (aligned with deployment strategy)
+resource_prefixes = {
+  vnet               = "vnet-aml"
+  subnet             = "subnet-aml"
+  workspace          = "amlw"           # ✅ Corrected from "amlws"
+  registry           = "amlr"           # ✅ Corrected from "amlreg"
+  storage            = "staml"          # ✅ Corrected from "amlst"
+  container_registry = "acr"            # ✅ Corrected from "amlacr"
+  key_vault          = "kv"             # ✅ Corrected from "amlkv"
+  log_analytics      = "log-ml"         # ✅ Corrected from "amllog"
+}
+
+# Environment Configuration
+purpose       = "prod"
+location      = "canadacentral"
+location_code = "cc"
+random_string = "01"                  # ✅ Same as dev per strategy
+
+# Production Network Configuration (DIFFERENT CIDR)
+vnet_address_space    = "10.2.0.0/16"    # ✅ Prod CIDR - isolated
+subnet_address_prefix = "10.2.1.0/24"    # ✅ Prod subnet - isolated
+
+# Resource Tagging
+tags = {
+  environment  = "production"
+  project      = "ml-platform"
+  created_by   = "terraform"
+  owner        = "ml-team"
+  purpose      = "production"
+}
+
+# Key Vault Configuration - CRITICAL SECURITY
+enable_auto_purge = false             # ✅ MANDATORY for production
+
+# Service Principal Configuration - Single SP for all environments
+create_service_principal = false      # ✅ Only create SP once in dev environment
+service_principal_secret_expiry_hours = 17520  # 2 years
+
+# Cross-Environment RBAC (prod environment gets access to dev resource groups)
+enable_cross_environment_rbac = true
+cross_environment_vnet_resource_group_name     = "rg-aml-vnet-dev-cc01"
+cross_environment_workspace_resource_group_name = "rg-aml-workspace-dev-cc01"
+cross_environment_registry_resource_group_name = "rg-aml-registry-dev-cc01"

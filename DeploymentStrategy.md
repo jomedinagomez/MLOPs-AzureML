@@ -153,6 +153,13 @@ Workspace UAMI:
 │   ├── AzureML Registry User (on registry): Access and use shared models, components, and environments - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/ai-machine-learning#azureml-registry-user)
 │   └── Reader (on private endpoints for storage accounts): Monitor and validate secure storage connectivity - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/general#reader)
 
+Registry SMI (System-Assigned Managed Identity):
+├── Identity Type: System-Assigned (Azure ML Registries do not support user-assigned managed identities)
+├── Automatic Creation: Created automatically when the registry is provisioned
+├── Access: Manages registry's Microsoft-managed storage account and container registry
+├── RBAC: Automatically configured by Azure ML service for registry operations
+└── No Manual Configuration Required: Azure handles all permissions for registry-managed resources
+
 Compute Cluster & Compute Instance UAMI (Shared):
 ├── Name: "${purpose}-mi-compute" 
 ├── Location: rg-aml-vnet-${purpose}-${location_code}${random_string}
@@ -248,6 +255,29 @@ NO WRITE ACCESS to Development Environment:
 
 **Security Principle**: Minimal cross-environment access following the principle of least privilege. Production can read promoted assets from dev registry but cannot modify development resources.
 
+#### Production Workspace UAMI Permissions (`{prod-workspace-uami-name}`)
+
+```
+Production Environment Resources:
+├── Azure AI Administrator (on {prod-resource-group}): Configure workspace settings and AI services integration
+├── Azure AI Enterprise Network Connection Approver (on {prod-resource-group}): Enable secure connectivity and cross-environment sharing
+├── Azure AI Enterprise Network Connection Approver (on {prod-registry}): Enable cross-environment model sharing
+├── Storage Blob Data Contributor (on {prod-storage-account}): Manage workspace artifacts and datasets
+├── Storage Blob Data Owner (on {prod-storage-account}): Complete workspace storage management and permissions
+├── AzureML Registry User (on {prod-registry}): Access and use shared models, components, and environments
+└── Reader (on private endpoints for {prod-storage-account}): Monitor and validate secure storage connectivity
+
+Cross-Environment Access (REQUIRED for Automatic Private Endpoint Creation):
+└── Azure AI Enterprise Network Connection Approver (on {dev-registry}): Enable automatic private endpoint creation for outbound rules
+
+NO WRITE ACCESS to Development Environment:
+├── {dev-storage-account}: No access
+├── {dev-workspace}: No access
+└── {dev-key-vault}: No access
+```
+
+**Critical Permission**: The production workspace UAMI requires `Azure AI Enterprise Network Connection Approver` on the dev registry to automatically create private endpoints when outbound rules are configured. This permission enables the managed VNet to establish secure connectivity without manual intervention.
+
 #### Cross-Environment Access Justification
 
 The production UAMI requires `AzureML Registry User` access to the development registry (`{dev-registry}`) to support the documented asset promotion patterns:
@@ -261,11 +291,52 @@ The production UAMI requires `AzureML Registry User` access to the development r
 
 3. **Model Lineage**: Maintain complete lineage tracking for models that originated in development and were promoted through the dev registry.
 
+#### Network Connectivity for Cross-Environment Access
+
+**Managed VNet Automatic Private Endpoint Creation**
+
+This infrastructure uses Azure ML managed virtual networks with `isolationMode = "AllowOnlyApprovedOutbound"`. **Private endpoints are automatically created** when outbound rules specify `type = "PrivateEndpoint"`.
+
+```terraform
+# Cross-environment connectivity (from main.tf)
+resource "azapi_resource" "workspace_to_registry_outbound_rule" {
+  type      = "Microsoft.MachineLearningServices/workspaces/outboundRules@2024-10-01-preview"
+  name      = "allow-external-registry-${var.purpose}"
+  parent_id = module.aml_workspace.workspace_id
+
+  body = {
+    properties = {
+      type = "PrivateEndpoint"              # Automatically creates private endpoint
+      destination = {
+        serviceResourceId = module.aml_registry.registry_id
+        subresourceTarget = "amlregistry"
+      }
+      category = "UserDefined"
+    }
+  }
+}
+```
+
+**What Happens Automatically:**
+- **Private Endpoint Creation**: Azure ML service creates the private endpoint within the managed VNet
+- **DNS Resolution**: Automatic DNS configuration for `{dev-registry}.api.azureml.ms`
+- **Network Path**: Secure connectivity from prod workspace to dev registry without VNet peering
+- **Microsoft-Managed ACR Access**: Automatic access to dev registry's internal ACR through the same private endpoint
+
+**No Manual Network Configuration Required:**
+- ❌ No VNet peering needed between environments
+- ❌ No manual private endpoint creation
+- ❌ No manual DNS configuration
+- ❌ No cross-VNet private endpoint setup
+- ✅ Complete network isolation maintained
+- ✅ Automatic secure connectivity through managed VNet outbound rules
+
 #### Registry Access Notes
 
 - **Microsoft-Managed Resources**: Azure ML Registries create Microsoft-managed resource groups with their own ACR and storage. These resources are not directly manageable for RBAC assignments.
 - **Automatic Access**: The `AzureML Registry User` role on the registry service automatically provides access to associated container images through Azure ML's internal service mechanisms.
-- **No Direct ACR Permissions Needed**: Unlike workspace-managed ACRs, registry-managed ACRs are accessed automatically when you have appropriate registry permissions.
+- **Managed VNet Integration**: The outbound rule with `type = "PrivateEndpoint"` automatically handles all network connectivity, including access to the registry's Microsoft-managed ACR and storage.
+- **No Direct ACR Permissions Needed**: Unlike workspace-managed ACRs, registry-managed ACRs are accessed automatically when you have appropriate registry permissions and network connectivity.
 
 #### RBAC Assignment Summary
 
@@ -277,8 +348,20 @@ The production UAMI requires `AzureML Registry User` access to the development r
 ├── Storage Blob Data Contributor (on {dev-storage-account})
 └── Key Vault Secrets User (on {dev-key-vault})
 
+{dev-workspace-uami-name}:
+├── Azure AI Administrator (on {dev-resource-group})
+├── Azure AI Enterprise Network Connection Approver (on {dev-resource-group})
+├── Azure AI Enterprise Network Connection Approver (on {dev-registry})
+├── Storage Blob Data Contributor (on {dev-storage-account})
+├── Storage Blob Data Owner (on {dev-storage-account})
+├── AzureML Registry User (on {dev-registry})
+└── Reader (on private endpoints for {dev-storage-account})
+
 {prod-compute-uami-name}:
 └── AzureML Registry User (on {dev-registry}) # Cross-environment read access
+
+{prod-workspace-uami-name}:
+└── Azure AI Enterprise Network Connection Approver (on {dev-registry}) # For automatic PE creation
 ```
 
 **Production Resource Group** (`{prod-resource-group}`):
@@ -289,7 +372,19 @@ The production UAMI requires `AzureML Registry User` access to the development r
 ├── Storage Blob Data Contributor (on {prod-storage-account})  
 └── Key Vault Secrets User (on {prod-key-vault})
 
+{prod-workspace-uami-name}:
+├── Azure AI Administrator (on {prod-resource-group})
+├── Azure AI Enterprise Network Connection Approver (on {prod-resource-group})
+├── Azure AI Enterprise Network Connection Approver (on {prod-registry})
+├── Storage Blob Data Contributor (on {prod-storage-account})
+├── Storage Blob Data Owner (on {prod-storage-account})
+├── AzureML Registry User (on {prod-registry})
+└── Reader (on private endpoints for {prod-storage-account})
+
 {dev-compute-uami-name}:
+└── No access to any production resources
+
+{dev-workspace-uami-name}:
 └── No access to any production resources
 ```
 

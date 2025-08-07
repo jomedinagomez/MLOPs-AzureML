@@ -75,6 +75,12 @@ output "workspace_name" {
   value       = module.aml_workspace.workspace_name
 }
 
+output "workspace_principal_id" {
+  description = "Principal ID of the Azure ML workspace system-managed identity"
+  value       = module.aml_workspace.workspace_principal_id
+  sensitive   = true
+}
+
 output "workspace_resource_group_name" {
   description = "Resource group name of the ML workspace"
   value       = module.aml_workspace.resource_group_name
@@ -186,4 +192,45 @@ output "deployment_summary" {
       }
     }
   }
+}
+
+###### Service Principal Outputs ######
+output "service_principal_id" {
+  description = "Object ID of the deployment service principal"
+  value       = var.create_service_principal ? azuread_service_principal.deployment_sp[0].object_id : null
+  sensitive   = true
+}
+
+output "service_principal_application_id" {
+  description = "Application (client) ID of the deployment service principal"
+  value       = var.create_service_principal ? azuread_service_principal.deployment_sp[0].client_id : null
+  sensitive   = true
+}
+
+output "service_principal_display_name" {
+  description = "Display name of the deployment service principal"
+  value       = var.create_service_principal ? azuread_service_principal.deployment_sp[0].display_name : null
+}
+
+output "service_principal_secret" {
+  description = "Client secret for the deployment service principal (expires in 2 years)"
+  value       = var.create_service_principal ? azuread_application_password.deployment_sp_secret[0].value : null
+  sensitive   = true
+}
+
+output "service_principal_secret_id" {
+  description = "ID of the service principal secret"
+  value       = var.create_service_principal ? azuread_application_password.deployment_sp_secret[0].key_id : null
+  sensitive   = true
+}
+
+output "service_principal_auth_instructions" {
+  description = "Instructions for using the service principal for authentication"
+  value = var.create_service_principal ? {
+    client_id       = azuread_service_principal.deployment_sp[0].client_id
+    tenant_id       = data.azurerm_client_config.current.tenant_id
+    subscription_id = data.azurerm_client_config.current.subscription_id
+    instructions    = "Use these values to set ARM_CLIENT_ID, ARM_TENANT_ID, ARM_SUBSCRIPTION_ID environment variables. Get the secret from 'service_principal_secret' output."
+  } : null
+  sensitive = true
 }

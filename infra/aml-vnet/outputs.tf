@@ -46,6 +46,11 @@ output "resource_group_name_dns" {
   value       = azurerm_resource_group.aml_vnet_rg.name
 }
 
+output "resource_group_id" {
+  description = "ID of the resource group containing VNet and DNS zones"
+  value       = azurerm_resource_group.aml_vnet_rg.id
+}
+
 output "vnet_id" {
   description = "ID of the virtual network"
   value       = azurerm_virtual_network.aml_vnet.id

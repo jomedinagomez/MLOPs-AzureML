@@ -1,5 +1,5 @@
 resource "azurerm_resource_group" "aml_vnet_rg" {
-  name     = "${local.vnet_resource_group_prefix}-${var.purpose}-${var.location_code}"
+  name     = "${local.vnet_resource_group_prefix}-${var.purpose}-${var.location_code}${var.random_string}"
   location = var.location
   tags     = var.tags
 }
@@ -22,7 +22,7 @@ resource "azurerm_subnet" "aml_subnet" {
 # Managed Identity for Compute Cluster
 
 resource "azurerm_user_assigned_identity" "cc" {
-  name                = "${var.purpose}-mi-cluster"
+  name                = "${var.purpose}-mi-compute"
   location            = var.location
   resource_group_name = azurerm_resource_group.aml_vnet_rg.name
   tags                = var.tags

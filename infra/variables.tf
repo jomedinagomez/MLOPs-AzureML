@@ -80,13 +80,18 @@ variable "location_code" {
 }
 
 variable "random_string" {
-  description = "Unique string for resource naming"
+  description = "Unique string for resource naming (must be '01' per deployment strategy)"
   type        = string
-  default     = "001"
+  default     = "01"
 
   validation {
-    condition     = can(regex("^[a-z0-9]{3,8}$", var.random_string))
-    error_message = "Random string must be between 3-8 characters, lowercase letters and numbers only."
+    condition     = var.random_string == "01"
+    error_message = "DEPLOYMENT STRATEGY REQUIREMENT: random_string must be '01' for both dev and prod environments."
+  }
+
+  validation {
+    condition     = can(regex("^[a-z0-9]{2,8}$", var.random_string))
+    error_message = "Random string must be between 2-8 characters, lowercase letters and numbers only."
   }
 }
 
@@ -136,4 +141,88 @@ variable "enable_auto_purge" {
     condition     = var.enable_auto_purge == true || var.enable_auto_purge == false
     error_message = "Enable auto purge must be true or false."
   }
+}
+
+# Cross-environment RBAC configuration for asset promotion
+variable "enable_cross_env_rbac" {
+  description = "Enable cross-environment RBAC for asset promotion between dev and prod"
+  type        = bool
+  default     = false
+}
+
+variable "cross_env_registry_resource_group" {
+  description = "Resource group name containing the other environment's registry (for cross-env RBAC)"
+  type        = string
+  default     = null
+}
+
+variable "cross_env_registry_name" {
+  description = "Name of the other environment's registry (for cross-env RBAC)"
+  type        = string
+  default     = null
+}
+
+variable "cross_env_workspace_principal_id" {
+  description = "Principal ID of the other environment's workspace system-managed identity (for cross-env RBAC)"
+  type        = string
+  default     = null
+}
+
+# Service Principal Configuration
+variable "service_principal_secret_expiry_hours" {
+  description = "Hours until the service principal secret expires (default: 17520 = 2 years)"
+  type        = number
+  default     = 17520 # 2 years
+
+  validation {
+    condition     = var.service_principal_secret_expiry_hours > 0 && var.service_principal_secret_expiry_hours <= 87600 # Max 10 years
+    error_message = "Service principal secret expiry must be between 1 hour and 87600 hours (10 years)."
+  }
+}
+
+variable "create_service_principal" {
+  description = "Whether to create a service principal for deployment automation"
+  type        = bool
+  default     = true
+
+  validation {
+    condition     = var.create_service_principal == true || var.create_service_principal == false
+    error_message = "Create service principal must be true or false."
+  }
+}
+
+variable "service_principal_secret_expiry_hours" {
+  description = "Number of hours until the service principal secret expires (default: 2 years = 17520 hours)"
+  type        = number
+  default     = 17520 # 2 years
+
+  validation {
+    condition     = var.service_principal_secret_expiry_hours > 0 && var.service_principal_secret_expiry_hours <= 87600 # Max 10 years
+    error_message = "Service principal secret expiry must be between 1 hour and 87600 hours (10 years)."
+  }
+}
+
+# Cross-Environment RBAC Variables
+variable "cross_environment_vnet_resource_group_name" {
+  description = "The name of the VNet resource group in the other environment for cross-environment RBAC"
+  type        = string
+  default     = ""
+}
+
+variable "cross_environment_workspace_resource_group_name" {
+  description = "The name of the workspace resource group in the other environment for cross-environment RBAC"
+  type        = string
+  default     = ""
+}
+
+variable "cross_environment_registry_resource_group_name" {
+  description = "The name of the registry resource group in the other environment for cross-environment RBAC"
+  type        = string
+  default     = ""
+}
+
+variable "enable_cross_environment_rbac" {
+  description = "Whether to enable cross-environment RBAC assignments for the service principal"
+  type        = bool
+  default     = false
 }

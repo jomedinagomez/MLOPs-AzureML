@@ -5,7 +5,7 @@
 ##
 resource "azurerm_resource_group" "rgwork" {
 
-  name     = "rg-aml-ws-${var.purpose}-${var.location_code}"
+  name     = "rg-aml-ws-${var.purpose}-${var.location_code}${var.random_string}"
   location = var.location
 
   tags = var.tags
@@ -105,6 +105,16 @@ module "keyvault_aml" {
 ##### Create the Azure Machine Learning Workspace and its child resources
 #####
 
+## Create User-Assigned Managed Identity for the workspace
+## This will replace the system-assigned managed identity
+##
+resource "azurerm_user_assigned_identity" "workspace_identity" {
+  name                = "${var.purpose}-mi-workspace"
+  location            = var.location
+  resource_group_name = azurerm_resource_group.rgwork.name
+  tags                = var.tags
+}
+
 ## Create the Azure Machine Learning Workspace in a managed vnet configuration
 ##
 resource "azapi_resource" "aml_workspace" {
@@ -113,7 +123,8 @@ resource "azapi_resource" "aml_workspace" {
     azurerm_application_insights.aml-appins,
     module.storage_account_default,
     module.keyvault_aml,
-    module.container_registry
+    module.container_registry,
+    azurerm_user_assigned_identity.workspace_identity
   ]
 
   type                      = "Microsoft.MachineLearningServices/workspaces@2025-04-01-preview"
@@ -124,9 +135,12 @@ resource "azapi_resource" "aml_workspace" {
 
   body = {
 
-    # Create the AML Workspace with a system-assigned managed identity
+    # Create the AML Workspace with a user-assigned managed identity
     identity = {
-      type = "SystemAssigned"
+      type = "UserAssigned"
+      userAssignedIdentities = {
+        "${azurerm_user_assigned_identity.workspace_identity.id}" = {}
+      }
     }
 
     # Create a non hub-based AML workspace
@@ -282,6 +296,30 @@ resource "azapi_resource" "aml_workspace" {
             destination = "vscode.download.prss.microsoft.com"
             category    = "UserDefined"
           }
+
+          # Cross-environment connectivity rules for asset promotion
+          # Allow connectivity to Azure ML services in other regions for cross-environment operations
+          AllowAzureMLWildcard = {
+            type        = "FQDN"
+            destination = "*.ml.azure.com"
+            category    = "UserDefined"
+          }
+          AllowAzureMLApiWildcard = {
+            type        = "FQDN"
+            destination = "*.azureml.net"
+            category    = "UserDefined"
+          }
+          AllowAzureMLStudioWildcard = {
+            type        = "FQDN"
+            destination = "*.azureml.ms"
+            category    = "UserDefined"
+          }
+          # Allow connectivity to Azure Resource Manager for cross-subscription operations
+          AllowAzureResourceManager = {
+            type        = "FQDN"
+            destination = "management.azure.com"
+            category    = "UserDefined"
+          }
         }
       }
       # Allow the platform to grant the SMI for the workspace AI Administrator on the resource group the AML workspace
@@ -295,9 +333,7 @@ resource "azapi_resource" "aml_workspace" {
 
     tags = var.tags
   }
-  response_export_values = [
-    "identity.principalId"
-  ]
+  # No longer exporting identity.principalId since we're using user-assigned identity
   lifecycle {
     ignore_changes = [
       tags["created_date"],
@@ -481,33 +517,46 @@ resource "azurerm_private_dns_a_record" "aml_workspace_compute_instance" {
 
 resource "time_sleep" "wait_aml_workspace_identities" {
   depends_on = [
-    azapi_resource.aml_workspace
+    azapi_resource.aml_workspace,
+    azurerm_user_assigned_identity.workspace_identity
   ]
   create_duration = "10s"
 }
 
 ## Create role assignments granting Reader role over the resource group to AML Workspace's
-## system-managed identity
+## user-assigned managed identity
 resource "azurerm_role_assignment" "rg_reader" {
   depends_on = [
     time_sleep.wait_aml_workspace_identities
   ]
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${azapi_resource.aml_workspace.output.identity.principalId}reader")
+  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${azurerm_user_assigned_identity.workspace_identity.principal_id}reader")
   scope                = azurerm_resource_group.rgwork.id
   role_definition_name = "Reader"
-  principal_id         = azapi_resource.aml_workspace.output.identity.principalId
+  principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
 }
 
 ## Create role assignments granting Azure AI Enterprise Network Connection Approver role over the resource group to the AML Workspace's
-## system-managed identity
+## user-assigned managed identity
 resource "azurerm_role_assignment" "ai_network_connection_approver" {
   depends_on = [
     azurerm_role_assignment.rg_reader
   ]
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${azapi_resource.aml_workspace.output.identity.principalId}netapprover")
+  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${azurerm_user_assigned_identity.workspace_identity.principal_id}netapprover")
   scope                = azurerm_resource_group.rgwork.id
   role_definition_name = "Azure AI Enterprise Network Connection Approver"
-  principal_id         = azapi_resource.aml_workspace.output.identity.principalId
+  principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
+}
+
+## Create role assignments granting Azure AI Administrator role over the resource group to the AML Workspace's
+## user-assigned managed identity - Required for image creation and registry operations
+resource "azurerm_role_assignment" "ai_administrator" {
+  depends_on = [
+    azurerm_role_assignment.ai_network_connection_approver
+  ]
+  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${azurerm_user_assigned_identity.workspace_identity.principal_id}aiadmin")
+  scope                = azurerm_resource_group.rgwork.id
+  role_definition_name = "Azure AI Administrator"
+  principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
 }
 
 ##### Create human role assignments
@@ -567,6 +616,57 @@ resource "azurerm_role_assignment" "file_perm_default_sa" {
   scope                = module.storage_account_default.id
   role_definition_name = "Storage File Data Privileged Contributor"
   principal_id         = var.user_object_id
+}
+
+##### Cross-environment RBAC for asset promotion
+#####
+
+## Grant the other environment's workspace read access to this registry
+## This enables asset promotion between dev and prod environments
+##
+resource "azurerm_role_assignment" "cross_env_registry_reader" {
+  count = var.enable_cross_env_rbac && var.cross_env_workspace_principal_id != null ? 1 : 0
+  
+  depends_on = [
+    azapi_resource.aml_workspace
+  ]
+
+  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${var.cross_env_workspace_principal_id}registryreader")
+  scope                = azapi_resource.aml_workspace.id # Allow access to this workspace
+  role_definition_name = "AzureML Registry User"
+  principal_id         = var.cross_env_workspace_principal_id
+}
+
+## Grant this workspace's user-assigned managed identity access to the other environment's registry
+## This enables bidirectional asset sharing for comprehensive MLOps workflows
+##
+resource "azurerm_role_assignment" "cross_env_registry_contributor" {
+  count = var.enable_cross_env_rbac && var.cross_env_registry_resource_group != null && var.cross_env_registry_name != null ? 1 : 0
+  
+  depends_on = [
+    time_sleep.wait_aml_workspace_identities
+  ]
+
+  name                 = uuidv5("dns", "${var.cross_env_registry_resource_group}${azurerm_user_assigned_identity.workspace_identity.principal_id}registrycontrib")
+  scope                = "/subscriptions/${var.sub_id}/resourceGroups/${var.cross_env_registry_resource_group}/providers/Microsoft.MachineLearningServices/registries/${var.cross_env_registry_name}"
+  role_definition_name = "AzureML Registry User"
+  principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
+}
+
+## Grant this workspace's user-assigned managed identity Network Connection Approver role on the other environment's registry
+## This enables automatic private endpoint creation for cross-environment connectivity
+##
+resource "azurerm_role_assignment" "cross_env_registry_network_approver" {
+  count = var.enable_cross_env_rbac && var.cross_env_registry_resource_group != null && var.cross_env_registry_name != null ? 1 : 0
+  
+  depends_on = [
+    azurerm_role_assignment.cross_env_registry_contributor
+  ]
+
+  name                 = uuidv5("dns", "${var.cross_env_registry_resource_group}${azurerm_user_assigned_identity.workspace_identity.principal_id}registrynetwork")
+  scope                = "/subscriptions/${var.sub_id}/resourceGroups/${var.cross_env_registry_resource_group}/providers/Microsoft.MachineLearningServices/registries/${var.cross_env_registry_name}"
+  role_definition_name = "Azure AI Enterprise Network Connection Approver"
+  principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
 }
 
 ##### Create compute cluster role assignments
@@ -635,6 +735,63 @@ resource "azurerm_role_assignment" "compute_storage_file_privileged_contributor"
   scope                = module.storage_account_default.id # Individual storage account resource
   role_definition_name = "Storage File Data Privileged Contributor"
   principal_id         = local.compute_cluster_principal_id
+}
+
+## Assign AcrPull role to compute identity for workspace container registry
+## This allows compute clusters to pull base images for ML training and inference environments
+##
+resource "azurerm_role_assignment" "compute_acr_pull" {
+  depends_on = [
+    module.container_registry
+  ]
+
+  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}${module.container_registry.name}acrpull")
+  scope                = module.container_registry.id # Individual ACR resource
+  role_definition_name = "AcrPull"
+  principal_id         = local.compute_cluster_principal_id
+}
+
+## Assign AcrPush role to compute identity for workspace container registry
+## This allows compute clusters to build and store custom training environments and inference images
+##
+resource "azurerm_role_assignment" "compute_acr_push" {
+  depends_on = [
+    azurerm_role_assignment.compute_acr_pull
+  ]
+
+  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}${module.container_registry.name}acrpush")
+  scope                = module.container_registry.id # Individual ACR resource
+  role_definition_name = "AcrPush"
+  principal_id         = local.compute_cluster_principal_id
+}
+
+## Assign Contributor role to compute identity for the workspace
+## This enables automatic shutdown of idle compute instances
+##
+resource "azurerm_role_assignment" "compute_workspace_contributor" {
+  depends_on = [
+    azapi_resource.aml_workspace
+  ]
+
+  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}${azapi_resource.aml_workspace.name}contributor")
+  scope                = azapi_resource.aml_workspace.id # Individual workspace resource
+  role_definition_name = "Contributor"
+  principal_id         = local.compute_cluster_principal_id
+}
+
+## Assign Storage Blob Data Owner role to workspace user-assigned managed identity for workspace storage
+## This allows the workspace to manage data and models in the storage account for registry operations
+##
+resource "azurerm_role_assignment" "workspace_storage_blob_owner" {
+  depends_on = [
+    module.storage_account_default,
+    time_sleep.wait_aml_workspace_identities
+  ]
+
+  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${azurerm_user_assigned_identity.workspace_identity.principal_id}${module.storage_account_default.name}blobowner")
+  scope                = module.storage_account_default.id # Individual storage account resource
+  role_definition_name = "Storage Blob Data Owner"
+  principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
 }
 
 ##### Diagnostic Settings for Monitoring

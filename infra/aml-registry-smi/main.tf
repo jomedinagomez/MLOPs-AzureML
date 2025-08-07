@@ -5,7 +5,7 @@
 ##
 resource "azurerm_resource_group" "rgwork" {
 
-  name     = "rg-aml-reg-${var.purpose}-${var.location_code}"
+  name     = "rg-aml-reg-${var.purpose}-${var.location_code}${var.random_string}"
   location = var.location
   tags     = var.tags
 }

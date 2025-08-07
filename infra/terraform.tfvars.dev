@@ -1,0 +1,43 @@
+# Base prefix for all resources
+prefix = "aml"
+
+# Specific prefixes for each resource type (aligned with deployment strategy)
+resource_prefixes = {
+  vnet               = "vnet-aml"
+  subnet             = "subnet-aml"
+  workspace          = "amlws"       # ✅ Matches strategy
+  registry           = "amlreg"      # ✅ Matches strategy
+  storage            = "amlst"       # ✅ Matches strategy
+  container_registry = "amlacr"      # ✅ Matches strategy
+  key_vault          = "amlkv"       # ✅ Matches strategy
+  log_analytics      = "amllog"      # ✅ Matches strategy
+}
+
+# Environment Configuration
+purpose       = "dev"
+location      = "canadacentral"
+location_code = "cc"
+random_string = "01"                # ✅ CRITICAL: Fixed from "004"
+
+# Development Network Configuration
+vnet_address_space    = "10.1.0.0/16"    # ✅ Dev CIDR
+subnet_address_prefix = "10.1.1.0/24"    # ✅ Dev subnet
+
+# Resource Tagging
+tags = {
+  environment  = "dev"
+  project      = "ml-platform"
+  created_by   = "terraform"
+  owner        = "ml-team"
+  purpose      = "development"
+}
+
+# Key Vault Configuration
+enable_auto_purge = true              # ✅ SAFE for dev environment
+
+# Cross-environment configuration (commented out by default)
+# Uncomment and configure when setting up cross-environment asset promotion
+# enable_cross_env_rbac = true
+# cross_env_registry_resource_group = "rg-aml-prod-cc-01"
+# cross_env_registry_name = "amlreg-prod-cc-01"  
+# cross_env_workspace_principal_id = "<prod-workspace-principal-id>"
