@@ -80,7 +80,7 @@ DEV_WORKSPACE_PRINCIPAL=$(terraform output workspace_principal_id)
 terraform apply -var-file="environments/prod.tfvars"
 ```
 
-## 🔧 Configuration Options
+## Configuration Options
 
 ### Environment Variables
 
@@ -104,7 +104,7 @@ Key variables you can modify in `.tfvars` files:
 | `enable_auto_purge` | Key Vault purge | `true` | `false` |
 | `enable_cross_env_rbac` | Cross-env access | `false` | `true` |
 
-## 📊 Resource Overview
+## Resource Overview
 
 ### Development Environment (18 resources)
 
@@ -143,24 +143,24 @@ Per Resource Group (3 roles × 6 RGs = 18 total):
 ## 🔒 Security Features
 
 ### Network Security
-- ✅ Private endpoints for all services
-- ✅ Managed VNet with outbound rules
-- ✅ Complete network isolation between environments
-- ✅ Private DNS resolution
+- Private endpoints for all services
+- Managed VNet with outbound rules
+- Complete network isolation between environments
+- Private DNS resolution
 
 ### Identity & Access Management
-- ✅ User-assigned identities for workspaces and compute
-- ✅ System-assigned identity for registries
-- ✅ Least-privilege RBAC assignments
-- ✅ Cross-environment read-only access (prod → dev)
+- User-assigned identities for workspaces and compute
+- System-assigned identity for registries
+- Least-privilege RBAC assignments
+- Cross-environment read-only access (prod → dev)
 
 ### Data Protection
-- ✅ Storage account network restrictions
-- ✅ Key Vault with access policies
-- ✅ Container registry private access
-- ✅ Automatic secret rotation support
+- Storage account network restrictions
+- Key Vault with access policies
+- Container registry private access
+- Automatic secret rotation support
 
-## 🚨 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 

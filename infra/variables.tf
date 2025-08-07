@@ -29,12 +29,12 @@ variable "resource_prefixes" {
   default = {
     vnet               = "vnet-aml"
     subnet             = "subnet-aml"
-    workspace          = "amlw"
-    registry           = "amlr"
-    storage            = "staml"
-    container_registry = "acr"
-    key_vault          = "kv"
-    log_analytics      = "log-ml"
+    workspace          = "amlws"
+    registry           = "amlreg"
+    storage            = "amlst"
+    container_registry = "amlacr"
+    key_vault          = "amlkv"
+    log_analytics      = "amllog"
   }
 }
 
@@ -178,51 +178,4 @@ variable "service_principal_secret_expiry_hours" {
     condition     = var.service_principal_secret_expiry_hours > 0 && var.service_principal_secret_expiry_hours <= 87600 # Max 10 years
     error_message = "Service principal secret expiry must be between 1 hour and 87600 hours (10 years)."
   }
-}
-
-variable "create_service_principal" {
-  description = "Whether to create a service principal for deployment automation"
-  type        = bool
-  default     = true
-
-  validation {
-    condition     = var.create_service_principal == true || var.create_service_principal == false
-    error_message = "Create service principal must be true or false."
-  }
-}
-
-variable "service_principal_secret_expiry_hours" {
-  description = "Number of hours until the service principal secret expires (default: 2 years = 17520 hours)"
-  type        = number
-  default     = 17520 # 2 years
-
-  validation {
-    condition     = var.service_principal_secret_expiry_hours > 0 && var.service_principal_secret_expiry_hours <= 87600 # Max 10 years
-    error_message = "Service principal secret expiry must be between 1 hour and 87600 hours (10 years)."
-  }
-}
-
-# Cross-Environment RBAC Variables
-variable "cross_environment_vnet_resource_group_name" {
-  description = "The name of the VNet resource group in the other environment for cross-environment RBAC"
-  type        = string
-  default     = ""
-}
-
-variable "cross_environment_workspace_resource_group_name" {
-  description = "The name of the workspace resource group in the other environment for cross-environment RBAC"
-  type        = string
-  default     = ""
-}
-
-variable "cross_environment_registry_resource_group_name" {
-  description = "The name of the registry resource group in the other environment for cross-environment RBAC"
-  type        = string
-  default     = ""
-}
-
-variable "enable_cross_environment_rbac" {
-  description = "Whether to enable cross-environment RBAC assignments for the service principal"
-  type        = bool
-  default     = false
 }

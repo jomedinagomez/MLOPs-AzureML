@@ -5,23 +5,23 @@ prefix = "aml"
 resource_prefixes = {
   vnet               = "vnet-aml"
   subnet             = "subnet-aml"
-  workspace          = "amlws"       # ✅ Matches strategy
-  registry           = "amlreg"      # ✅ Matches strategy
-  storage            = "amlst"       # ✅ Matches strategy
-  container_registry = "amlacr"      # ✅ Matches strategy
-  key_vault          = "amlkv"       # ✅ Matches strategy
-  log_analytics      = "amllog"      # ✅ Matches strategy
+  workspace          = "amlws"
+  registry           = "amlreg"
+  storage            = "amlst"
+  container_registry = "amlacr"
+  key_vault          = "amlkv"
+  log_analytics      = "amllog"
 }
 
 # Environment Configuration
 purpose       = "dev"
 location      = "canadacentral"
 location_code = "cc"
-random_string = "01"                # ✅ CRITICAL: Fixed from "004"
+random_string = "01"
 
 # Development Network Configuration
-vnet_address_space    = "10.1.0.0/16"    # ✅ Dev CIDR
-subnet_address_prefix = "10.1.1.0/24"    # ✅ Dev subnet
+vnet_address_space    = "10.1.0.0/16"
+subnet_address_prefix = "10.1.1.0/24"
 
 # Resource Tagging
 tags = {
@@ -33,7 +33,7 @@ tags = {
 }
 
 # Key Vault Configuration
-enable_auto_purge = true              # ✅ SAFE for dev environment
+enable_auto_purge = true
 
 # Cross-environment configuration (commented out by default)
 # Uncomment and configure when setting up cross-environment asset promotion

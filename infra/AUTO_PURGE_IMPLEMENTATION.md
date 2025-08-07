@@ -1,27 +1,27 @@
 # Azure Services Auto-Purge Implementation
 
-## 🎯 **Overview**
+## **Overview**
 
 You now have comprehensive **destroy-time auto-purging** for all Azure services with soft-delete protection in your infrastructure. The auto-purge functionality only activates during `terraform destroy` operations, ensuring clean deployments without soft-delete conflicts.
 
-## 🔧 **Services with Auto-Purge Protection**
+## **Services with Auto-Purge Protection**
 
-### ✅ **Key Vault** (Previously Implemented)
+### **Key Vault** (Previously Implemented)
 - **Soft-Delete Period**: 7-90 days (configurable)
 - **Auto-Purge**: Runs `az keyvault purge` during destroy
 - **Prevents**: 409 Conflict errors on diagnostic settings
 
-### ✅ **Container Registry** (Newly Added)
+### **Container Registry** (Newly Added)
 - **Soft-Delete Period**: 7 days for repositories/manifests  
 - **Auto-Purge**: Cleans repositories and manifests during destroy
 - **Prevents**: Repository naming conflicts and manifest issues
 
-### ✅ **Storage Account** (Newly Added)
+### **Storage Account** (Newly Added)
 - **Soft-Delete Period**: 7 days for blobs/containers
 - **Auto-Purge**: Restores and purges soft-deleted blobs/containers
 - **Prevents**: Container and blob access issues
 
-### ✅ **Log Analytics Workspace** (Manual Script)
+### **Log Analytics Workspace** (Manual Script)
 - **Soft-Delete Period**: 14 days
 - **Auto-Purge**: Handled by comprehensive cleanup script
 - **Prevents**: Workspace naming conflicts
@@ -53,7 +53,7 @@ enable_auto_purge = false  # Disable for production (default)
 ### **1. Enable Auto-Purge (Dev/Test Environments)**
 ```hcl
 # infra/terraform.tfvars
-enable_auto_purge = true  # ⚠️ NEVER use in production!
+enable_auto_purge = true  # NEVER use in production!
 ```
 
 ### **2. Deploy Infrastructure**
@@ -99,20 +99,20 @@ terraform destroy
 ## 📁 **Files Modified**
 
 ### **Infrastructure Components**
-- ✅ `infra/main.tf` - Added null provider
-- ✅ `infra/modules/key-vault/main.tf` - Key Vault auto-purge (existing)
-- ✅ `infra/modules/container-registry/main.tf` - ACR auto-purge (new)
-- ✅ `infra/modules/storage-account/main.tf` - Storage auto-purge (new)
-- ✅ `infra/aml-managed-smi/main.tf` - Pass enable_auto_purge to modules
+- `infra/main.tf` - Added null provider
+- `infra/modules/key-vault/main.tf` - Key Vault auto-purge (existing)
+- `infra/modules/container-registry/main.tf` - ACR auto-purge (new)
+- `infra/modules/storage-account/main.tf` - Storage auto-purge (new)
+- `infra/aml-managed-smi/main.tf` - Pass enable_auto_purge to modules
 
 ### **Variable Configuration**
-- ✅ `infra/variables.tf` - Root enable_auto_purge variable (existing)
-- ✅ `infra/modules/container-registry/variables.tf` - Module variable (new)
-- ✅ `infra/modules/storage-account/variables.tf` - Module variable (new)
+- `infra/variables.tf` - Root enable_auto_purge variable (existing)
+- `infra/modules/container-registry/variables.tf` - Module variable (new)
+- `infra/modules/storage-account/variables.tf` - Module variable (new)
 
 ### **Cleanup Scripts**
-- ✅ `infra/cleanup.ps1` - Original Key Vault script (existing)
-- ✅ `infra/cleanup_comprehensive.ps1` - Full service cleanup (new)
+- `infra/cleanup.ps1` - Original Key Vault script (existing)
+- `infra/cleanup_comprehensive.ps1` - Full service cleanup (new)
 
 ## 🧪 **Testing the Implementation**
 
@@ -142,7 +142,7 @@ az acr list --query "[?provisioningState=='Deleted']"
 .\cleanup_comprehensive.ps1 -Force
 ```
 
-## 🎯 **Expected Behavior**
+## **Expected Behavior**
 
 ### **Before This Implementation**
 ```bash
@@ -158,13 +158,13 @@ terraform apply
 ### **After This Implementation**
 ```bash
 terraform destroy
-# ✅ Resources deleted
-# ✅ Soft-deleted resources automatically purged
-# ✅ Clean slate for next deployment
+# Resources deleted
+# Soft-deleted resources automatically purged
+# Clean slate for next deployment
 
 terraform apply
-# ✅ Deploys successfully without conflicts
-# ✅ No manual intervention required
+# Deploys successfully without conflicts
+# No manual intervention required
 ```
 
 ## 🔄 **Migration Path**
@@ -180,11 +180,11 @@ Your infrastructure is now ready! No additional steps needed:
 
 You now have a **production-ready, comprehensive soft-delete management solution** that:
 
-- ✅ **Prevents all deployment conflicts** from soft-deleted resources
-- ✅ **Only activates during destroy operations** (safe for regular deployments)
-- ✅ **Covers all Azure services** with soft-delete protection in your infrastructure
-- ✅ **Provides multiple cleanup options** (automatic, script-based, manual)
-- ✅ **Maintains production safety** with conditional activation
-- ✅ **Includes comprehensive error handling** and logging
+- **Prevents all deployment conflicts** from soft-deleted resources
+- **Only activates during destroy operations** (safe for regular deployments)
+- **Covers all Azure services** with soft-delete protection in your infrastructure
+- **Provides multiple cleanup options** (automatic, script-based, manual)
+- **Maintains production safety** with conditional activation
+- **Includes comprehensive error handling** and logging
 
 Your infrastructure is now fully protected against soft-delete conflicts! 🚀

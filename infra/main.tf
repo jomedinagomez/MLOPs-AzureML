@@ -40,51 +40,15 @@ provider "azuread" {
 # Data sources to automatically get current subscription and user information
 data "azurerm_client_config" "current" {}
 
-##### Service Principal for Deployment Automation
+#####
+##### Service Principal Data Source
+##### References the pre-created service principal from service-principal module
 #####
 
-# Create Azure AD Application for the service principal
-resource "azuread_application" "deployment_sp_app" {
-  count = var.create_service_principal ? 1 : 0
-
-  display_name = "sp-aml-deployment-platform"  # Single SP for all environments
-  description  = "Service Principal for Azure ML platform deployment automation (all environments)"
-  
-  owners = [data.azurerm_client_config.current.object_id]
-
-  tags = [
-    "Purpose:MLOps-Deployment",
-    "ManagedBy:Terraform",
-    "Scope:AllEnvironments"
-  ]
-}
-
-# Create the service principal
-resource "azuread_service_principal" "deployment_sp" {
-  count = var.create_service_principal ? 1 : 0
-
-  client_id                    = azuread_application.deployment_sp_app[0].client_id
-  app_role_assignment_required = false
-  description                  = "Service Principal for Azure ML platform deployment via Terraform (all environments)"
-  
-  owners = [data.azurerm_client_config.current.object_id]
-
-  tags = [
-    "Purpose:MLOps-Deployment", 
-    "ManagedBy:Terraform",
-    "Scope:AllEnvironments"
-  ]
-}
-
-# Create a client secret for the service principal
-resource "azuread_application_password" "deployment_sp_secret" {
-  count = var.create_service_principal ? 1 : 0
-
-  application_id = azuread_application.deployment_sp_app[0].id
-  display_name   = "Terraform Deployment Secret - Platform"
-  
-  # Secret expires based on variable (default: 2 years)
-  end_date = timeadd(timestamp(), "${var.service_principal_secret_expiry_hours}h")
+# Reference the existing service principal created by the service-principal module
+# This service principal must be created BEFORE running any environment deployment
+data "azuread_service_principal" "deployment_sp" {
+  display_name = "sp-aml-deployment-platform"
 }
 
 ##### Module Orchestration
@@ -295,213 +259,90 @@ resource "azurerm_role_assignment" "endpoint_registry_user" {
 # These permissions enable the SP to deploy networking infrastructure and manage identities
 
 resource "azurerm_role_assignment" "sp_contributor_vnet_rg" {
-  count = var.create_service_principal ? 1 : 0
-
   scope                = module.aml_vnet.resource_group_id
   role_definition_name = "Contributor"
-  principal_id         = azuread_service_principal.deployment_sp[0].object_id
+  principal_id         = data.azuread_service_principal.deployment_sp.object_id
   description          = "Allows sp-aml-deployment-platform to deploy ML networking infrastructure"
 
-  depends_on = [module.aml_vnet, azuread_service_principal.deployment_sp]
+  depends_on = [module.aml_vnet]
 }
 
 resource "azurerm_role_assignment" "sp_user_access_admin_vnet_rg" {
-  count = var.create_service_principal ? 1 : 0
-
   scope                = module.aml_vnet.resource_group_id
   role_definition_name = "User Access Administrator"
-  principal_id         = azuread_service_principal.deployment_sp[0].object_id
+  principal_id         = data.azuread_service_principal.deployment_sp.object_id
   description          = "Allows sp-aml-deployment-platform to configure RBAC for managed identities in VNet RG"
 
-  depends_on = [module.aml_vnet, azuread_service_principal.deployment_sp]
+  depends_on = [module.aml_vnet]
 }
 
 resource "azurerm_role_assignment" "sp_network_contributor_vnet_rg" {
-  count = var.create_service_principal ? 1 : 0
-
   scope                = module.aml_vnet.resource_group_id
   role_definition_name = "Network Contributor"
-  principal_id         = azuread_service_principal.deployment_sp[0].object_id
+  principal_id         = data.azuread_service_principal.deployment_sp.object_id
   description          = "Allows sp-aml-deployment-platform to configure secure networking for ML workspace isolation"
 
-  depends_on = [module.aml_vnet, azuread_service_principal.deployment_sp]
+  depends_on = [module.aml_vnet]
 }
 
 # Service Principal role assignments on Workspace Resource Group
 # These permissions enable the SP to deploy workspace infrastructure and configure RBAC
 
 resource "azurerm_role_assignment" "sp_contributor_workspace_rg" {
-  count = var.create_service_principal ? 1 : 0
-
   scope                = module.aml_workspace.resource_group_id
   role_definition_name = "Contributor"
-  principal_id         = azuread_service_principal.deployment_sp[0].object_id
+  principal_id         = data.azuread_service_principal.deployment_sp.object_id
   description          = "Allows sp-aml-deployment-platform to deploy ML workspace, storage accounts, and compute resources"
 
-  depends_on = [module.aml_workspace, azuread_service_principal.deployment_sp]
+  depends_on = [module.aml_workspace]
 }
 
 resource "azurerm_role_assignment" "sp_user_access_admin_workspace_rg" {
-  count = var.create_service_principal ? 1 : 0
-
   scope                = module.aml_workspace.resource_group_id
   role_definition_name = "User Access Administrator"
-  principal_id         = azuread_service_principal.deployment_sp[0].object_id
+  principal_id         = data.azuread_service_principal.deployment_sp.object_id
   description          = "Allows sp-aml-deployment-platform to configure RBAC for managed identities and user access in Workspace RG"
 
-  depends_on = [module.aml_workspace, azuread_service_principal.deployment_sp]
+  depends_on = [module.aml_workspace]
 }
 
 resource "azurerm_role_assignment" "sp_network_contributor_workspace_rg" {
-  count = var.create_service_principal ? 1 : 0
-
   scope                = module.aml_workspace.resource_group_id
   role_definition_name = "Network Contributor"
-  principal_id         = azuread_service_principal.deployment_sp[0].object_id
+  principal_id         = data.azuread_service_principal.deployment_sp.object_id
   description          = "Allows sp-aml-deployment-platform to configure secure networking for ML workspace isolation"
 
-  depends_on = [module.aml_workspace, azuread_service_principal.deployment_sp]
+  depends_on = [module.aml_workspace]
 }
 
 # Service Principal role assignments on Registry Resource Group  
 # These permissions enable the SP to deploy registry infrastructure and configure RBAC
 
 resource "azurerm_role_assignment" "sp_contributor_registry_rg" {
-  count = var.create_service_principal ? 1 : 0
-
   scope                = module.aml_registry.resource_group_id
   role_definition_name = "Contributor"
-  principal_id         = azuread_service_principal.deployment_sp[0].object_id
+  principal_id         = data.azuread_service_principal.deployment_sp.object_id
   description          = "Allows sp-aml-deployment-platform to deploy ML registry and associated resources"
 
-  depends_on = [module.aml_registry, azuread_service_principal.deployment_sp]
+  depends_on = [module.aml_registry]
 }
 
 resource "azurerm_role_assignment" "sp_user_access_admin_registry_rg" {
-  count = var.create_service_principal ? 1 : 0
-
   scope                = module.aml_registry.resource_group_id
   role_definition_name = "User Access Administrator"
-  principal_id         = azuread_service_principal.deployment_sp[0].object_id
+  principal_id         = data.azuread_service_principal.deployment_sp.object_id
   description          = "Allows sp-aml-deployment-platform to configure RBAC for managed identities and user access in Registry RG"
 
-  depends_on = [module.aml_registry, azuread_service_principal.deployment_sp]
+  depends_on = [module.aml_registry]
 }
 
 resource "azurerm_role_assignment" "sp_network_contributor_registry_rg" {
-  count = var.create_service_principal ? 1 : 0
-
   scope                = module.aml_registry.resource_group_id
   role_definition_name = "Network Contributor"
-  principal_id         = azuread_service_principal.deployment_sp[0].object_id
+  principal_id         = data.azuread_service_principal.deployment_sp.object_id
   description          = "Allows sp-aml-deployment-platform to configure secure networking for ML registry isolation"
 
-  depends_on = [module.aml_registry, azuread_service_principal.deployment_sp]
-}
-
-#####
-##### Cross-Environment Service Principal RBAC Assignments
-##### These enable the single SP to manage resources across both dev and prod environments
-#####
-
-# Cross-environment Service Principal permissions
-data "azurerm_resource_group" "cross_env_vnet" {
-  count = var.create_service_principal && var.enable_cross_environment_rbac ? 1 : 0
-  name  = var.cross_environment_vnet_resource_group_name
-}
-
-data "azurerm_resource_group" "cross_env_workspace" {
-  count = var.create_service_principal && var.enable_cross_environment_rbac ? 1 : 0
-  name  = var.cross_environment_workspace_resource_group_name
-}
-
-data "azurerm_resource_group" "cross_env_registry" {
-  count = var.create_service_principal && var.enable_cross_environment_rbac ? 1 : 0
-  name  = var.cross_environment_registry_resource_group_name
-}
-
-# Cross-environment Contributor permissions
-resource "azurerm_role_assignment" "sp_cross_env_contributor_vnet" {
-  count                = var.create_service_principal && var.enable_cross_environment_rbac ? 1 : 0
-  scope                = data.azurerm_resource_group.cross_env_vnet[0].id
-  role_definition_name = "Contributor"
-  principal_id         = azuread_service_principal.deployment_sp[0].object_id
-  description          = "Allows sp-aml-deployment-platform to deploy cross-environment networking infrastructure"
-  depends_on          = [azuread_service_principal.deployment_sp]
-}
-
-resource "azurerm_role_assignment" "sp_cross_env_contributor_workspace" {
-  count                = var.create_service_principal && var.enable_cross_environment_rbac ? 1 : 0
-  scope                = data.azurerm_resource_group.cross_env_workspace[0].id
-  role_definition_name = "Contributor"
-  principal_id         = azuread_service_principal.deployment_sp[0].object_id
-  description          = "Allows sp-aml-deployment-platform to deploy cross-environment workspace infrastructure"
-  depends_on          = [azuread_service_principal.deployment_sp]
-}
-
-resource "azurerm_role_assignment" "sp_cross_env_contributor_registry" {
-  count                = var.create_service_principal && var.enable_cross_environment_rbac ? 1 : 0
-  scope                = data.azurerm_resource_group.cross_env_registry[0].id
-  role_definition_name = "Contributor"
-  principal_id         = azuread_service_principal.deployment_sp[0].object_id
-  description          = "Allows sp-aml-deployment-platform to deploy cross-environment registry infrastructure"
-  depends_on          = [azuread_service_principal.deployment_sp]
-}
-
-# Cross-environment User Access Administrator permissions
-resource "azurerm_role_assignment" "sp_cross_env_user_access_admin_vnet" {
-  count                = var.create_service_principal && var.enable_cross_environment_rbac ? 1 : 0
-  scope                = data.azurerm_resource_group.cross_env_vnet[0].id
-  role_definition_name = "User Access Administrator"
-  principal_id         = azuread_service_principal.deployment_sp[0].object_id
-  description          = "Allows sp-aml-deployment-platform to configure cross-environment RBAC for VNet resources"
-  depends_on          = [azuread_service_principal.deployment_sp]
-}
-
-resource "azurerm_role_assignment" "sp_cross_env_user_access_admin_workspace" {
-  count                = var.create_service_principal && var.enable_cross_environment_rbac ? 1 : 0
-  scope                = data.azurerm_resource_group.cross_env_workspace[0].id
-  role_definition_name = "User Access Administrator"
-  principal_id         = azuread_service_principal.deployment_sp[0].object_id
-  description          = "Allows sp-aml-deployment-platform to configure cross-environment RBAC for workspace resources"
-  depends_on          = [azuread_service_principal.deployment_sp]
-}
-
-resource "azurerm_role_assignment" "sp_cross_env_user_access_admin_registry" {
-  count                = var.create_service_principal && var.enable_cross_environment_rbac ? 1 : 0
-  scope                = data.azurerm_resource_group.cross_env_registry[0].id
-  role_definition_name = "User Access Administrator"
-  principal_id         = azuread_service_principal.deployment_sp[0].object_id
-  description          = "Allows sp-aml-deployment-platform to configure cross-environment RBAC for registry resources"
-  depends_on          = [azuread_service_principal.deployment_sp]
-}
-
-# Cross-environment Network Contributor permissions
-resource "azurerm_role_assignment" "sp_cross_env_network_contributor_vnet" {
-  count                = var.create_service_principal && var.enable_cross_environment_rbac ? 1 : 0
-  scope                = data.azurerm_resource_group.cross_env_vnet[0].id
-  role_definition_name = "Network Contributor"
-  principal_id         = azuread_service_principal.deployment_sp[0].object_id
-  description          = "Allows sp-aml-deployment-platform to configure cross-environment secure networking"
-  depends_on          = [azuread_service_principal.deployment_sp]
-}
-
-resource "azurerm_role_assignment" "sp_cross_env_network_contributor_workspace" {
-  count                = var.create_service_principal && var.enable_cross_environment_rbac ? 1 : 0
-  scope                = data.azurerm_resource_group.cross_env_workspace[0].id
-  role_definition_name = "Network Contributor"
-  principal_id         = azuread_service_principal.deployment_sp[0].object_id
-  description          = "Allows sp-aml-deployment-platform to configure cross-environment workspace networking"
-  depends_on          = [azuread_service_principal.deployment_sp]
-}
-
-resource "azurerm_role_assignment" "sp_cross_env_network_contributor_registry" {
-  count                = var.create_service_principal && var.enable_cross_environment_rbac ? 1 : 0
-  scope                = data.azurerm_resource_group.cross_env_registry[0].id
-  role_definition_name = "Network Contributor"
-  principal_id         = azuread_service_principal.deployment_sp[0].object_id
-  description          = "Allows sp-aml-deployment-platform to configure cross-environment registry networking"
-  depends_on          = [azuread_service_principal.deployment_sp]
+  depends_on = [module.aml_registry]
 }
 
 #####

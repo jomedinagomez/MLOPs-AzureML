@@ -1,53 +1,65 @@
-# Azure ML Infrastructure
+# Azure ML Platform Deployment Guide
 
-This folder contains the complete Terraform infrastructure for the Azure ML Operations (MLOps) project. The infrastructure uses a **module orchestration approach** to deploy networking, workspace, and registry components with proper dependency management and optimized for private networking.
+## Overview
 
-## 📁 **Infrastructure Architecture**
+This Azure ML platform follows the deployment strategy with **complete environment isolation** and uses a **single service principal** approach for infrastructure automation across all environments.
 
-### **Module Organization**
+## Deployment Architecture
+
+### Service Principal Strategy (Updated)
+
+The service principal is created **independently** before any environment deployment and has permissions across **all 6 resource groups** (3 dev + 3 prod) as per the deployment strategy:
 
 ```
-infra/
-├── 🎯 main.tf                     # Root orchestration file (DEPLOY FROM HERE)
-├── 🔧 variables.tf                # Root variable definitions  
-├── ⚙️ terraform.tfvars            # Main configuration file
-├── 📤 outputs.tf                  # Aggregated outputs from all modules
-├── 📋 terraform.tfstate           # State file (after deployment)
-│
-├── 🌐 aml-vnet/                   # Networking Foundation Module
-│   ├── main.tf                    # VNet, subnets, DNS zones, managed identities
-│   ├── variables.tf               # Network module variables
-│   ├── outputs.tf                 # Network outputs (IDs, names, principal IDs)
-│   ├── locals.tf                  # Resource naming and calculations
-│   └── terraform.tfvars          # Network-specific configuration
-│
-├── 🏢 aml-managed-smi/            # ML Workspace Module  
-│   ├── main.tf                    # Workspace, storage, Key Vault, ACR, compute
-│   ├── variables.tf               # Workspace module variables
-│   ├── outputs.tf                 # Workspace outputs
-│   ├── locals.tf                  # Resource naming and calculations
-│   ├── locals_dns.tf              # DNS zone conditional logic
-│   └── terraform.tfvars          # Workspace-specific configuration
-│
-├── 📚 aml-registry-smi/           # ML Registry Module
-│   ├── main.tf                    # Registry, Log Analytics, monitoring
-│   ├── variables.tf               # Registry module variables  
-│   ├── outputs.tf                 # Registry outputs
-│   ├── locals.tf                  # Resource naming and calculations
-│   └── terraform.tfvars          # Registry-specific configuration
-│
-└── 📁 modules/                    # Reusable component modules
-    ├── container-registry/        # ACR module
-    ├── key-vault/                 # Key Vault module
-    ├── private-endpoint/          # Private endpoint module
-    └── storage-account/           # Storage account module
+Service Principal: sp-aml-deployment-platform
+├── Scope: All 6 resource groups across both environments
+├── Permissions per resource group:
+│   ├── Contributor: Deploy ML infrastructure
+│   ├── User Access Administrator: Configure RBAC  
+│   └── Network Contributor: Configure networking
+└── Created: Before any environment deployment
 ```
 
-## 🚦 Deployment Flow & Dependencies
+## Deployment Order
 
-This infrastructure uses a **modular orchestration** approach. The deployment order and dependencies are as follows:
+### Phase 1: Service Principal Creation (First)
 
-### Deployment Order
+1. **Create Service Principal** (independent step):
+   ```bash
+   cd infra/service-principal
+   terraform init
+   terraform plan
+   terraform apply
+   ```
+
+   **Outputs**: Service Principal credentials for CI/CD pipeline configuration
+
+### Phase 2: Environment Deployment
+
+2. **Deploy Development Environment**:
+   ```bash
+   cd infra
+   terraform init
+   terraform plan -var-file="environments/dev.tfvars"
+   terraform apply -var-file="environments/dev.tfvars"
+   ```
+
+3. **Deploy Production Environment**:
+   ```bash
+   cd infra  
+   terraform plan -var-file="terraform.tfvars.prod"
+   terraform apply -var-file="terraform.tfvars.prod"
+   ```
+
+## Key Benefits
+
+**Service Principal Pre-Authorization**: SP has permissions across all resource groups before deployment  
+**No Chicken-and-Egg**: No dependency between SP creation and resource group existence  
+**Deployment Strategy Compliance**: Single SP manages all 6 resource groups as specified  
+**CI/CD Ready**: SP credentials available immediately for pipeline configuration  
+**Environment Agnostic**: Same SP works for both dev and prod deployments  
+
+This approach aligns perfectly with the deployment strategy requirement for a single service principal managing all 6 resource groups across both environments.
 1. **aml-vnet**: Deploys networking, DNS, and managed identities (foundation for all other modules)
 2. **aml-managed-smi**: Deploys ML workspace, storage, Key Vault, ACR, compute, and private endpoints. Consumes outputs from `aml-vnet`.
 3. **aml-registry-smi**: Deploys ML registry, Log Analytics, and private endpoint. Consumes outputs from `aml-vnet` and workspace identity from `aml-managed-smi`.
@@ -99,7 +111,7 @@ flowchart TD
 ```
 
 ### Microsoft-Managed Resource Groups
-> ⚠️ **Important:** When deploying the ML Registry, Azure automatically creates a Microsoft-managed resource group (`rg-{registry-name}`) containing internal infrastructure (storage, ACR, etc.). **Never modify or delete resources in this group.**
+> **Important:** When deploying the ML Registry, Azure automatically creates a Microsoft-managed resource group (`rg-{registry-name}`) containing internal infrastructure (storage, ACR, etc.). **Never modify or delete resources in this group.**
 
 ### Key Dependency Callouts
 - **aml-managed-smi** and **aml-registry-smi** both require outputs from **aml-vnet** (subnet, DNS, managed identities)
@@ -247,9 +259,9 @@ Root Orchestration (main.tf)
 - **Visibility**: Appears in your subscription but is not directly manageable through Terraform
 - **Lifecycle**: Automatically created when registry is deployed, removed when registry is deleted
 
-> ⚠️ **Critical Warning**: Do not attempt to manage, modify, or delete resources in the Microsoft managed resource group as this will break the ML Registry functionality and may require Microsoft support to resolve.
+> **Critical Warning**: Do not attempt to manage, modify, or delete resources in the Microsoft managed resource group as this will break the ML Registry functionality and may require Microsoft support to resolve.
 
-## 🔧 Configuration
+## Configuration
 
 ### Required Variables
 
@@ -447,7 +459,7 @@ try:
     print("🎉 Asset sharing configuration verified successfully!")
     
 except Exception as e:
-    print(f"❌ Asset sharing test failed: {str(e)}")
+    print(f"Asset sharing test failed: {str(e)}")
     print("Check network configuration and permissions")
 ```
 
@@ -477,11 +489,11 @@ az ml registry show \
 ```
 
 ##### 7. Expected Success Indicators
-✅ **Storage Account**: Shows "Selected networks" with registry in resource instances  
-✅ **Outbound Rule**: `allow-external-registry-{purpose}` rule exists and shows "Approved" status  
-✅ **Registry Access**: Workspace can query registry models/environments without errors  
-✅ **Network Connectivity**: No timeout errors when accessing registry from workspace  
-✅ **Asset Operations**: Can successfully share/copy assets between workspace and registry
+**Storage Account**: Shows "Selected networks" with registry in resource instances  
+**Outbound Rule**: `allow-external-registry-{purpose}` rule exists and shows "Approved" status  
+**Registry Access**: Workspace can query registry models/environments without errors  
+**Network Connectivity**: No timeout errors when accessing registry from workspace  
+**Asset Operations**: Can successfully share/copy assets between workspace and registry
 
 ### Data Protection
 - **Encryption**: Data encrypted at rest and in transit
@@ -743,7 +755,7 @@ az ml compute list --workspace-name {workspace-name} --resource-group {resource-
 
 ## 🧹 **Infrastructure Cleanup**
 
-### **Complete Destruction** ⚠️
+### **Complete Destruction**
 ```bash
 # CAUTION: This will destroy ALL infrastructure
 terraform destroy
@@ -800,7 +812,7 @@ az ml compute list --workspace-name {workspace-name} --resource-group {resource-
 az network private-endpoint list --resource-group {resource-group-name} --query '[].{Name:name,State:privateLinkServiceConnections[0].privateLinkServiceConnectionState.status}'
 ```
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 ### **Common Deployment Issues**
 
@@ -832,10 +844,10 @@ enable_auto_purge = true
    - Prevents soft-delete conflicts on subsequent deployments
 
 3. **Benefits**:
-   - ✅ Fully automated cleanup
-   - ✅ Prevents deployment conflicts
-   - ✅ Safe for dev/test environments
-   - ❌ Should NEVER be used in production
+   - Fully automated cleanup
+   - Prevents deployment conflicts
+   - Safe for dev/test environments
+   - Should NEVER be used in production
 
 ##### **Option B: Manual Purge (Production-Safe)**
 
@@ -868,11 +880,11 @@ Use the provided PowerShell script for safe, interactive cleanup:
 ```
 
 **The script**:
-- ✅ Safely destroys infrastructure with confirmations
-- ✅ Automatically purges soft-deleted Key Vaults
-- ✅ Cleans up Terraform state files
-- ✅ Has safety checks and naming pattern validation
-- ✅ Works in both dev and production contexts
+- Safely destroys infrastructure with confirmations
+- Automatically purges soft-deleted Key Vaults
+- Cleans up Terraform state files
+- Has safety checks and naming pattern validation
+- Works in both dev and production contexts
 
 **Prevention**: 
 - Always purge Key Vaults when cleaning up test environments
@@ -938,7 +950,7 @@ terraform plan
 terraform apply
 ```
 
-## 📝 Development
+## Development
 
 ### Adding New Modules
 1. Create module in appropriate location
@@ -1006,9 +1018,9 @@ az vm create \
 ### **VM Image Comparison**
 | **Image Type** | **What's Included** | **Best For** |
 |----------------|-------------------|--------------|
-| **Data Science VM (DSVM)** | ✅ VS Code, Python, Jupyter, Git, Azure CLI, Docker | **Recommended** - Ready for ML development |
-| **Visual Studio Community** | ✅ VS 2022, VS Code, .NET, Git, development tools | .NET development + ML work |
-| **Windows Server** | ❌ Minimal - requires manual installation | Cost-conscious, custom setups |
+| **Data Science VM (DSVM)** | VS Code, Python, Jupyter, Git, Azure CLI, Docker | **Recommended** - Ready for ML development |
+| **Visual Studio Community** | VS 2022, VS Code, .NET, Git, development tools | .NET development + ML work |
+| **Windows Server** | Minimal - requires manual installation | Cost-conscious, custom setups |
 
 ### **Step 2: Create Azure Bastion Subnet**
 ```bash
