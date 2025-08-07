@@ -380,6 +380,7 @@ module "dev_vnet" {
   resource_prefixes        = local.resource_prefixes
   vnet_address_space       = "10.1.0.0/16"
   subnet_address_prefix    = "10.1.1.0/24"
+  resource_group_name      = azurerm_resource_group.dev_vnet_rg.name
   enable_auto_purge        = true
   tags                     = merge(var.tags, {
     environment = "development"
@@ -443,20 +444,17 @@ module "dev_registry" {
   location_code            = var.location_code
   random_string            = random_string.main.result
   resource_prefixes        = local.resource_prefixes
-  
-  # Pass compute cluster identity from VNet module
-  compute_cluster_identity_id    = module.dev_vnet.cc_identity_id
-  compute_cluster_principal_id   = module.dev_vnet.cc_identity_principal_id
+  resource_group_name      = azurerm_resource_group.dev_registry_rg.name
   
   # Additional required variables
-  user_object_id               = var.user_object_id
   workload_vnet_location       = var.location
   workload_vnet_location_code  = var.location_code
   resource_group_name_dns      = module.dev_vnet.resource_group_name_dns
   subnet_id                    = module.dev_vnet.subnet_id
   sub_id                       = var.subscription_id
   log_analytics_workspace_id   = module.dev_vnet.log_analytics_workspace_id
-  workspace_principal_id       = module.dev_managed_umi.workspace_principal_id
+  managed_rg_assigned_principal_id = azuread_service_principal.deployment_sp.object_id
+  
   
   tags                     = merge(var.tags, {
     environment = "development"
@@ -486,6 +484,7 @@ module "prod_vnet" {
   resource_prefixes        = local.resource_prefixes
   vnet_address_space       = "10.2.0.0/16"
   subnet_address_prefix    = "10.2.1.0/24"
+  resource_group_name      = azurerm_resource_group.prod_vnet_rg.name
   enable_auto_purge        = true
   tags                     = merge(var.tags, {
     environment = "production"
@@ -527,9 +526,7 @@ module "prod_managed_umi" {
   compute_cluster_principal_id   = module.prod_vnet.cc_identity_principal_id
   
   # Cross-environment configuration for asset promotion (will be applied after dev registry is created)
-  enable_cross_env_rbac           = false  # Initially disabled, enabled via separate resource
-  cross_env_registry_resource_group = null
-  cross_env_registry_name         = null
+  # (Removed unused cross-env inputs; RBAC is centralized in this file and no module-level cross-env is used.)
   
   tags                     = merge(var.tags, {
     environment = "production"
@@ -555,20 +552,17 @@ module "prod_registry" {
   location_code            = var.location_code
   random_string            = random_string.main.result
   resource_prefixes        = local.resource_prefixes
-  
-  # Pass compute cluster identity from VNet module
-  compute_cluster_identity_id    = module.prod_vnet.cc_identity_id
-  compute_cluster_principal_id   = module.prod_vnet.cc_identity_principal_id
+  resource_group_name      = azurerm_resource_group.prod_registry_rg.name
   
   # Additional required variables
-  user_object_id               = var.user_object_id
   workload_vnet_location       = var.location
   workload_vnet_location_code  = var.location_code
   resource_group_name_dns      = module.prod_vnet.resource_group_name_dns
   subnet_id                    = module.prod_vnet.subnet_id
   sub_id                       = var.subscription_id
   log_analytics_workspace_id   = module.prod_vnet.log_analytics_workspace_id
-  workspace_principal_id       = module.prod_managed_umi.workspace_principal_id
+  managed_rg_assigned_principal_id = azuread_service_principal.deployment_sp.object_id
+  
   
   tags                     = merge(var.tags, {
     environment = "production"

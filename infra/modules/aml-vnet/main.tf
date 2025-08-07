@@ -1,5 +1,11 @@
+locals {
+  use_existing_rg = var.resource_group_name != ""
+  rg_name         = local.use_existing_rg ? var.resource_group_name : "${local.vnet_resource_group_prefix}-${var.purpose}-${var.location_code}${var.random_string}"
+}
+
 resource "azurerm_resource_group" "aml_vnet_rg" {
-  name     = "${local.vnet_resource_group_prefix}-${var.purpose}-${var.location_code}${var.random_string}"
+  count    = local.use_existing_rg ? 0 : 1
+  name     = local.rg_name
   location = var.location
   tags     = var.tags
 }
@@ -7,14 +13,14 @@ resource "azurerm_resource_group" "aml_vnet_rg" {
 resource "azurerm_virtual_network" "aml_vnet" {
   name                = "${local.vnet_prefix}${var.purpose}${var.location_code}${var.random_string}"
   address_space       = [var.vnet_address_space]
-  location            = azurerm_resource_group.aml_vnet_rg.location
-  resource_group_name = azurerm_resource_group.aml_vnet_rg.name
+  location            = var.location
+  resource_group_name = local.rg_name
   tags                = var.tags
 }
 
 resource "azurerm_subnet" "aml_subnet" {
   name                 = "${local.subnet_prefix}${var.purpose}${var.location_code}${var.random_string}"
-  resource_group_name  = azurerm_resource_group.aml_vnet_rg.name
+  resource_group_name  = local.rg_name
   virtual_network_name = azurerm_virtual_network.aml_vnet.name
   address_prefixes     = [var.subnet_address_prefix]
 }
@@ -25,7 +31,7 @@ resource "azurerm_subnet" "aml_subnet" {
 resource "azurerm_user_assigned_identity" "cc" {
   name                = "${var.purpose}-mi-compute"
   location            = var.location
-  resource_group_name = azurerm_resource_group.aml_vnet_rg.name
+  resource_group_name = local.rg_name
   tags                = var.tags
 }
 
@@ -35,58 +41,58 @@ resource "azurerm_user_assigned_identity" "cc" {
 # Storage Account Private DNS Zones
 resource "azurerm_private_dns_zone" "blob" {
   name                = "privatelink.blob.core.windows.net"
-  resource_group_name = azurerm_resource_group.aml_vnet_rg.name
+  resource_group_name = local.rg_name
   tags                = var.tags
 }
 
 resource "azurerm_private_dns_zone" "file" {
   name                = "privatelink.file.core.windows.net"
-  resource_group_name = azurerm_resource_group.aml_vnet_rg.name
+  resource_group_name = local.rg_name
   tags                = var.tags
 }
 
 resource "azurerm_private_dns_zone" "table" {
   name                = "privatelink.table.core.windows.net"
-  resource_group_name = azurerm_resource_group.aml_vnet_rg.name
+  resource_group_name = local.rg_name
   tags                = var.tags
 }
 
 resource "azurerm_private_dns_zone" "queue" {
   name                = "privatelink.queue.core.windows.net"
-  resource_group_name = azurerm_resource_group.aml_vnet_rg.name
+  resource_group_name = local.rg_name
   tags                = var.tags
 }
 
 # Key Vault Private DNS Zone
 resource "azurerm_private_dns_zone" "keyvault" {
   name                = "privatelink.vaultcore.azure.net"
-  resource_group_name = azurerm_resource_group.aml_vnet_rg.name
+  resource_group_name = local.rg_name
   tags                = var.tags
 }
 
 # Container Registry Private DNS Zone
 resource "azurerm_private_dns_zone" "acr" {
   name                = "privatelink.azurecr.io"
-  resource_group_name = azurerm_resource_group.aml_vnet_rg.name
+  resource_group_name = local.rg_name
   tags                = var.tags
 }
 
 # Azure ML Workspace Private DNS Zones
 resource "azurerm_private_dns_zone" "aml_api" {
   name                = "privatelink.api.azureml.ms"
-  resource_group_name = azurerm_resource_group.aml_vnet_rg.name
+  resource_group_name = local.rg_name
   tags                = var.tags
 }
 
 resource "azurerm_private_dns_zone" "aml_notebooks" {
   name                = "privatelink.notebooks.azure.net"
-  resource_group_name = azurerm_resource_group.aml_vnet_rg.name
+  resource_group_name = local.rg_name
   tags                = var.tags
 }
 
 resource "azurerm_private_dns_zone" "aml_instances" {
   name                = "instances.azureml.ms"
-  resource_group_name = azurerm_resource_group.aml_vnet_rg.name
+  resource_group_name = local.rg_name
   tags                = var.tags
 }
 
@@ -95,7 +101,7 @@ resource "azurerm_private_dns_zone" "aml_instances" {
 
 resource "azurerm_private_dns_zone_virtual_network_link" "blob_link" {
   name                  = "blob-vnet-link"
-  resource_group_name   = azurerm_resource_group.aml_vnet_rg.name
+  resource_group_name   = local.rg_name
   private_dns_zone_name = azurerm_private_dns_zone.blob.name
   virtual_network_id    = azurerm_virtual_network.aml_vnet.id
   registration_enabled  = false
@@ -104,7 +110,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "blob_link" {
 
 resource "azurerm_private_dns_zone_virtual_network_link" "file_link" {
   name                  = "file-vnet-link"
-  resource_group_name   = azurerm_resource_group.aml_vnet_rg.name
+  resource_group_name   = local.rg_name
   private_dns_zone_name = azurerm_private_dns_zone.file.name
   virtual_network_id    = azurerm_virtual_network.aml_vnet.id
   registration_enabled  = false
@@ -113,7 +119,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "file_link" {
 
 resource "azurerm_private_dns_zone_virtual_network_link" "table_link" {
   name                  = "table-vnet-link"
-  resource_group_name   = azurerm_resource_group.aml_vnet_rg.name
+  resource_group_name   = local.rg_name
   private_dns_zone_name = azurerm_private_dns_zone.table.name
   virtual_network_id    = azurerm_virtual_network.aml_vnet.id
   registration_enabled  = false
@@ -122,7 +128,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "table_link" {
 
 resource "azurerm_private_dns_zone_virtual_network_link" "queue_link" {
   name                  = "queue-vnet-link"
-  resource_group_name   = azurerm_resource_group.aml_vnet_rg.name
+  resource_group_name   = local.rg_name
   private_dns_zone_name = azurerm_private_dns_zone.queue.name
   virtual_network_id    = azurerm_virtual_network.aml_vnet.id
   registration_enabled  = false
@@ -131,7 +137,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "queue_link" {
 
 resource "azurerm_private_dns_zone_virtual_network_link" "keyvault_link" {
   name                  = "keyvault-vnet-link"
-  resource_group_name   = azurerm_resource_group.aml_vnet_rg.name
+  resource_group_name   = local.rg_name
   private_dns_zone_name = azurerm_private_dns_zone.keyvault.name
   virtual_network_id    = azurerm_virtual_network.aml_vnet.id
   registration_enabled  = false
@@ -140,7 +146,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "keyvault_link" {
 
 resource "azurerm_private_dns_zone_virtual_network_link" "acr_link" {
   name                  = "acr-vnet-link"
-  resource_group_name   = azurerm_resource_group.aml_vnet_rg.name
+  resource_group_name   = local.rg_name
   private_dns_zone_name = azurerm_private_dns_zone.acr.name
   virtual_network_id    = azurerm_virtual_network.aml_vnet.id
   registration_enabled  = false
@@ -149,7 +155,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "acr_link" {
 
 resource "azurerm_private_dns_zone_virtual_network_link" "aml_api_link" {
   name                  = "aml-api-vnet-link"
-  resource_group_name   = azurerm_resource_group.aml_vnet_rg.name
+  resource_group_name   = local.rg_name
   private_dns_zone_name = azurerm_private_dns_zone.aml_api.name
   virtual_network_id    = azurerm_virtual_network.aml_vnet.id
   registration_enabled  = false
@@ -158,7 +164,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "aml_api_link" {
 
 resource "azurerm_private_dns_zone_virtual_network_link" "aml_notebooks_link" {
   name                  = "aml-notebooks-vnet-link"
-  resource_group_name   = azurerm_resource_group.aml_vnet_rg.name
+  resource_group_name   = local.rg_name
   private_dns_zone_name = azurerm_private_dns_zone.aml_notebooks.name
   virtual_network_id    = azurerm_virtual_network.aml_vnet.id
   registration_enabled  = false
@@ -167,7 +173,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "aml_notebooks_link" {
 
 resource "azurerm_private_dns_zone_virtual_network_link" "aml_instances_link" {
   name                  = "aml-instances-vnet-link"
-  resource_group_name   = azurerm_resource_group.aml_vnet_rg.name
+  resource_group_name   = local.rg_name
   private_dns_zone_name = azurerm_private_dns_zone.aml_instances.name
   virtual_network_id    = azurerm_virtual_network.aml_vnet.id
   registration_enabled  = false
@@ -180,12 +186,14 @@ resource "azurerm_private_dns_zone_virtual_network_link" "aml_instances_link" {
 # Log Analytics Workspace for VNet monitoring
 resource "azurerm_log_analytics_workspace" "vnet_logs" {
   name                = "${local.log_analytics_prefix}${var.purpose}${var.location_code}${var.random_string}"
-  location            = azurerm_resource_group.aml_vnet_rg.location
-  resource_group_name = azurerm_resource_group.aml_vnet_rg.name
+  location            = var.location
+  resource_group_name = local.rg_name
   sku                 = var.log_analytics_sku
   retention_in_days   = var.log_analytics_retention_days
   tags                = var.tags
 }
+
+data "azurerm_client_config" "identity_config" {}
 
 ##### Diagnostic Settings for Monitoring
 #####

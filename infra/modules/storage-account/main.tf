@@ -11,6 +11,9 @@ resource "azurerm_storage_account" "storage_account" {
   shared_access_key_enabled       = var.key_based_authentication
   allow_nested_items_to_be_public = var.allow_blob_public_access
 
+  # Enforce private-only by default
+  public_network_access_enabled = var.public_network_access_enabled
+
   network_rules {
     default_action = var.network_access_default
 

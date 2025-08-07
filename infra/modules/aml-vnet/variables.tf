@@ -78,3 +78,9 @@ variable "enable_auto_purge" {
     error_message = "Enable auto purge must be true or false."
   }
 }
+
+variable "resource_group_name" {
+  description = "Optional existing resource group name to place VNet and DNS resources; if empty, this module will create one"
+  type        = string
+  default     = ""
+}

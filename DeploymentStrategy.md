@@ -13,7 +13,7 @@ This document outlines the deployment strategy for our Azure Machine Learning pl
 
 **This implementation uses two registries to showcase comprehensive MLOps asset promotion workflows, though a single registry would be sufficient for most production scenarios.**
 
-**Last Updated**: August 7, 2025 - Updated to reflect hub-and-spoke VPN architecture with complete elimination of jumpbox infrastructure, improved connectivity model, cost optimization, and resolved Terraform dependency issues for production-ready deployment.
+**Last Updated**: August 7, 2025 - Added registry managed resource group pre-authorization via assignedIdentities, enforced private-only posture for storage and Key Vault, and clarified workspace→registry outbound rules (dev→dev, prod→prod, and prod→dev) on managed VNets.
 
 ## Strategic Principles
 
@@ -244,6 +244,37 @@ Registry SMI (System-Assigned Managed Identity):
 ├── Access: Manages registry's Microsoft-managed storage account and container registry
 ├── RBAC: Automatically configured by Azure ML service for registry operations
 └── No Manual Configuration Required: Azure handles all permissions for registry-managed resources
+
+### Registry Managed Resource Group Pre-Authorization
+
+Azure ML Registries create a Microsoft-managed resource group (azureml-rg-<registry>_guid) that hosts internal storage and ACR. To allow the Azure ML service to create private endpoints and network resources from managed VNets during provisioning and outbound rule operations, pre-authorize the deployment service principal by assigning its objectId via `managedResourceGroupSettings.assignedIdentities`.
+
+Terraform (azapi):
+
+```hcl
+resource "azapi_resource" "registry" {
+    type      = "Microsoft.MachineLearningServices/registries@2025-01-01-preview"
+    name      = "${local.aml_registry_prefix}${var.purpose}${var.location_code}${var.random_string}"
+    parent_id = azurerm_resource_group.rgwork.id
+    location  = var.location
+
+    body = {
+        identity = { type = "SystemAssigned" }
+        properties = {
+            regionDetails = [{ location = var.location }]
+            managedResourceGroupSettings = {
+                assignedIdentities = [{ principalId = var.managed_rg_assigned_principal_id }]
+            }
+            publicNetworkAccess = "Disabled"
+        }
+    }
+}
+```
+
+Key points:
+- Use the objectId of the service principal that provisions resources.
+- This enables Azure ML to finalize private connectivity for the registry under managed VNet constraints.
+- Public network access remains disabled; connectivity occurs via private endpoints only.
 
 Compute Cluster & Compute Instance UAMI (Shared):
 ├── Name: "${purpose}-mi-compute" 
@@ -561,6 +592,132 @@ resource "azapi_resource" "prod_workspace_to_dev_registry_outbound_rule" {
 ```
 
 This configuration ensures complete environment isolation while enabling the necessary cross-environment asset access for production deployments using promoted development assets.
+
+## Verify After Apply
+
+Use these quick checks to validate networking, RBAC, and registry pre-authorization once Terraform finishes.
+
+Prerequisites
+- Azure CLI installed and logged in with sufficient permissions
+- Subscription set to the one used for deployment
+
+Set common variables (replace names if you customized naming)
+
+```powershell
+# Subscription
+$SUBSCRIPTION_ID = (az account show --query id -o tsv)
+
+# Names (match Terraform naming in this repo)
+$DEV_RG_WS   = (az group list --query "[?starts_with(name, 'rg-aml-ws-dev-')].name | [0]" -o tsv)
+$PROD_RG_WS  = (az group list --query "[?starts_with(name, 'rg-aml-ws-prod-')].name | [0]" -o tsv)
+$DEV_RG_REG  = (az group list --query "[?starts_with(name, 'rg-aml-reg-dev-')].name | [0]" -o tsv)
+$PROD_RG_REG = (az group list --query "[?starts_with(name, 'rg-aml-reg-prod-')].name | [0]" -o tsv)
+
+$DEV_WS_NAME   = (az resource list -g $DEV_RG_WS  --resource-type Microsoft.MachineLearningServices/workspaces --query "[0].name" -o tsv)
+$PROD_WS_NAME  = (az resource list -g $PROD_RG_WS --resource-type Microsoft.MachineLearningServices/workspaces --query "[0].name" -o tsv)
+$DEV_REG_NAME  = (az resource list -g $DEV_RG_REG  --resource-type Microsoft.MachineLearningServices/registries --query "[0].name" -o tsv)
+$PROD_REG_NAME = (az resource list -g $PROD_RG_REG --resource-type Microsoft.MachineLearningServices/registries --query "[0].name" -o tsv)
+
+# Deployment Service Principal objectId (from Terraform output or Azure AD)
+$DEPLOY_SP_OBJECT_ID = (az ad sp list --display-name "sp-aml-deployment-platform" --query "[0].id" -o tsv)
+```
+
+### 1) Registry managed RG pre-authorization (assignedIdentities)
+
+Expect to see your deployment SP objectId under properties.managedResourceGroupSettings.assignedIdentities[].principalId
+
+```powershell
+# Dev registry
+az rest `
+    --method get `
+    --uri "https://management.azure.com/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$DEV_RG_REG/providers/Microsoft.MachineLearningServices/registries/$DEV_REG_NAME?api-version=2025-01-01-preview" `
+    | ConvertFrom-Json `
+    | Select-Object -ExpandProperty properties `
+    | Select-Object -ExpandProperty managedResourceGroupSettings `
+    | Select-Object -ExpandProperty assignedIdentities
+
+# Prod registry
+az rest `
+    --method get `
+    --uri "https://management.azure.com/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$PROD_RG_REG/providers/Microsoft.MachineLearningServices/registries/$PROD_REG_NAME?api-version=2025-01-01-preview" `
+    | ConvertFrom-Json `
+    | Select-Object -ExpandProperty properties `
+    | Select-Object -ExpandProperty managedResourceGroupSettings `
+    | Select-Object -ExpandProperty assignedIdentities
+```
+
+### 2) Managed VNet outbound rules (auto-PE)
+
+Expect rules:
+- Dev workspace → Dev registry
+- Prod workspace → Prod registry
+- Prod workspace → Dev registry (for dev asset consumption)
+
+```powershell
+# List outbound rules on dev workspace
+az rest `
+    --method get `
+    --uri "https://management.azure.com/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$DEV_RG_WS/providers/Microsoft.MachineLearningServices/workspaces/$DEV_WS_NAME/outboundRules?api-version=2024-10-01-preview"
+
+# List outbound rules on prod workspace
+az rest `
+    --method get `
+    --uri "https://management.azure.com/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$PROD_RG_WS/providers/Microsoft.MachineLearningServices/workspaces/$PROD_WS_NAME/outboundRules?api-version=2024-10-01-preview"
+```
+
+### 3) Managed private endpoints present
+
+Azure ML creates private endpoints in the workspace managed resource group (name starts with "mrg-"). Check for endpoints targeting the registries.
+
+```powershell
+# Find dev workspace managed RG and list PEs
+$DEV_MRG = (az group list --query "[?starts_with(name, 'mrg-') && contains(name, '$DEV_WS_NAME')].name | [0]" -o tsv)
+az network private-endpoint list -g $DEV_MRG -o table
+
+# Find prod workspace managed RG and list PEs
+$PROD_MRG = (az group list --query "[?starts_with(name, 'mrg-') && contains(name, '$PROD_WS_NAME')].name | [0]" -o tsv)
+az network private-endpoint list -g $PROD_MRG -o table
+```
+
+Look for private service connections referencing subresource "amlregistry" and the dev/prod registry resource IDs.
+
+### 4) Private-only posture for Storage, Key Vault, ACR
+
+Expect publicNetworkAccess disabled and defaultAction Deny (where applicable).
+
+```powershell
+# Storage (dev/prod)
+az storage account show -g $DEV_RG_WS  --name (az resource list -g $DEV_RG_WS  --resource-type Microsoft.Storage/storageAccounts --query "[0].name" -o tsv)  --query "{publicNetworkAccess:publicNetworkAccess, defaultAction:networkRuleSet.defaultAction}" -o table
+az storage account show -g $PROD_RG_WS --name (az resource list -g $PROD_RG_WS --resource-type Microsoft.Storage/storageAccounts --query "[0].name" -o tsv) --query "{publicNetworkAccess:publicNetworkAccess, defaultAction:networkRuleSet.defaultAction}" -o table
+
+# Key Vault (dev/prod)
+az keyvault show -g $DEV_RG_WS  -n (az resource list -g $DEV_RG_WS  --resource-type Microsoft.KeyVault/vaults --query "[0].name" -o tsv)  --query "{publicNetworkAccess:properties.publicNetworkAccess, defaultAction:properties.networkAcls.defaultAction}" -o table
+az keyvault show -g $PROD_RG_WS -n (az resource list -g $PROD_RG_WS --resource-type Microsoft.KeyVault/vaults --query "[0].name" -o tsv) --query "{publicNetworkAccess:properties.publicNetworkAccess, defaultAction:properties.networkAcls.defaultAction}" -o table
+
+# Container Registry (workspace-managed ACR)
+az acr show -g $DEV_RG_WS  -n (az resource list -g $DEV_RG_WS  --resource-type Microsoft.ContainerRegistry/registries --query "[0].name" -o tsv)  --query "{publicNetworkAccess:publicNetworkAccess, networkRuleBypassOption:networkRuleBypassOptions}" -o table
+az acr show -g $PROD_RG_WS -n (az resource list -g $PROD_RG_WS --resource-type Microsoft.ContainerRegistry/registries --query "[0].name" -o tsv) --query "{publicNetworkAccess:publicNetworkAccess, networkRuleBypassOption:networkRuleBypassOptions}" -o table
+```
+
+### 5) RBAC spot checks on registries
+
+Expect:
+- Workspace UAMI has Azure AI Enterprise Network Connection Approver on dev/prod registries (for connectivity only)
+- Compute UAMI has AzureML Registry User on dev/prod registries (for asset access)
+
+```powershell
+# Registry IDs
+$DEV_REG_ID  = (az resource show -g $DEV_RG_REG  -n $DEV_REG_NAME  --resource-type Microsoft.MachineLearningServices/registries --query id -o tsv)
+$PROD_REG_ID = (az resource show -g $PROD_RG_REG -n $PROD_REG_NAME --resource-type Microsoft.MachineLearningServices/registries --query id -o tsv)
+
+# List role assignments at registry scopes
+az role assignment list --scope $DEV_REG_ID  --query "[].{principalId:principalId, role:roleDefinitionName}"  -o table
+az role assignment list --scope $PROD_REG_ID --query "[].{principalId:principalId, role:roleDefinitionName}" -o table
+```
+
+Look for roles:
+- Azure AI Enterprise Network Connection Approver (workspace UAMI principal IDs)
+- AzureML Registry User (compute UAMI principal IDs)
 
 ## Asset Promotion Strategy
 

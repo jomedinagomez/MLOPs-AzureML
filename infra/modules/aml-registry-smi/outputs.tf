@@ -13,12 +13,15 @@ output "registry_name" {
 
 output "resource_group_name" {
   description = "Name of the resource group containing the AML registry"
-  value       = azurerm_resource_group.rgwork.name
+  value       = local.rg_name
 }
 
 output "resource_group_id" {
   description = "ID of the resource group containing the AML registry"
-  value       = azurerm_resource_group.rgwork.id
+  value       = coalesce(
+    try(azurerm_resource_group.rgwork[0].id, null),
+    "/subscriptions/${data.azurerm_client_config.identity_config.subscription_id}/resourceGroups/${local.rg_name}"
+  )
 }
 
 ##### Microsoft-Managed Resources Outputs

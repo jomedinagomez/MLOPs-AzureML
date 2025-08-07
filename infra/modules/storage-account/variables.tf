@@ -129,3 +129,9 @@ variable "enable_auto_purge" {
   type        = bool
   default     = false
 }
+
+variable "public_network_access_enabled" {
+  description = "Whether public network access is enabled for the Storage Account. Set to false to require private endpoints."
+  type        = bool
+  default     = false
+}

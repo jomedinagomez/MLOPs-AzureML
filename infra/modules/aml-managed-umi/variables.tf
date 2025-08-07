@@ -152,27 +152,4 @@ variable "enable_auto_purge" {
   default     = false
 }
 
-# Cross-environment RBAC configuration for asset promotion
-variable "enable_cross_env_rbac" {
-  description = "Enable cross-environment RBAC for asset promotion between dev and prod"
-  type        = bool
-  default     = false
-}
-
-variable "cross_env_registry_resource_group" {
-  description = "Resource group name containing the other environment's registry (for cross-env RBAC)"
-  type        = string
-  default     = null
-}
-
-variable "cross_env_registry_name" {
-  description = "Name of the other environment's registry (for cross-env RBAC)"
-  type        = string
-  default     = null
-}
-
-variable "cross_env_workspace_principal_id" {
-  description = "Principal ID of the other environment's workspace system-managed identity (for cross-env RBAC)"
-  type        = string
-  default     = null
-}
+// Cross-environment RBAC inputs removed; RBAC is centralized in infra/main.tf.

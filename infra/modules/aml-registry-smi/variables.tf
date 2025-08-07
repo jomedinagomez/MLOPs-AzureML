@@ -57,10 +57,12 @@ variable "tags" {
   type        = map(string)
 }
 
-variable "user_object_id" {
-  description = "The object id of the user who will manage the Azure Machine Learning Workspace"
+variable "resource_group_name" {
+  description = "Optional existing resource group name for the registry; if empty, the module will create it"
   type        = string
+  default     = ""
 }
+
 
 variable "workload_vnet_location" {
   description = "The region where the workload virtual network is located"
@@ -103,22 +105,17 @@ variable "dns_zone_aml_api_id" {
   default     = null
 }
 
-variable "compute_cluster_identity_id" {
-  description = "ID of the compute cluster managed identity from VNet module"
-  type        = string
-}
-
-variable "compute_cluster_principal_id" {
-  description = "Principal ID of the compute cluster managed identity from VNet module"
-  type        = string
-}
 
 variable "log_analytics_workspace_id" {
   description = "Resource ID of the Log Analytics workspace for diagnostic settings"
   type        = string
 }
 
-variable "workspace_principal_id" {
-  description = "Principal ID of the ML workspace system-managed identity for cross-registry permissions"
+// RBAC-related inputs removed; RBAC is centralized in infra/main.tf
+
+// Principal to assign to the registry's managed resource group so it inherits Azure AI admin capabilities
+// Use the object ID of the service principal provisioning the resources
+variable "managed_rg_assigned_principal_id" {
+  description = "Object ID of the principal to assign in the registry managed resource group (assignedIdentities.principalId)"
   type        = string
 }

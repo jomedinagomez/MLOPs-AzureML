@@ -53,13 +53,17 @@ resource "azurerm_virtual_network_gateway" "vpn_gateway" {
     subnet_id                     = azurerm_subnet.gateway_subnet.id
   }
 
-  vpn_client_configuration {
-    address_space = [var.vpn_client_address_space]
-    vpn_client_protocols = ["OpenVPN", "IkeV2"]
-    
-    root_certificate {
-      name = "P2SRootCert"
-      public_cert_data = var.vpn_root_certificate_data
+  # Only configure Point-to-Site (P2S) when a root certificate is provided
+  dynamic "vpn_client_configuration" {
+    for_each = var.vpn_root_certificate_data != "" ? [1] : []
+    content {
+      address_space        = [var.vpn_client_address_space]
+      vpn_client_protocols = ["OpenVPN", "IkeV2"]
+
+      root_certificate {
+        name             = "P2SRootCert"
+        public_cert_data = var.vpn_root_certificate_data
+      }
     }
   }
 

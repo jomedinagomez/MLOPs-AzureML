@@ -1,11 +1,15 @@
 ##### Create the base resources
 #####
 
-## Create resource group
-##
-resource "azurerm_resource_group" "rgwork" {
+locals {
+  use_existing_rg = var.resource_group_name != ""
+  rg_name         = local.use_existing_rg ? var.resource_group_name : "rg-aml-reg-${var.purpose}-${var.location_code}${var.random_string}"
+}
 
-  name     = "rg-aml-reg-${var.purpose}-${var.location_code}${var.random_string}"
+## Create resource group if not provided
+resource "azurerm_resource_group" "rgwork" {
+  count    = local.use_existing_rg ? 0 : 1
+  name     = local.rg_name
   location = var.location
   tags     = var.tags
 }
@@ -22,9 +26,9 @@ resource "azapi_resource" "registry" {
 
   type                      = "Microsoft.MachineLearningServices/registries@2025-01-01-preview"
   name                      = "${local.aml_registry_prefix}${var.purpose}${var.location_code}${var.random_string}"
-  parent_id                 = azurerm_resource_group.rgwork.id
+  parent_id                 = local.use_existing_rg ? "/subscriptions/${data.azurerm_client_config.identity_config.subscription_id}/resourceGroups/${local.rg_name}" : azurerm_resource_group.rgwork[0].id
   location                  = var.location
-  schema_validation_enabled = true
+  schema_validation_enabled = false
 
   body = {
     identity = {
@@ -52,6 +56,13 @@ resource "azapi_resource" "registry" {
 
         }
       ]
+      managedResourceGroupSettings = {
+        assignedIdentities = [
+          {
+            principalId = var.managed_rg_assigned_principal_id
+          }
+        ]
+      }
       publicNetworkAccess = "Disabled"
     }
 
@@ -69,6 +80,7 @@ resource "azapi_resource" "registry" {
     ]
   }
 }
+
 
 ## Pause 10 seconds to ensure the managed identity has replicated
 ##
@@ -92,7 +104,7 @@ module "private_endpoint_aml_registry" {
   random_string       = var.random_string
   location            = var.workload_vnet_location
   location_code       = var.workload_vnet_location_code
-  resource_group_name = azurerm_resource_group.rgwork.name
+  resource_group_name = local.rg_name
   tags                = var.tags
 
   resource_name    = azapi_resource.registry.name
@@ -103,59 +115,7 @@ module "private_endpoint_aml_registry" {
   private_dns_zone_ids = [local.dns_zone_aml_api_id]
 }
 
-##### Create role assignments for registry access
-#####
-
-## Assign AzureML Registry User role to user account
-## This allows the user to read and use models from the registry
-##
-resource "azurerm_role_assignment" "registry_user_permission" {
-  depends_on = [
-    time_sleep.wait_registry_identity
-  ]
-
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${var.user_object_id}${azapi_resource.registry.name}registryuser")
-  scope                = azapi_resource.registry.id
-  role_definition_name = "AzureML Registry User"
-  principal_id         = var.user_object_id
-}
-
-## Use the compute cluster managed identity passed from the VNet module
-## The managed identity IDs are always passed from the parent module
-##
-locals {
-  # Use the managed identity values passed from the VNet module
-  compute_cluster_identity_id  = var.compute_cluster_identity_id
-  compute_cluster_principal_id = var.compute_cluster_principal_id
-}
-
-## Assign AzureML Registry User role to compute cluster managed identity
-## This allows compute clusters to access models from the registry during training/inference
-##
-resource "azurerm_role_assignment" "compute_registry_user" {
-  depends_on = [
-    time_sleep.wait_registry_identity
-  ]
-
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}${azapi_resource.registry.name}registryuser")
-  scope                = azapi_resource.registry.id
-  role_definition_name = "AzureML Registry User"
-  principal_id         = local.compute_cluster_principal_id
-}
-
-## Assign Azure AI Enterprise Network Connection Approver role to workspace system-managed identity
-## This allows the workspace to create managed private endpoints to this registry
-##
-resource "azurerm_role_assignment" "workspace_network_connection_approver" {
-  depends_on = [
-    time_sleep.wait_registry_identity
-  ]
-
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${var.workspace_principal_id}${azapi_resource.registry.name}netapprover")
-  scope                = azapi_resource.registry.id
-  role_definition_name = "Azure AI Enterprise Network Connection Approver"
-  principal_id         = var.workspace_principal_id
-}
+// RBAC assignments removed — centralized in infra/main.tf
 
 ##### Diagnostic Settings for Monitoring
 #####
@@ -195,7 +155,7 @@ resource "null_resource" "registry_managed_resources_diagnostics" {
   provisioner "local-exec" {
     command = <<-EOT
       $registryName = "${azapi_resource.registry.name}"
-      $resourceGroup = "${azurerm_resource_group.rgwork.name}"
+  $resourceGroup = "${local.rg_name}"
       $workspaceId = "${var.log_analytics_workspace_id}"
       
       Write-Host "Configuring diagnostic settings for registry managed resources: $registryName"

@@ -23,17 +23,17 @@ output "cc_identity_principal_id" {
 
 output "resource_group_name" {
   description = "Name of the resource group containing VNet and DNS zones"
-  value       = azurerm_resource_group.aml_vnet_rg.name
+  value       = local.rg_name
 }
 
 output "resource_group_name_dns" {
   description = "Name of the resource group containing DNS zones (alias for resource_group_name)"
-  value       = azurerm_resource_group.aml_vnet_rg.name
+  value       = local.rg_name
 }
 
 output "resource_group_id" {
   description = "ID of the resource group containing VNet and DNS zones"
-  value       = azurerm_resource_group.aml_vnet_rg.id
+  value       = coalesce(try(azurerm_resource_group.aml_vnet_rg[0].id, null), "/subscriptions/${data.azurerm_client_config.identity_config.subscription_id}/resourceGroups/${local.rg_name}")
 }
 
 output "vnet_id" {

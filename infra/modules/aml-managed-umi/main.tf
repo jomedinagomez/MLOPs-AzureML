@@ -624,56 +624,10 @@ resource "azurerm_role_assignment" "file_perm_default_sa" {
   principal_id         = var.user_object_id
 }
 
-##### Cross-environment RBAC for asset promotion
+##### Cross-environment RBAC for asset promotion (centralized in parent module)
 #####
-
-## Grant the other environment's workspace read access to this registry
-## This enables asset promotion between dev and prod environments
-##
-resource "azurerm_role_assignment" "cross_env_registry_reader" {
-  count = var.enable_cross_env_rbac && var.cross_env_workspace_principal_id != null ? 1 : 0
-  
-  depends_on = [
-    azapi_resource.aml_workspace
-  ]
-
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${var.cross_env_workspace_principal_id}registryreader")
-  scope                = azapi_resource.aml_workspace.id # Allow access to this workspace
-  role_definition_name = "AzureML Registry User"
-  principal_id         = var.cross_env_workspace_principal_id
-}
-
-## Grant this workspace's user-assigned managed identity access to the other environment's registry
-## This enables bidirectional asset sharing for comprehensive MLOps workflows
-##
-resource "azurerm_role_assignment" "cross_env_registry_contributor" {
-  count = var.enable_cross_env_rbac && var.cross_env_registry_resource_group != null && var.cross_env_registry_resource_group != "" && var.cross_env_registry_name != null && var.cross_env_registry_name != "" ? 1 : 0
-  
-  depends_on = [
-    time_sleep.wait_aml_workspace_identities
-  ]
-
-  name                 = uuidv5("dns", "${var.cross_env_registry_resource_group}${azurerm_user_assigned_identity.workspace_identity.principal_id}registrycontrib")
-  scope                = "/subscriptions/${var.sub_id}/resourceGroups/${var.cross_env_registry_resource_group}/providers/Microsoft.MachineLearningServices/registries/${var.cross_env_registry_name}"
-  role_definition_name = "AzureML Registry User"
-  principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
-}
-
-## Grant this workspace's user-assigned managed identity Network Connection Approver role on the other environment's registry
-## This enables automatic private endpoint creation for cross-environment connectivity
-##
-resource "azurerm_role_assignment" "cross_env_registry_network_approver" {
-  count = var.enable_cross_env_rbac && var.cross_env_registry_resource_group != null && var.cross_env_registry_resource_group != "" && var.cross_env_registry_name != null && var.cross_env_registry_name != "" ? 1 : 0
-  
-  depends_on = [
-    azurerm_role_assignment.cross_env_registry_contributor
-  ]
-
-  name                 = uuidv5("dns", "${var.cross_env_registry_resource_group}${azurerm_user_assigned_identity.workspace_identity.principal_id}registrynetwork")
-  scope                = "/subscriptions/${var.sub_id}/resourceGroups/${var.cross_env_registry_resource_group}/providers/Microsoft.MachineLearningServices/registries/${var.cross_env_registry_name}"
-  role_definition_name = "Azure AI Enterprise Network Connection Approver"
-  principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
-}
+# Intentionally removed module-level cross-environment role assignments to avoid duplication and drift.
+# Cross-environment RBAC is now managed centrally in infra/main.tf.
 
 ##### Create compute cluster role assignments
 #####
