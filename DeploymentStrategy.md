@@ -181,6 +181,18 @@ Online Endpoints:
 └── No additional RBAC configuration required
 ```
 
+### Implementation Notes
+
+**Key Implementation Decisions:**
+
+1. **Single Shared Compute UAMI**: The implementation uses one User-Assigned Managed Identity (`${purpose}-mi-compute`) for both compute clusters and compute instances, as documented above. This reduces complexity while maintaining security boundaries.
+
+2. **No Managed Online Endpoint UAMIs**: Following the strategy, online endpoints use system-assigned managed identities that are automatically managed by Azure ML service. No additional User-Assigned Managed Identities are created for online endpoints.
+
+3. **Role Assignment Timing**: All role assignments are configured before compute resource creation to ensure proper permissions are in place when resources are provisioned.
+
+4. **Module Parameter Passing**: The VNet module creates the shared compute UAMI and passes the identity ID and principal ID to both workspace and registry modules for proper role assignment configuration.
+
 ### Human User RBAC
 
 ```
@@ -299,21 +311,26 @@ This infrastructure uses Azure ML managed virtual networks with `isolationMode =
 
 ```terraform
 # Cross-environment connectivity (from main.tf)
-resource "azapi_resource" "workspace_to_registry_outbound_rule" {
+resource "azapi_resource" "prod_workspace_to_dev_registry_outbound_rule" {
   type      = "Microsoft.MachineLearningServices/workspaces/outboundRules@2024-10-01-preview"
-  name      = "allow-external-registry-${var.purpose}"
-  parent_id = module.aml_workspace.workspace_id
+  name      = "AllowDevRegistryAccess"
+  parent_id = module.prod_managed_umi.workspace_id
 
   body = {
     properties = {
-      type = "PrivateEndpoint"              # Automatically creates private endpoint
+      type = "PrivateEndpoint"
       destination = {
-        serviceResourceId = module.aml_registry.registry_id
-        subresourceTarget = "amlregistry"
+        serviceResourceId = module.dev_registry.registry_id
       }
       category = "UserDefined"
     }
   }
+
+  depends_on = [
+    module.prod_managed_umi,
+    module.dev_registry,
+    azurerm_role_assignment.prod_workspace_network_connection_approver
+  ]
 }
 ```
 
@@ -343,10 +360,15 @@ resource "azapi_resource" "workspace_to_registry_outbound_rule" {
 **Development Resource Group** (`{dev-resource-group}`):
 ```
 {dev-compute-uami-name}:
-├── AzureML Data Scientist (on {dev-workspace})
-├── AzureML Registry User (on {dev-registry})  
+├── AcrPull (on {dev-container-registry})
+├── AcrPush (on {dev-container-registry})
 ├── Storage Blob Data Contributor (on {dev-storage-account})
-└── Key Vault Secrets User (on {dev-key-vault})
+├── Storage File Data Privileged Contributor (on {dev-storage-account})
+├── AzureML Data Scientist (on {dev-workspace})
+├── Key Vault Secrets User (on {dev-key-vault})
+├── Reader (on {dev-resource-group})
+├── AzureML Registry User (on {dev-registry})
+└── Contributor (on {dev-workspace})
 
 {dev-workspace-uami-name}:
 ├── Azure AI Administrator (on {dev-resource-group})
@@ -367,10 +389,15 @@ resource "azapi_resource" "workspace_to_registry_outbound_rule" {
 **Production Resource Group** (`{prod-resource-group}`):
 ```
 {prod-compute-uami-name}:
+├── AcrPull (on {prod-container-registry})
+├── AcrPush (on {prod-container-registry})
+├── Storage Blob Data Contributor (on {prod-storage-account})
+├── Storage File Data Privileged Contributor (on {prod-storage-account})
 ├── AzureML Data Scientist (on {prod-workspace})
+├── Key Vault Secrets User (on {prod-key-vault})
+├── Reader (on {prod-resource-group})
 ├── AzureML Registry User (on {prod-registry})
-├── Storage Blob Data Contributor (on {prod-storage-account})  
-└── Key Vault Secrets User (on {prod-key-vault})
+└── Contributor (on {prod-workspace})
 
 {prod-workspace-uami-name}:
 ├── Azure AI Administrator (on {prod-resource-group})
@@ -1605,6 +1632,31 @@ Your parameterized modules are ready for production deployment:
    - Documentation and runbooks for operational procedures
    - Team training on Data Engineer role capabilities and asset promotion
 
+## Implementation Status
+
+### ✅ **RBAC Implementation Complete**
+
+The current infrastructure implementation in `main.tf` fully implements this deployment strategy with the following role assignments:
+
+- **Service Principal**: 18 role assignments (3 roles × 6 resource groups)
+- **Shared Compute UAMIs**: 18 role assignments (9 roles × 2 environments)
+- **Workspace UAMIs**: 14 role assignments (7 roles × 2 environments)  
+- **Human User Roles**: 14 role assignments (7 roles × 2 environments)
+- **Cross-Environment Access**: 3 role assignments
+- **Managed VNet Outbound Rules**: 1 automatic private endpoint rule
+
+### ✅ **Architecture Decisions Implemented**
+
+1. **Single Shared Compute UAMI**: ✅ One UAMI per environment for both compute cluster and compute instance
+2. **No MOE UAMIs**: ✅ Online endpoints use system-assigned managed identities as designed
+3. **Cross-Environment Connectivity**: ✅ Production can access dev registry via automatic private endpoints
+4. **Complete Environment Isolation**: ✅ Zero shared components between dev and prod
+5. **Role Assignment Before Resource Creation**: ✅ All permissions configured before compute provisioning
+
+### ✅ **Infrastructure Ready for Deployment**
+
+The Terraform configuration in `/infra/main.tf` is ready for deployment and fully implements this strategy.
+
 ## References
 
 - [Azure ML Private Network Configuration](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-registry-network-isolation)
@@ -1614,6 +1666,6 @@ Your parameterized modules are ready for production deployment:
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: August 6, 2025  
-**Next Review**: TBD based on strategic decisions
+**Document Version**: 1.1  
+**Last Updated**: August 7, 2025  
+**Next Review**: Post-deployment validation

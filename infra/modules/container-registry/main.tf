@@ -20,7 +20,7 @@ resource "azurerm_container_registry" "acr" {
   tags = var.tags
 }
 resource "azurerm_monitor_diagnostic_setting" "diag-base" {
-  name                       = "diag-base"
+  name                       = "${azurerm_container_registry.acr.name}-diag-base-${var.purpose}-${var.random_string}"
   target_resource_id         = azurerm_container_registry.acr.id
   log_analytics_workspace_id = var.law_resource_id
 

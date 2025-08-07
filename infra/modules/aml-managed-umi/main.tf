@@ -1,3 +1,9 @@
+##### Data Sources
+#####
+
+## Get current client configuration for compute instance assignment
+data "azurerm_client_config" "current" {}
+
 ##### Create scaffolding
 #####
 
@@ -813,7 +819,7 @@ resource "azurerm_role_assignment" "workspace_storage_blob_owner" {
 
 # Diagnostic settings for Application Insights
 resource "azurerm_monitor_diagnostic_setting" "appinsights_diagnostics" {
-  name                       = "${azurerm_application_insights.aml-appins.name}-diagnostics"
+  name                       = "${azurerm_application_insights.aml-appins.name}-diagnostics-${var.purpose}-${var.random_string}"
   target_resource_id         = azurerm_application_insights.aml-appins.id
   log_analytics_workspace_id = var.log_analytics_workspace_id
 
@@ -868,7 +874,7 @@ resource "azurerm_monitor_diagnostic_setting" "appinsights_diagnostics" {
 
 # Azure ML workspace diagnostic settings with ALL supported log categories
 resource "azurerm_monitor_diagnostic_setting" "ml_workspace_diagnostics" {
-  name                       = "${azapi_resource.aml_workspace.name}-diagnostics"
+  name                       = "${azapi_resource.aml_workspace.name}-diagnostics-${var.purpose}-${var.random_string}"
   target_resource_id         = azapi_resource.aml_workspace.id
   log_analytics_workspace_id = var.log_analytics_workspace_id
 
@@ -997,7 +1003,16 @@ resource "azurerm_monitor_diagnostic_setting" "ml_workspace_diagnostics" {
 resource "azapi_resource" "compute_cluster_uami" {
   depends_on = [
     azapi_resource.aml_workspace,
-    module.private_endpoint_aml_workspace
+    module.private_endpoint_aml_workspace,
+    # Wait for all local compute role assignments to be created first
+    azurerm_role_assignment.compute_ml_data_scientist,
+    azurerm_role_assignment.compute_keyvault_secrets_user,
+    azurerm_role_assignment.compute_storage_blob_contributor,
+    azurerm_role_assignment.compute_storage_file_privileged_contributor,
+    azurerm_role_assignment.compute_acr_pull,
+    azurerm_role_assignment.compute_acr_push,
+    azurerm_role_assignment.compute_workspace_contributor,
+    azurerm_role_assignment.compute_rg_reader
   ]
 
   type      = "Microsoft.MachineLearningServices/workspaces/computes@2024-10-01"
@@ -1040,13 +1055,77 @@ resource "azapi_resource" "compute_cluster_uami" {
   }
 }
 
+##### Create Compute Instance
+#####
+
+## Create compute instance with user-assigned managed identity for interactive development
+##
+resource "azapi_resource" "compute_instance_uami" {
+  depends_on = [
+    azapi_resource.aml_workspace,
+    module.private_endpoint_aml_workspace,
+    # Wait for all local compute role assignments to be created first
+    azurerm_role_assignment.compute_ml_data_scientist,
+    azurerm_role_assignment.compute_keyvault_secrets_user,
+    azurerm_role_assignment.compute_storage_blob_contributor,
+    azurerm_role_assignment.compute_storage_file_privileged_contributor,
+    azurerm_role_assignment.compute_acr_pull,
+    azurerm_role_assignment.compute_acr_push,
+    azurerm_role_assignment.compute_workspace_contributor,
+    azurerm_role_assignment.compute_rg_reader
+  ]
+
+  type      = "Microsoft.MachineLearningServices/workspaces/computes@2024-10-01"
+  name      = "ci-dev-${var.purpose}"
+  parent_id = azapi_resource.aml_workspace.id
+  location  = var.location
+
+  body = {
+    identity = {
+      type = "UserAssigned"
+      userAssignedIdentities = {
+        "${var.compute_cluster_identity_id}" = {}
+      }
+    }
+    properties = {
+      computeType = "ComputeInstance"
+      properties = {
+        vmSize                      = "Standard_F8s_v2"
+        enableNodePublicIp          = false
+        personalComputeInstanceSettings = {
+          assignedUser = {
+            objectId = data.azurerm_client_config.current.object_id
+            tenantId = data.azurerm_client_config.current.tenant_id
+          }
+        }
+        sshSettings = {
+          sshPublicAccess = "Disabled"
+        }
+        applicationSharingPolicy = "Personal"
+        computeInstanceAuthorizationType = "personal"
+      }
+      description = "Personal compute instance with user-assigned managed identity for interactive ML development"
+    }
+  }
+
+  tags = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_date"],
+      tags["created_by"]
+    ]
+  }
+}
+
 ##### Configure Image Build Compute
 #####
 
-## Add a delay to ensure compute cluster is fully provisioned
-resource "time_sleep" "wait_for_compute_cluster" {
+## Add a delay to ensure compute resources are fully provisioned
+resource "time_sleep" "wait_for_compute_resources" {
   depends_on = [
-    azapi_resource.compute_cluster_uami
+    azapi_resource.compute_cluster_uami,
+    azapi_resource.compute_instance_uami
   ]
   create_duration = "180s"  # Increased to 180 seconds
 }
@@ -1056,7 +1135,7 @@ resource "time_sleep" "wait_for_compute_cluster" {
 resource "azapi_update_resource" "workspace_image_build_config" {
   depends_on = [
     azapi_resource.aml_workspace,
-    time_sleep.wait_for_compute_cluster,
+    time_sleep.wait_for_compute_resources,
     module.private_endpoint_aml_workspace
   ]
 

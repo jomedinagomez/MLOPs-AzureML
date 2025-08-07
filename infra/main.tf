@@ -514,19 +514,56 @@ module "prod_registry" {
 # STEP 6: CROSS-ENVIRONMENT CONNECTIVITY
 # ===============================
 
-# Allow production workspace to read from dev registry (AzureML Registry User role)
-resource "azurerm_role_assignment" "prod_workspace_to_dev_registry" {
+# Dev compute to dev registry (local environment access)
+resource "azurerm_role_assignment" "dev_compute_to_dev_registry" {
   scope                = module.dev_registry.registry_id
   role_definition_name = "AzureML Registry User"
-  principal_id         = module.prod_managed_umi.workspace_uami_principal_id
+  principal_id         = module.dev_managed_umi.compute_uami_principal_id
 
   depends_on = [
     module.dev_registry,
+    module.dev_managed_umi
+  ]
+}
+
+# Prod compute to prod registry (local environment access)
+resource "azurerm_role_assignment" "prod_compute_to_prod_registry" {
+  scope                = module.prod_registry.registry_id
+  role_definition_name = "AzureML Registry User"
+  principal_id         = module.prod_managed_umi.compute_uami_principal_id
+
+  depends_on = [
+    module.prod_registry,
     module.prod_managed_umi
   ]
 }
 
-# Allow production workspace to create private endpoints to dev registry
+# Network connection approver roles for workspaces to create outbound rules
+# Allow dev workspace to create private endpoints to dev registry (local environment)
+resource "azurerm_role_assignment" "dev_workspace_network_connection_approver" {
+  scope                = module.dev_registry.registry_id
+  role_definition_name = "Azure AI Enterprise Network Connection Approver"
+  principal_id         = module.dev_managed_umi.workspace_uami_principal_id
+
+  depends_on = [
+    module.dev_registry,
+    module.dev_managed_umi
+  ]
+}
+
+# Allow prod workspace to create private endpoints to prod registry (local environment)
+resource "azurerm_role_assignment" "prod_workspace_to_prod_registry_network_approver" {
+  scope                = module.prod_registry.registry_id
+  role_definition_name = "Azure AI Enterprise Network Connection Approver"
+  principal_id         = module.prod_managed_umi.workspace_uami_principal_id
+
+  depends_on = [
+    module.prod_registry,
+    module.prod_managed_umi
+  ]
+}
+
+# Allow prod workspace to create private endpoints to dev registry (cross-environment)
 resource "azurerm_role_assignment" "prod_workspace_network_connection_approver" {
   scope                = module.dev_registry.registry_id
   role_definition_name = "Azure AI Enterprise Network Connection Approver"
@@ -547,6 +584,52 @@ resource "azurerm_role_assignment" "prod_compute_to_dev_registry" {
   depends_on = [
     module.dev_registry,
     module.prod_managed_umi
+  ]
+}
+
+# Create outbound rule for dev workspace to access dev registry (local environment)
+resource "azapi_resource" "dev_workspace_to_dev_registry_outbound_rule" {
+  type      = "Microsoft.MachineLearningServices/workspaces/outboundRules@2024-10-01-preview"
+  name      = "AllowDevRegistryAccess"
+  parent_id = module.dev_managed_umi.workspace_id
+
+  body = {
+    properties = {
+      type = "PrivateEndpoint"
+      destination = {
+        serviceResourceId = module.dev_registry.registry_id
+      }
+      category = "UserDefined"
+    }
+  }
+
+  depends_on = [
+    module.dev_managed_umi,
+    module.dev_registry,
+    azurerm_role_assignment.dev_workspace_network_connection_approver
+  ]
+}
+
+# Create outbound rule for prod workspace to access prod registry (local environment)
+resource "azapi_resource" "prod_workspace_to_prod_registry_outbound_rule" {
+  type      = "Microsoft.MachineLearningServices/workspaces/outboundRules@2024-10-01-preview"
+  name      = "AllowProdRegistryAccess"
+  parent_id = module.prod_managed_umi.workspace_id
+
+  body = {
+    properties = {
+      type = "PrivateEndpoint"
+      destination = {
+        serviceResourceId = module.prod_registry.registry_id
+      }
+      category = "UserDefined"
+    }
+  }
+
+  depends_on = [
+    module.prod_managed_umi,
+    module.prod_registry,
+    azurerm_role_assignment.prod_workspace_to_prod_registry_network_approver
   ]
 }
 

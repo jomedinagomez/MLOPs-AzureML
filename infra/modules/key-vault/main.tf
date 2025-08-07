@@ -63,7 +63,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag-base" {
     azurerm_role_assignment.assign-admin
   ]
 
-  name                       = "${azurerm_key_vault.kv.name}-terraform-diagnostics"
+  name                       = "${azurerm_key_vault.kv.name}-diagnostics-${var.purpose}-${var.random_string}"
   target_resource_id         = azurerm_key_vault.kv.id
   log_analytics_workspace_id = var.law_resource_id
 

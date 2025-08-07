@@ -192,7 +192,7 @@ resource "azurerm_log_analytics_workspace" "vnet_logs" {
 
 # Virtual Network diagnostic settings with supported log categories
 resource "azurerm_monitor_diagnostic_setting" "vnet_diagnostics" {
-  name                       = "${azurerm_virtual_network.aml_vnet.name}-diagnostics"
+  name                       = "${azurerm_virtual_network.aml_vnet.name}-diagnostics-${var.purpose}-${var.random_string}"
   target_resource_id         = azurerm_virtual_network.aml_vnet.id
   log_analytics_workspace_id = azurerm_log_analytics_workspace.vnet_logs.id
 

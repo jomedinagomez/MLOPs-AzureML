@@ -71,6 +71,16 @@ output "compute_cluster_uami_name" {
   value       = azapi_resource.compute_cluster_uami.name
 }
 
+output "compute_instance_uami_id" {
+  description = "ID of the compute instance with user-assigned managed identity"
+  value       = azapi_resource.compute_instance_uami.id
+}
+
+output "compute_instance_uami_name" {
+  description = "Name of the compute instance with user-assigned managed identity"
+  value       = azapi_resource.compute_instance_uami.name
+}
+
 output "image_build_compute_config" {
   description = "Image build compute configuration applied to workspace"
   value       = azapi_update_resource.workspace_image_build_config.body.properties.imageBuildCompute

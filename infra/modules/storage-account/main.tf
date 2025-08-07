@@ -52,7 +52,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag-base" {
 
   depends_on = [azurerm_storage_account.storage_account]
 
-  name                       = "diag-base"
+  name                       = "${azurerm_storage_account.storage_account.name}-diag-base-${var.purpose}-${var.random_string}"
   target_resource_id         = azurerm_storage_account.storage_account.id
   log_analytics_workspace_id = var.law_resource_id
 
@@ -71,7 +71,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag-blob" {
     azurerm_storage_account.storage_account,
   azurerm_monitor_diagnostic_setting.diag-base]
 
-  name                       = "diag-blob"
+  name                       = "${azurerm_storage_account.storage_account.name}-diag-blob-${var.purpose}-${var.random_string}"
   target_resource_id         = "${azurerm_storage_account.storage_account.id}/blobServices/default"
   log_analytics_workspace_id = var.law_resource_id
 
@@ -94,7 +94,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag-file" {
     azurerm_monitor_diagnostic_setting.diag-blob
   ]
 
-  name                       = "diag-file"
+  name                       = "${azurerm_storage_account.storage_account.name}-diag-file-${var.purpose}-${var.random_string}"
   target_resource_id         = "${azurerm_storage_account.storage_account.id}/fileServices/default"
   log_analytics_workspace_id = var.law_resource_id
 
@@ -117,7 +117,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag-queue" {
     azurerm_monitor_diagnostic_setting.diag-file
   ]
 
-  name                       = "diag-default"
+  name                       = "${azurerm_storage_account.storage_account.name}-diag-queue-${var.purpose}-${var.random_string}"
   target_resource_id         = "${azurerm_storage_account.storage_account.id}/queueServices/default"
   log_analytics_workspace_id = var.law_resource_id
 
@@ -141,7 +141,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag-table" {
     azurerm_monitor_diagnostic_setting.diag-queue
   ]
 
-  name                       = "diag-table"
+  name                       = "${azurerm_storage_account.storage_account.name}-diag-table-${var.purpose}-${var.random_string}"
   target_resource_id         = "${azurerm_storage_account.storage_account.id}/tableServices/default"
   log_analytics_workspace_id = var.law_resource_id
 
