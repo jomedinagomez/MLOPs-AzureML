@@ -6,6 +6,12 @@ variable "subscription_id" {
   default     = "5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25"
 }
 
+variable "assign_user_roles" {
+  description = "Whether to assign roles to the current user (data.azurerm_client_config.current.object_id)"
+  type        = bool
+  default     = true
+}
+
 variable "location" {
   description = "Azure region for all resources"
   type        = string

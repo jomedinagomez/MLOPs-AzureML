@@ -103,18 +103,8 @@ output "managed_identity_cc_id" {
 }
 
 output "managed_identity_cc_name" {
-  description = "Name of the environment compute cluster managed identity (purpose determined by module instantiation)"
+  description = "Name of the environment shared compute managed identity (used by both cluster and compute instance)"
   value       = module.aml_vnet.cc_identity_name
-}
-
-output "managed_identity_moe_id" {
-  description = "ID of the environment managed online endpoint identity (purpose determined by module instantiation)"
-  value       = module.aml_vnet.moe_identity_id
-}
-
-output "managed_identity_moe_name" {
-  description = "Name of the environment managed online endpoint identity (purpose determined by module instantiation)"
-  value       = module.aml_vnet.moe_identity_name
 }
 
 ###### Log Analytics ######

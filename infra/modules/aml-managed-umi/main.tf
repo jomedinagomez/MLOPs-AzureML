@@ -779,6 +779,20 @@ resource "azurerm_role_assignment" "compute_workspace_contributor" {
   principal_id         = local.compute_cluster_principal_id
 }
 
+## Assign Reader role to compute identity for the resource group
+## This allows compute clusters to discover resources during pipeline execution
+##
+resource "azurerm_role_assignment" "compute_rg_reader" {
+  depends_on = [
+    azurerm_resource_group.rgwork
+  ]
+
+  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}reader")
+  scope                = azurerm_resource_group.rgwork.id # Resource group scope
+  role_definition_name = "Reader"
+  principal_id         = local.compute_cluster_principal_id
+}
+
 ## Assign Storage Blob Data Owner role to workspace user-assigned managed identity for workspace storage
 ## This allows the workspace to manage data and models in the storage account for registry operations
 ##

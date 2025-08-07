@@ -7,33 +7,18 @@ output "subnet_id" {
 }
 
 output "cc_identity_id" {
-  description = "ID of the compute cluster managed identity"
+  description = "ID of the shared compute cluster and compute instance managed identity"
   value       = azurerm_user_assigned_identity.cc.id
 }
 
 output "cc_identity_name" {
-  description = "Name of the compute cluster managed identity"
+  description = "Name of the shared compute cluster and compute instance managed identity"
   value       = azurerm_user_assigned_identity.cc.name
 }
 
 output "cc_identity_principal_id" {
-  description = "Principal ID of the compute cluster managed identity"
+  description = "Principal ID of the shared compute cluster and compute instance managed identity"
   value       = azurerm_user_assigned_identity.cc.principal_id
-}
-
-output "moe_identity_id" {
-  description = "ID of the managed online endpoint identity"
-  value       = azurerm_user_assigned_identity.moe.id
-}
-
-output "moe_identity_name" {
-  description = "Name of the managed online endpoint identity"
-  value       = azurerm_user_assigned_identity.moe.name
-}
-
-output "moe_identity_principal_id" {
-  description = "Principal ID of the managed online endpoint identity"
-  value       = azurerm_user_assigned_identity.moe.principal_id
 }
 
 output "resource_group_name" {

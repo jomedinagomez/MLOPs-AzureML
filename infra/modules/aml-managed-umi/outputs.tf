@@ -75,3 +75,13 @@ output "image_build_compute_config" {
   description = "Image build compute configuration applied to workspace"
   value       = azapi_update_resource.workspace_image_build_config.body.properties.imageBuildCompute
 }
+
+output "workspace_uami_principal_id" {
+  description = "Principal ID of the workspace user-assigned managed identity"
+  value       = azurerm_user_assigned_identity.workspace_identity.principal_id
+}
+
+output "compute_uami_principal_id" {
+  description = "Principal ID of the compute user-assigned managed identity"
+  value       = var.compute_cluster_principal_id
+}

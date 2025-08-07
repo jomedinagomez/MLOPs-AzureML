@@ -19,19 +19,11 @@ resource "azurerm_subnet" "aml_subnet" {
   address_prefixes     = [var.subnet_address_prefix]
 }
 
-# Managed Identity for Compute Cluster
+# Shared Managed Identity for Compute Cluster and Compute Instance
+# According to deployment strategy: "Compute Cluster & Compute Instance UAMI (Shared)"
 
 resource "azurerm_user_assigned_identity" "cc" {
   name                = "${var.purpose}-mi-compute"
-  location            = var.location
-  resource_group_name = azurerm_resource_group.aml_vnet_rg.name
-  tags                = var.tags
-}
-
-# Managed Identity for Managed Online Endpoint
-
-resource "azurerm_user_assigned_identity" "moe" {
-  name                = "${var.purpose}-mi-endpoint"
   location            = var.location
   resource_group_name = azurerm_resource_group.aml_vnet_rg.name
   tags                = var.tags

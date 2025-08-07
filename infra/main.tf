@@ -344,6 +344,7 @@ module "dev_vnet" {
   resource_prefixes        = local.resource_prefixes
   vnet_address_space       = "10.1.0.0/16"
   subnet_address_prefix    = "10.1.1.0/24"
+  enable_auto_purge        = true
   tags                     = merge(var.tags, {
     environment = "development"
     purpose     = "dev"
@@ -370,6 +371,11 @@ module "dev_managed_umi" {
   log_analytics_workspace_id = module.dev_vnet.log_analytics_workspace_id
   enable_auto_purge        = true
   sub_id                   = var.subscription_id
+  
+  # Pass compute cluster identity from VNet module
+  compute_cluster_identity_id    = module.dev_vnet.cc_identity_id
+  compute_cluster_principal_id   = module.dev_vnet.cc_identity_principal_id
+  
   tags                     = merge(var.tags, {
     environment = "development"
     purpose     = "dev"
@@ -393,6 +399,11 @@ module "dev_registry" {
   location_code            = var.location_code
   random_string            = random_string.main.result
   resource_prefixes        = local.resource_prefixes
+  
+  # Pass compute cluster identity from VNet module
+  compute_cluster_identity_id    = module.dev_vnet.cc_identity_id
+  compute_cluster_principal_id   = module.dev_vnet.cc_identity_principal_id
+  
   tags                     = merge(var.tags, {
     environment = "development"
     purpose     = "dev"
@@ -421,6 +432,7 @@ module "prod_vnet" {
   resource_prefixes        = local.resource_prefixes
   vnet_address_space       = "10.2.0.0/16"
   subnet_address_prefix    = "10.2.1.0/24"
+  enable_auto_purge        = true
   tags                     = merge(var.tags, {
     environment = "production"
     purpose     = "prod"
@@ -447,6 +459,10 @@ module "prod_managed_umi" {
   log_analytics_workspace_id = module.prod_vnet.log_analytics_workspace_id
   enable_auto_purge        = true
   sub_id                   = var.subscription_id
+  
+  # Pass compute cluster identity from VNet module
+  compute_cluster_identity_id    = module.prod_vnet.cc_identity_id
+  compute_cluster_principal_id   = module.prod_vnet.cc_identity_principal_id
   
   # Cross-environment configuration for asset promotion
   enable_cross_env_rbac           = true
@@ -477,6 +493,11 @@ module "prod_registry" {
   location_code            = var.location_code
   random_string            = random_string.main.result
   resource_prefixes        = local.resource_prefixes
+  
+  # Pass compute cluster identity from VNet module
+  compute_cluster_identity_id    = module.prod_vnet.cc_identity_id
+  compute_cluster_principal_id   = module.prod_vnet.cc_identity_principal_id
+  
   tags                     = merge(var.tags, {
     environment = "production"
     purpose     = "prod"
@@ -549,5 +570,165 @@ resource "azapi_resource" "prod_workspace_to_dev_registry_outbound_rule" {
     module.prod_managed_umi,
     module.dev_registry,
     azurerm_role_assignment.prod_workspace_network_connection_approver
+  ]
+}
+
+# ===============================
+# STEP 7: USER ROLE ASSIGNMENTS
+# ===============================
+
+# Development Environment - Human User Role Assignments
+resource "azurerm_role_assignment" "user_dev_rg_reader" {
+  count                = var.assign_user_roles ? 1 : 0
+  scope                = azurerm_resource_group.dev_workspace_rg.id
+  role_definition_name = "Reader"
+  principal_id         = data.azurerm_client_config.current.object_id
+
+  depends_on = [
+    azurerm_resource_group.dev_workspace_rg
+  ]
+}
+
+resource "azurerm_role_assignment" "user_dev_workspace_data_scientist" {
+  count                = var.assign_user_roles ? 1 : 0
+  scope                = module.dev_managed_umi.workspace_id
+  role_definition_name = "AzureML Data Scientist"
+  principal_id         = data.azurerm_client_config.current.object_id
+
+  depends_on = [
+    module.dev_managed_umi
+  ]
+}
+
+resource "azurerm_role_assignment" "user_dev_workspace_ai_developer" {
+  count                = var.assign_user_roles ? 1 : 0
+  scope                = module.dev_managed_umi.workspace_id
+  role_definition_name = "Azure AI Developer"
+  principal_id         = data.azurerm_client_config.current.object_id
+
+  depends_on = [
+    module.dev_managed_umi
+  ]
+}
+
+resource "azurerm_role_assignment" "user_dev_workspace_compute_operator" {
+  count                = var.assign_user_roles ? 1 : 0
+  scope                = module.dev_managed_umi.workspace_id
+  role_definition_name = "AzureML Compute Operator"
+  principal_id         = data.azurerm_client_config.current.object_id
+
+  depends_on = [
+    module.dev_managed_umi
+  ]
+}
+
+resource "azurerm_role_assignment" "user_dev_storage_blob_contributor" {
+  count                = var.assign_user_roles ? 1 : 0
+  scope                = module.dev_managed_umi.storage_account_id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = data.azurerm_client_config.current.object_id
+
+  depends_on = [
+    module.dev_managed_umi
+  ]
+}
+
+resource "azurerm_role_assignment" "user_dev_storage_file_privileged_contributor" {
+  count                = var.assign_user_roles ? 1 : 0
+  scope                = module.dev_managed_umi.storage_account_id
+  role_definition_name = "Storage File Data Privileged Contributor"
+  principal_id         = data.azurerm_client_config.current.object_id
+
+  depends_on = [
+    module.dev_managed_umi
+  ]
+}
+
+resource "azurerm_role_assignment" "user_dev_registry_user" {
+  count                = var.assign_user_roles ? 1 : 0
+  scope                = module.dev_registry.registry_id
+  role_definition_name = "AzureML Registry User"
+  principal_id         = data.azurerm_client_config.current.object_id
+
+  depends_on = [
+    module.dev_registry
+  ]
+}
+
+# Production Environment - Human User Role Assignments
+resource "azurerm_role_assignment" "user_prod_rg_reader" {
+  count                = var.assign_user_roles ? 1 : 0
+  scope                = azurerm_resource_group.prod_workspace_rg.id
+  role_definition_name = "Reader"
+  principal_id         = data.azurerm_client_config.current.object_id
+
+  depends_on = [
+    azurerm_resource_group.prod_workspace_rg
+  ]
+}
+
+resource "azurerm_role_assignment" "user_prod_workspace_data_scientist" {
+  count                = var.assign_user_roles ? 1 : 0
+  scope                = module.prod_managed_umi.workspace_id
+  role_definition_name = "AzureML Data Scientist"
+  principal_id         = data.azurerm_client_config.current.object_id
+
+  depends_on = [
+    module.prod_managed_umi
+  ]
+}
+
+resource "azurerm_role_assignment" "user_prod_workspace_ai_developer" {
+  count                = var.assign_user_roles ? 1 : 0
+  scope                = module.prod_managed_umi.workspace_id
+  role_definition_name = "Azure AI Developer"
+  principal_id         = data.azurerm_client_config.current.object_id
+
+  depends_on = [
+    module.prod_managed_umi
+  ]
+}
+
+resource "azurerm_role_assignment" "user_prod_workspace_compute_operator" {
+  count                = var.assign_user_roles ? 1 : 0
+  scope                = module.prod_managed_umi.workspace_id
+  role_definition_name = "AzureML Compute Operator"
+  principal_id         = data.azurerm_client_config.current.object_id
+
+  depends_on = [
+    module.prod_managed_umi
+  ]
+}
+
+resource "azurerm_role_assignment" "user_prod_storage_blob_contributor" {
+  count                = var.assign_user_roles ? 1 : 0
+  scope                = module.prod_managed_umi.storage_account_id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = data.azurerm_client_config.current.object_id
+
+  depends_on = [
+    module.prod_managed_umi
+  ]
+}
+
+resource "azurerm_role_assignment" "user_prod_storage_file_privileged_contributor" {
+  count                = var.assign_user_roles ? 1 : 0
+  scope                = module.prod_managed_umi.storage_account_id
+  role_definition_name = "Storage File Data Privileged Contributor"
+  principal_id         = data.azurerm_client_config.current.object_id
+
+  depends_on = [
+    module.prod_managed_umi
+  ]
+}
+
+resource "azurerm_role_assignment" "user_prod_registry_user" {
+  count                = var.assign_user_roles ? 1 : 0
+  scope                = module.prod_registry.registry_id
+  role_definition_name = "AzureML Registry User"
+  principal_id         = data.azurerm_client_config.current.object_id
+
+  depends_on = [
+    module.prod_registry
   ]
 }
