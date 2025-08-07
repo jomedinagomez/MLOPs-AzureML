@@ -80,7 +80,6 @@ variable "enable_auto_purge" {
 }
 
 variable "resource_group_name" {
-  description = "Optional existing resource group name to place VNet and DNS resources; if empty, this module will create one"
+  description = "Resource group name where the VNet and DNS resources will be deployed (must exist)"
   type        = string
-  default     = ""
 }

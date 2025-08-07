@@ -33,7 +33,7 @@ output "resource_group_name_dns" {
 
 output "resource_group_id" {
   description = "ID of the resource group containing VNet and DNS zones"
-  value       = coalesce(try(azurerm_resource_group.aml_vnet_rg[0].id, null), "/subscriptions/${data.azurerm_client_config.identity_config.subscription_id}/resourceGroups/${local.rg_name}")
+  value       = "/subscriptions/${data.azurerm_client_config.identity_config.subscription_id}/resourceGroups/${local.rg_name}"
 }
 
 output "vnet_id" {

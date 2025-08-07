@@ -2,17 +2,11 @@
 #####
 
 locals {
-  use_existing_rg = var.resource_group_name != ""
-  rg_name         = local.use_existing_rg ? var.resource_group_name : "rg-aml-reg-${var.purpose}-${var.location_code}${var.random_string}"
+  rg_name = var.resource_group_name
+  rg_id   = "/subscriptions/${data.azurerm_client_config.identity_config.subscription_id}/resourceGroups/${local.rg_name}"
 }
 
-## Create resource group if not provided
-resource "azurerm_resource_group" "rgwork" {
-  count    = local.use_existing_rg ? 0 : 1
-  name     = local.rg_name
-  location = var.location
-  tags     = var.tags
-}
+## Resource group is expected to be created by the root module
 
 ##### Create the Azure Machine Learning Registry
 #####
@@ -20,13 +14,9 @@ resource "azurerm_resource_group" "rgwork" {
 ## Create the Azure Machine Learning Registry
 ##
 resource "azapi_resource" "registry" {
-  depends_on = [
-    azurerm_resource_group.rgwork
-  ]
-
   type                      = "Microsoft.MachineLearningServices/registries@2025-01-01-preview"
   name                      = "${local.aml_registry_prefix}${var.purpose}${var.location_code}${var.random_string}"
-  parent_id                 = local.use_existing_rg ? "/subscriptions/${data.azurerm_client_config.identity_config.subscription_id}/resourceGroups/${local.rg_name}" : azurerm_resource_group.rgwork[0].id
+  parent_id                 = local.rg_id
   location                  = var.location
   schema_validation_enabled = false
 

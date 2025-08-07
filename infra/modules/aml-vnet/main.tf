@@ -1,13 +1,5 @@
 locals {
-  use_existing_rg = var.resource_group_name != ""
-  rg_name         = local.use_existing_rg ? var.resource_group_name : "${local.vnet_resource_group_prefix}-${var.purpose}-${var.location_code}${var.random_string}"
-}
-
-resource "azurerm_resource_group" "aml_vnet_rg" {
-  count    = local.use_existing_rg ? 0 : 1
-  name     = local.rg_name
-  location = var.location
-  tags     = var.tags
+  rg_name = var.resource_group_name
 }
 
 resource "azurerm_virtual_network" "aml_vnet" {

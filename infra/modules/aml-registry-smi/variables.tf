@@ -58,9 +58,8 @@ variable "tags" {
 }
 
 variable "resource_group_name" {
-  description = "Optional existing resource group name for the registry; if empty, the module will create it"
+  description = "Resource group name where the registry will be deployed (must exist)"
   type        = string
-  default     = ""
 }
 
 

@@ -13,7 +13,7 @@ This document outlines the deployment strategy for our Azure Machine Learning pl
 
 **This implementation uses two registries to showcase comprehensive MLOps asset promotion workflows, though a single registry would be sufficient for most production scenarios.**
 
-**Last Updated**: August 7, 2025 - Added registry managed resource group pre-authorization via assignedIdentities, enforced private-only posture for storage and Key Vault, and clarified workspace→registry outbound rules (dev→dev, prod→prod, and prod→dev) on managed VNets.
+**Last Updated**: August 7, 2025 - Added registry managed resource group pre-authorization via assignedIdentities, enforced private-only posture for storage and Key Vault, clarified workspace→registry outbound rules (dev→dev, prod→prod, and prod→dev) on managed VNets, and centralized resource group (RG) creation at root (modules now require an explicit `resource_group_name`; module-internal RG creation/count logic removed).
 
 ## Strategic Principles
 
@@ -308,6 +308,19 @@ Online Endpoints:
 3. **Role Assignment Timing**: All role assignments are configured before compute resource creation to ensure proper permissions are in place when resources are provisioned.
 
 4. **Module Parameter Passing**: The VNet module creates the shared compute UAMI and passes the identity ID and principal ID to both workspace and registry modules for proper role assignment configuration.
+
+5. **Centralized Resource Group Ownership (New)**: Resource groups are created only at the root level. All modules require a pre-existing `resource_group_name` and no longer create RGs internally. This eliminates conditional `count` logic and plan-time unknowns, making plans deterministic and easier to reason about.
+
+6. **Module Contracts (RG Inputs) (New)**:
+    - `modules/aml-vnet`: requires `resource_group_name` (string). All VNet, subnet, UAMI, Private DNS zones, and diagnostics land in this RG.
+    - `modules/aml-registry-smi`: requires `resource_group_name` (string). The Azure ML Registry is created in this RG; the Azure-managed registry RG is still handled by the service.
+    - `modules/hub-network`: already requires `resource_group_name` (no changes).
+
+7. **Migration Notes (New)**:
+    - Remove any `create_resource_group` (bool) inputs from module invocations.
+    - Ensure root creates RGs explicitly (e.g., `rg-aml-vnet-...`, `rg-aml-reg-...`) and passes their names into modules via `resource_group_name`.
+    - Delete or ignore any internal RG resources in modules; references should use the passed `resource_group_name` via locals.
+    - If outputs referenced counted RG IDs, compute the RG ID as `"/subscriptions/${subscription_id}/resourceGroups/${resource_group_name}"` using `data.azurerm_client_config` for the subscription ID.
 
 ## Network Security and Compliance
 
