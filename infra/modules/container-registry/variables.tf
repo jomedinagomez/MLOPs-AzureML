@@ -33,11 +33,6 @@ variable "public_network_access_enabled" {
 }
 
 variable "prefix" {
-  description = "Prefix for all resource names to ensure uniqueness and consistency"
-  type        = string
-}
-
-variable "prefix" {
   description = "Base prefix for all resource names to ensure uniqueness and consistency"
   type        = string
 }

@@ -1,236 +1,199 @@
-# Terraform orchestration outputs
-# These outputs provide access to key resource information from all modules
+# Outputs for Single-Deployment Azure ML Platform
+# Clean, purpose-driven outputs for easy troubleshooting and implementation
 
-###### VNet Module Outputs ######
-output "vnet_id" {
-  description = "ID of the created Virtual Network"
-  value       = module.aml_vnet.vnet_id
-}
-
-output "subnet_id" {
-  description = "ID of the created subnet"
-  value       = module.aml_vnet.subnet_id
-}
-
-output "resource_group_name_dns" {
-  description = "Name of the DNS resource group"
-  value       = module.aml_vnet.resource_group_name_dns
-}
-
-output "dns_zone_ids" {
-  description = "Map of all DNS zone IDs"
-  value = {
-    blob          = module.aml_vnet.dns_zone_blob_id
-    file          = module.aml_vnet.dns_zone_file_id
-    table         = module.aml_vnet.dns_zone_table_id
-    queue         = module.aml_vnet.dns_zone_queue_id
-    keyvault      = module.aml_vnet.dns_zone_keyvault_id
-    acr           = module.aml_vnet.dns_zone_acr_id
-    aml_api       = module.aml_vnet.dns_zone_aml_api_id
-    aml_notebooks = module.aml_vnet.dns_zone_aml_notebooks_id
-  }
-}
-
-output "managed_identity_cc_id" {
-  description = "ID of the compute cluster managed identity from VNet module"
-  value       = module.aml_vnet.cc_identity_id
-}
-
-output "managed_identity_cc_name" {
-  description = "Name of the compute cluster managed identity from VNet module"
-  value       = module.aml_vnet.cc_identity_name
-}
-
-output "managed_identity_cc_principal_id" {
-  description = "Principal ID of the compute cluster managed identity from VNet module"
-  value       = module.aml_vnet.cc_identity_principal_id
-  sensitive   = true
-}
-
-output "managed_identity_moe_id" {
-  description = "ID of the managed online endpoint identity from VNet module"
-  value       = module.aml_vnet.moe_identity_id
-}
-
-output "managed_identity_moe_name" {
-  description = "Name of the managed online endpoint identity from VNet module"
-  value       = module.aml_vnet.moe_identity_name
-}
-
-output "managed_identity_moe_principal_id" {
-  description = "Principal ID of the managed online endpoint identity from VNet module"
-  value       = module.aml_vnet.moe_identity_principal_id
-  sensitive   = true
-}
-
-###### ML Workspace Module Outputs ######
-output "workspace_id" {
-  description = "ID of the Azure Machine Learning workspace"
-  value       = module.aml_workspace.workspace_id
-  sensitive   = false
-}
-
-output "workspace_name" {
-  description = "Name of the Azure Machine Learning workspace"
-  value       = module.aml_workspace.workspace_name
-}
-
-output "workspace_principal_id" {
-  description = "Principal ID of the Azure ML workspace system-managed identity"
-  value       = module.aml_workspace.workspace_principal_id
-  sensitive   = true
-}
-
-output "workspace_resource_group_name" {
-  description = "Resource group name of the ML workspace"
-  value       = module.aml_workspace.resource_group_name
-}
-
-output "storage_account_name" {
-  description = "Name of the storage account associated with the ML workspace"
-  value       = module.aml_workspace.storage_account_name
-}
-
-output "storage_account_id" {
-  description = "ID of the storage account associated with the ML workspace"
-  value       = module.aml_workspace.storage_account_id
-}
-
-output "keyvault_name" {
-  description = "Name of the Key Vault associated with the ML workspace"
-  value       = module.aml_workspace.keyvault_name
-}
-
-output "keyvault_id" {
-  description = "ID of the Key Vault associated with the ML workspace"
-  value       = module.aml_workspace.keyvault_id
-}
-
-output "container_registry_name" {
-  description = "Name of the Container Registry associated with the ML workspace"
-  value       = module.aml_workspace.container_registry_name
-}
-
-output "container_registry_id" {
-  description = "ID of the Container Registry associated with the ML workspace"
-  value       = module.aml_workspace.container_registry_id
-}
-
-# Note: Application Insights outputs not available in current module
-# output "application_insights_name" {
-#   description = "Name of the Application Insights associated with the ML workspace"
-#   value       = module.aml_workspace.application_insights_name
-# }
-
-# output "application_insights_id" {
-#   description = "ID of the Application Insights associated with the ML workspace"
-#   value       = module.aml_workspace.application_insights_id
-# }
-
-# Note: User-assigned managed identity outputs not available in current module
-# output "managed_identity_id" {
-#   description = "ID of the user-assigned managed identity"
-#   value       = module.aml_workspace.managed_identity_id
-# }
-
-# output "managed_identity_principal_id" {
-#   description = "Principal ID of the user-assigned managed identity"
-#   value       = module.aml_workspace.managed_identity_principal_id
-#   sensitive   = true
-# }
-
-###### ML Registry Module Outputs ######
-output "registry_id" {
-  description = "ID of the Azure Machine Learning registry"
-  value       = module.aml_registry.registry_id
-}
-
-output "registry_name" {
-  description = "Name of the Azure Machine Learning registry"
-  value       = module.aml_registry.registry_name
-}
-
-output "registry_resource_group_name" {
-  description = "Resource group name of the ML registry"
-  value       = module.aml_registry.resource_group_name
-}
-
-# Note: Registry storage, keyvault, and container registry outputs not available in current module
-# output "registry_storage_account_name" {
-#   description = "Name of the storage account associated with the ML registry"
-#   value       = module.aml_registry.storage_account_name
-# }
-
-# output "registry_keyvault_name" {
-#   description = "Name of the Key Vault associated with the ML registry"
-#   value       = module.aml_registry.keyvault_name
-# }
-
-# output "registry_container_registry_name" {
-#   description = "Name of the Container Registry associated with the ML registry"
-#   value       = module.aml_registry.container_registry_name
-# }
-
-###### Summary Output ######
-output "deployment_summary" {
-  description = "Summary of all deployed resources"
-  value = {
-    environment = var.purpose
-    location    = var.location
-    resources = {
-      workspace = {
-        name = module.aml_workspace.workspace_name
-        id   = module.aml_workspace.workspace_id
-      }
-      registry = {
-        name = module.aml_registry.registry_name
-        id   = module.aml_registry.registry_id
-      }
-      networking = {
-        vnet_id   = module.aml_vnet.vnet_id
-        subnet_id = module.aml_vnet.subnet_id
-      }
-    }
-  }
-}
-
-###### Service Principal Outputs ######
-output "service_principal_id" {
-  description = "Object ID of the deployment service principal"
-  value       = var.create_service_principal ? azuread_service_principal.deployment_sp[0].object_id : null
-  sensitive   = true
-}
+# ===============================
+# SERVICE PRINCIPAL OUTPUTS
+# ===============================
 
 output "service_principal_application_id" {
-  description = "Application (client) ID of the deployment service principal"
-  value       = var.create_service_principal ? azuread_service_principal.deployment_sp[0].client_id : null
-  sensitive   = true
+  description = "Application ID of the deployment service principal"
+  value       = azuread_application.deployment_sp_app.client_id
+}
+
+output "service_principal_object_id" {
+  description = "Object ID of the deployment service principal"
+  value       = azuread_service_principal.deployment_sp.object_id
 }
 
 output "service_principal_display_name" {
   description = "Display name of the deployment service principal"
-  value       = var.create_service_principal ? azuread_service_principal.deployment_sp[0].display_name : null
+  value       = azuread_application.deployment_sp_app.display_name
 }
 
-output "service_principal_secret" {
-  description = "Client secret for the deployment service principal (expires in 2 years)"
-  value       = var.create_service_principal ? azuread_application_password.deployment_sp_secret[0].value : null
-  sensitive   = true
+# ===============================
+# DEVELOPMENT ENVIRONMENT OUTPUTS
+# ===============================
+
+output "dev_workspace_name" {
+  description = "Name of the development Azure ML workspace"
+  value       = azurerm_machine_learning_workspace.dev_workspace.name
 }
 
-output "service_principal_secret_id" {
-  description = "ID of the service principal secret"
-  value       = var.create_service_principal ? azuread_application_password.deployment_sp_secret[0].key_id : null
-  sensitive   = true
+output "dev_workspace_id" {
+  description = "ID of the development Azure ML workspace"
+  value       = azurerm_machine_learning_workspace.dev_workspace.id
 }
 
-output "service_principal_auth_instructions" {
-  description = "Instructions for using the service principal for authentication"
-  value = var.create_service_principal ? {
-    client_id       = azuread_service_principal.deployment_sp[0].client_id
-    tenant_id       = data.azurerm_client_config.current.tenant_id
-    subscription_id = data.azurerm_client_config.current.subscription_id
-    instructions    = "Use these values to set ARM_CLIENT_ID, ARM_TENANT_ID, ARM_SUBSCRIPTION_ID environment variables. Get the secret from 'service_principal_secret' output."
-  } : null
-  sensitive = true
+output "dev_registry_name" {
+  description = "Name of the development Azure ML registry"
+  value       = azurerm_machine_learning_registry.dev_registry.name
+}
+
+output "dev_registry_id" {
+  description = "ID of the development Azure ML registry"
+  value       = azurerm_machine_learning_registry.dev_registry.id
+}
+
+output "dev_container_registry_name" {
+  description = "Name of the development container registry"
+  value       = module.dev_container_registry.container_registry_name
+}
+
+output "dev_key_vault_name" {
+  description = "Name of the development key vault"
+  value       = module.dev_keyvault.key_vault_name
+}
+
+output "dev_storage_account_name" {
+  description = "Name of the development storage account"
+  value       = module.dev_storage_account.storage_account_name
+}
+
+output "dev_vnet_id" {
+  description = "ID of the development virtual network"
+  value       = azurerm_virtual_network.dev_vnet.id
+}
+
+output "dev_subnet_id" {
+  description = "ID of the development subnet"
+  value       = azurerm_subnet.dev_subnet.id
+}
+
+# ===============================
+# PRODUCTION ENVIRONMENT OUTPUTS
+# ===============================
+
+output "prod_workspace_name" {
+  description = "Name of the production Azure ML workspace"
+  value       = azurerm_machine_learning_workspace.prod_workspace.name
+}
+
+output "prod_workspace_id" {
+  description = "ID of the production Azure ML workspace"
+  value       = azurerm_machine_learning_workspace.prod_workspace.id
+}
+
+output "prod_registry_name" {
+  description = "Name of the production Azure ML registry"
+  value       = azurerm_machine_learning_registry.prod_registry.name
+}
+
+output "prod_registry_id" {
+  description = "ID of the production Azure ML registry"
+  value       = azurerm_machine_learning_registry.prod_registry.id
+}
+
+output "prod_container_registry_name" {
+  description = "Name of the production container registry"
+  value       = module.prod_container_registry.container_registry_name
+}
+
+output "prod_key_vault_name" {
+  description = "Name of the production key vault"
+  value       = module.prod_keyvault.key_vault_name
+}
+
+output "prod_storage_account_name" {
+  description = "Name of the production storage account"
+  value       = module.prod_storage_account.storage_account_name
+}
+
+output "prod_vnet_id" {
+  description = "ID of the production virtual network"
+  value       = azurerm_virtual_network.prod_vnet.id
+}
+
+output "prod_subnet_id" {
+  description = "ID of the production subnet"
+  value       = azurerm_subnet.prod_subnet.id
+}
+
+# ===============================
+# CROSS-ENVIRONMENT CONNECTIVITY
+# ===============================
+
+output "cross_environment_connectivity" {
+  description = "Cross-environment connectivity configuration"
+  value = {
+    dev_to_prod_registry_access = {
+      enabled     = true
+      description = "Production workspace can pull from development registry"
+    }
+    prod_workspace_permissions = {
+      dev_registry_reader     = "Configured"
+      dev_registry_contributor = "Configured for asset promotion"
+    }
+  }
+  sensitive = false
+}
+
+# ===============================
+# PLATFORM DEPLOYMENT SUMMARY
+# ===============================
+
+output "platform_deployment_summary" {
+  description = "Complete platform deployment summary with all key information"
+  value = {
+    deployment_timestamp = timestamp()
+    terraform_version    = "~> 1.0"
+    region               = var.location
+    region_code          = var.location_code
+    
+    environments_deployed = ["development", "production"]
+    
+    service_principal = {
+      name           = azuread_application.deployment_sp_app.display_name
+      application_id = azuread_application.deployment_sp_app.client_id
+    }
+    
+    environment_config = {
+      development = {
+        purpose              = "dev"
+        vnet_address_space   = "10.1.0.0/16"
+        subnet_address_prefix = "10.1.1.0/24"
+        auto_purge_enabled   = true
+        cross_env_rbac       = false
+      }
+      production = {
+        purpose              = "prod"
+        vnet_address_space   = "10.2.0.0/16"
+        subnet_address_prefix = "10.2.1.0/24"
+        auto_purge_enabled   = false
+        cross_env_rbac       = true
+      }
+    }
+    
+    key_endpoints = {
+      development = {
+        workspace_endpoint   = "https://${azurerm_machine_learning_workspace.dev_workspace.name}.api.azureml.ms"
+        registry_endpoint    = "https://${azurerm_machine_learning_registry.dev_registry.name}.registry.azureml.ms"
+        container_registry   = "${module.dev_container_registry.container_registry_name}.azurecr.io"
+        key_vault           = "https://${module.dev_keyvault.key_vault_name}.vault.azure.net"
+        storage_account     = "https://${module.dev_storage_account.storage_account_name}.blob.core.windows.net"
+      }
+      production = {
+        workspace_endpoint   = "https://${azurerm_machine_learning_workspace.prod_workspace.name}.api.azureml.ms"
+        registry_endpoint    = "https://${azurerm_machine_learning_registry.prod_registry.name}.registry.azureml.ms"
+        container_registry   = "${module.prod_container_registry.container_registry_name}.azurecr.io"
+        key_vault           = "https://${module.prod_keyvault.key_vault_name}.vault.azure.net"
+        storage_account     = "https://${module.prod_storage_account.storage_account_name}.blob.core.windows.net"
+      }
+    }
+    
+    resource_naming = {
+      pattern      = "[prefix][service][purpose][location_code][random_string]"
+      example_dev  = azurerm_machine_learning_workspace.dev_workspace.name
+      example_prod = azurerm_machine_learning_workspace.prod_workspace.name
+    }
+  }
 }
