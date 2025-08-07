@@ -23,12 +23,12 @@ output "workspace_identity_id" {
 
 output "resource_group_name" {
   description = "Name of the resource group containing the AML workspace"
-  value       = azurerm_resource_group.rgwork.name
+  value       = var.resource_group_name
 }
 
 output "resource_group_id" {
   description = "ID of the resource group containing the AML workspace"
-  value       = azurerm_resource_group.rgwork.id
+  value       = "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name}"
 }
 
 output "storage_account_id" {

@@ -4,17 +4,13 @@
 ## Get current client configuration for compute instance assignment
 data "azurerm_client_config" "current" {}
 
-##### Create scaffolding
+##### Resource Group Context (passed from root)
 #####
 
-## Create the resource group the resources in this deployment will be deployed to
-##
-resource "azurerm_resource_group" "rgwork" {
-
-  name     = "rg-aml-ws-${var.purpose}-${var.location_code}${var.random_string}"
-  location = var.location
-
-  tags = var.tags
+locals {
+  rg_name = var.resource_group_name
+  rg_id   = "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name}"
+  resolved_suffix = coalesce(var.naming_suffix, "")
 }
 
 ## Create a Log Analytics Workspace where resources in this deployment will send their diagnostic logs
@@ -26,10 +22,11 @@ resource "azurerm_resource_group" "rgwork" {
 ## Create Application Insights for AML Workspace
 ##
 resource "azurerm_application_insights" "aml-appins" {
-  name                = "${local.app_insights_prefix}${var.purpose}${var.location_code}${var.random_string}"
+  name                = "${local.app_insights_prefix}${var.purpose}${var.location_code}${local.resolved_suffix}"
   location            = var.location
-  resource_group_name = azurerm_resource_group.rgwork.name
+  resource_group_name = local.rg_name
   workspace_id        = var.log_analytics_workspace_id
+  name                = "${local.app_insights_prefix}${var.purpose}${var.location_code}${local.resolved_suffix}"
   application_type    = "other"
 }
 
@@ -40,10 +37,10 @@ module "container_registry" {
   prefix              = var.prefix
   resource_prefixes   = var.resource_prefixes
   purpose             = var.purpose
-  random_string       = var.random_string
+  naming_suffix       = local.resolved_suffix
   location            = var.location
   location_code       = var.location_code
-  resource_group_name = azurerm_resource_group.rgwork.name
+  resource_group_name = local.rg_name
   law_resource_id     = var.log_analytics_workspace_id
   enable_auto_purge   = var.enable_auto_purge
 
@@ -58,10 +55,10 @@ module "storage_account_default" {
   prefix              = var.prefix
   resource_prefixes   = var.resource_prefixes
   purpose             = var.purpose
-  random_string       = var.random_string
+  naming_suffix       = local.resolved_suffix
   location            = var.location
   location_code       = var.location_code
-  resource_group_name = azurerm_resource_group.rgwork.name
+  resource_group_name = local.rg_name
   tags                = var.tags
 
   # Identity controls
@@ -91,10 +88,10 @@ module "keyvault_aml" {
   source              = "../key-vault"
   prefix              = var.prefix
   resource_prefixes   = var.resource_prefixes
-  random_string       = var.random_string
+  naming_suffix       = local.resolved_suffix
   location            = var.location
   location_code       = var.location_code
-  resource_group_name = azurerm_resource_group.rgwork.name
+  resource_group_name = local.rg_name
   purpose             = var.purpose
   law_resource_id     = var.log_analytics_workspace_id
   tags                = var.tags
@@ -117,7 +114,7 @@ module "keyvault_aml" {
 resource "azurerm_user_assigned_identity" "workspace_identity" {
   name                = "${var.purpose}-mi-workspace"
   location            = var.location
-  resource_group_name = azurerm_resource_group.rgwork.name
+  resource_group_name = local.rg_name
   tags                = var.tags
 }
 
@@ -125,7 +122,6 @@ resource "azurerm_user_assigned_identity" "workspace_identity" {
 ##
 resource "azapi_resource" "aml_workspace" {
   depends_on = [
-    azurerm_resource_group.rgwork,
     azurerm_application_insights.aml-appins,
     module.storage_account_default,
     module.keyvault_aml,
@@ -134,8 +130,8 @@ resource "azapi_resource" "aml_workspace" {
   ]
 
   type                      = "Microsoft.MachineLearningServices/workspaces@2025-04-01-preview"
-  name                      = "${local.aml_workspace_prefix}${var.purpose}${var.location_code}${var.random_string}"
-  parent_id                 = azurerm_resource_group.rgwork.id
+  name                      = "${local.aml_workspace_prefix}${var.purpose}${var.location_code}${local.resolved_suffix}"
+  parent_id                 = local.rg_id
   location                  = var.location
   schema_validation_enabled = false
 
@@ -157,7 +153,7 @@ resource "azapi_resource" "aml_workspace" {
 
       # The version of the managed network model to use; unsure what v2 is
       managedNetworkKind = "V1"
-
+  name                      = "${local.aml_workspace_prefix}${var.purpose}${var.location_code}${local.resolved_suffix}"
       # The resources that will be associated with the AML Workspace
       applicationInsights = azurerm_application_insights.aml-appins.id
       keyVault            = module.keyvault_aml.id
@@ -359,10 +355,10 @@ module "private_endpoint_st_default_blob" {
   ]
 
   source              = "../private-endpoint"
-  random_string       = var.random_string
+  naming_suffix       = local.resolved_suffix
   location            = var.workload_vnet_location
   location_code       = var.workload_vnet_location_code
-  resource_group_name = azurerm_resource_group.rgwork.name
+  resource_group_name = local.rg_name
   tags                = var.tags
 
   resource_name    = module.storage_account_default.name
@@ -379,10 +375,10 @@ module "private_endpoint_st_default_file" {
   ]
 
   source              = "../private-endpoint"
-  random_string       = var.random_string
+  naming_suffix       = local.resolved_suffix
   location            = var.workload_vnet_location
   location_code       = var.workload_vnet_location_code
-  resource_group_name = azurerm_resource_group.rgwork.name
+  resource_group_name = local.rg_name
   tags                = var.tags
 
   resource_name    = module.storage_account_default.name
@@ -399,10 +395,10 @@ module "private_endpoint_st_default_table" {
   ]
 
   source              = "../private-endpoint"
-  random_string       = var.random_string
+  naming_suffix       = local.resolved_suffix
   location            = var.workload_vnet_location
   location_code       = var.workload_vnet_location_code
-  resource_group_name = azurerm_resource_group.rgwork.name
+  resource_group_name = local.rg_name
   tags                = var.tags
 
   resource_name    = module.storage_account_default.name
@@ -419,10 +415,10 @@ module "private_endpoint_st_default_queue" {
   ]
 
   source              = "../private-endpoint"
-  random_string       = var.random_string
+  naming_suffix       = local.resolved_suffix
   location            = var.workload_vnet_location
   location_code       = var.workload_vnet_location_code
-  resource_group_name = azurerm_resource_group.rgwork.name
+  resource_group_name = local.rg_name
   tags                = var.tags
 
   resource_name    = module.storage_account_default.name
@@ -439,10 +435,10 @@ module "private_endpoint_kv" {
   ]
 
   source              = "../private-endpoint"
-  random_string       = var.random_string
+  naming_suffix       = local.resolved_suffix
   location            = var.workload_vnet_location
   location_code       = var.workload_vnet_location_code
-  resource_group_name = azurerm_resource_group.rgwork.name
+  resource_group_name = local.rg_name
   tags                = var.tags
 
   resource_name    = module.keyvault_aml.name
@@ -460,10 +456,10 @@ module "private_endpoint_container_registry" {
   ]
 
   source              = "../private-endpoint"
-  random_string       = var.random_string
+  naming_suffix       = local.resolved_suffix
   location            = var.workload_vnet_location
   location_code       = var.workload_vnet_location_code
-  resource_group_name = azurerm_resource_group.rgwork.name
+  resource_group_name = local.rg_name
   tags                = var.tags
 
   resource_name    = module.container_registry.name
@@ -485,10 +481,10 @@ module "private_endpoint_aml_workspace" {
   ]
 
   source              = "../private-endpoint"
-  random_string       = var.random_string
+  naming_suffix       = local.resolved_suffix
   location            = var.workload_vnet_location
   location_code       = var.workload_vnet_location_code
-  resource_group_name = azurerm_resource_group.rgwork.name
+  resource_group_name = local.rg_name
   tags                = var.tags
 
   resource_name    = azapi_resource.aml_workspace.name
@@ -535,8 +531,8 @@ resource "azurerm_role_assignment" "rg_reader" {
   depends_on = [
     time_sleep.wait_aml_workspace_identities
   ]
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${azurerm_user_assigned_identity.workspace_identity.principal_id}reader")
-  scope                = azurerm_resource_group.rgwork.id
+  name                 = uuidv5("dns", "${local.rg_name}${azurerm_user_assigned_identity.workspace_identity.principal_id}reader")
+  scope                = local.rg_id
   role_definition_name = "Reader"
   principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
 }
@@ -547,8 +543,8 @@ resource "azurerm_role_assignment" "ai_network_connection_approver" {
   depends_on = [
     azurerm_role_assignment.rg_reader
   ]
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${azurerm_user_assigned_identity.workspace_identity.principal_id}netapprover")
-  scope                = azurerm_resource_group.rgwork.id
+  name                 = uuidv5("dns", "${local.rg_name}${azurerm_user_assigned_identity.workspace_identity.principal_id}netapprover")
+  scope                = local.rg_id
   role_definition_name = "Azure AI Enterprise Network Connection Approver"
   principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
 }
@@ -559,8 +555,8 @@ resource "azurerm_role_assignment" "ai_administrator" {
   depends_on = [
     azurerm_role_assignment.ai_network_connection_approver
   ]
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${azurerm_user_assigned_identity.workspace_identity.principal_id}aiadmin")
-  scope                = azurerm_resource_group.rgwork.id
+  name                 = uuidv5("dns", "${local.rg_name}${azurerm_user_assigned_identity.workspace_identity.principal_id}aiadmin")
+  scope                = local.rg_id
   role_definition_name = "Azure AI Administrator"
   principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
 }
@@ -575,7 +571,7 @@ resource "azurerm_role_assignment" "wk_perm_ai_developer" {
   depends_on = [
     azapi_resource.aml_workspace
   ]
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${var.user_object_id}${azapi_resource.aml_workspace.name}aidev")
+  name                 = uuidv5("dns", "${local.rg_name}${var.user_object_id}${azapi_resource.aml_workspace.name}aidev")
   scope                = azapi_resource.aml_workspace.id
   role_definition_name = "Azure AI Developer"
   principal_id         = var.user_object_id
@@ -588,7 +584,7 @@ resource "azurerm_role_assignment" "wk_perm_compute_operator" {
   depends_on = [
     azapi_resource.aml_workspace
   ]
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${var.user_object_id}${azapi_resource.aml_workspace.name}computeoperator")
+  name                 = uuidv5("dns", "${local.rg_name}${var.user_object_id}${azapi_resource.aml_workspace.name}computeoperator")
   scope                = azapi_resource.aml_workspace.id
   role_definition_name = "AzureML Compute Operator"
   principal_id         = var.user_object_id
@@ -601,7 +597,7 @@ resource "azurerm_role_assignment" "wk_perm_data_scientist" {
   depends_on = [
     azapi_resource.aml_workspace
   ]
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${var.user_object_id}${azapi_resource.aml_workspace.name}datascientist")
+  name                 = uuidv5("dns", "${local.rg_name}${var.user_object_id}${azapi_resource.aml_workspace.name}datascientist")
   scope                = azapi_resource.aml_workspace.id
   role_definition_name = "AzureML Data Scientist"
   principal_id         = var.user_object_id
@@ -611,14 +607,14 @@ resource "azurerm_role_assignment" "wk_perm_data_scientist" {
 ## over the default storage account
 ##
 resource "azurerm_role_assignment" "blob_perm_default_sa" {
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${var.user_object_id}${module.storage_account_default.name}blob")
+  name                 = uuidv5("dns", "${local.rg_name}${var.user_object_id}${module.storage_account_default.name}blob")
   scope                = module.storage_account_default.id
   role_definition_name = "Storage Blob Data Contributor"
   principal_id         = var.user_object_id
 }
 
 resource "azurerm_role_assignment" "file_perm_default_sa" {
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${var.user_object_id}${module.storage_account_default.name}file")
+  name                 = uuidv5("dns", "${local.rg_name}${var.user_object_id}${module.storage_account_default.name}file")
   scope                = module.storage_account_default.id
   role_definition_name = "Storage File Data Privileged Contributor"
   principal_id         = var.user_object_id
@@ -649,7 +645,7 @@ resource "azurerm_role_assignment" "compute_ml_data_scientist" {
     azapi_resource.aml_workspace
   ]
 
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}mldatascientist")
+  name                 = uuidv5("dns", "${local.rg_name}${local.compute_cluster_principal_id}mldatascientist")
   scope                = azapi_resource.aml_workspace.id # Individual workspace resource
   role_definition_name = "AzureML Data Scientist"
   principal_id         = local.compute_cluster_principal_id
@@ -663,7 +659,7 @@ resource "azurerm_role_assignment" "compute_keyvault_secrets_user" {
     module.keyvault_aml
   ]
 
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}${module.keyvault_aml.name}secretsuser")
+  name                 = uuidv5("dns", "${local.rg_name}${local.compute_cluster_principal_id}${module.keyvault_aml.name}secretsuser")
   scope                = module.keyvault_aml.id # Individual Key Vault resource
   role_definition_name = "Key Vault Secrets User"
   principal_id         = local.compute_cluster_principal_id
@@ -677,7 +673,7 @@ resource "azurerm_role_assignment" "compute_storage_blob_contributor" {
     module.storage_account_default
   ]
 
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}${module.storage_account_default.name}blobcontrib")
+  name                 = uuidv5("dns", "${local.rg_name}${local.compute_cluster_principal_id}${module.storage_account_default.name}blobcontrib")
   scope                = module.storage_account_default.id # Individual storage account resource
   role_definition_name = "Storage Blob Data Contributor"
   principal_id         = local.compute_cluster_principal_id
@@ -691,7 +687,7 @@ resource "azurerm_role_assignment" "compute_storage_file_privileged_contributor"
     module.storage_account_default
   ]
 
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}${module.storage_account_default.name}filepriv")
+  name                 = uuidv5("dns", "${local.rg_name}${local.compute_cluster_principal_id}${module.storage_account_default.name}filepriv")
   scope                = module.storage_account_default.id # Individual storage account resource
   role_definition_name = "Storage File Data Privileged Contributor"
   principal_id         = local.compute_cluster_principal_id
@@ -705,7 +701,7 @@ resource "azurerm_role_assignment" "compute_acr_pull" {
     module.container_registry
   ]
 
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}${module.container_registry.name}acrpull")
+  name                 = uuidv5("dns", "${local.rg_name}${local.compute_cluster_principal_id}${module.container_registry.name}acrpull")
   scope                = module.container_registry.id # Individual ACR resource
   role_definition_name = "AcrPull"
   principal_id         = local.compute_cluster_principal_id
@@ -719,7 +715,7 @@ resource "azurerm_role_assignment" "compute_acr_push" {
     azurerm_role_assignment.compute_acr_pull
   ]
 
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}${module.container_registry.name}acrpush")
+  name                 = uuidv5("dns", "${local.rg_name}${local.compute_cluster_principal_id}${module.container_registry.name}acrpush")
   scope                = module.container_registry.id # Individual ACR resource
   role_definition_name = "AcrPush"
   principal_id         = local.compute_cluster_principal_id
@@ -733,7 +729,7 @@ resource "azurerm_role_assignment" "compute_workspace_contributor" {
     azapi_resource.aml_workspace
   ]
 
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}${azapi_resource.aml_workspace.name}contributor")
+  name                 = uuidv5("dns", "${local.rg_name}${local.compute_cluster_principal_id}${azapi_resource.aml_workspace.name}contributor")
   scope                = azapi_resource.aml_workspace.id # Individual workspace resource
   role_definition_name = "Contributor"
   principal_id         = local.compute_cluster_principal_id
@@ -744,11 +740,11 @@ resource "azurerm_role_assignment" "compute_workspace_contributor" {
 ##
 resource "azurerm_role_assignment" "compute_rg_reader" {
   depends_on = [
-    azurerm_resource_group.rgwork
+    azapi_resource.aml_workspace
   ]
 
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${local.compute_cluster_principal_id}reader")
-  scope                = azurerm_resource_group.rgwork.id # Resource group scope
+  name                 = uuidv5("dns", "${local.rg_name}${local.compute_cluster_principal_id}reader")
+  scope                = local.rg_id # Resource group scope
   role_definition_name = "Reader"
   principal_id         = local.compute_cluster_principal_id
 }
@@ -762,7 +758,7 @@ resource "azurerm_role_assignment" "workspace_storage_blob_owner" {
     time_sleep.wait_aml_workspace_identities
   ]
 
-  name                 = uuidv5("dns", "${azurerm_resource_group.rgwork.name}${azurerm_user_assigned_identity.workspace_identity.principal_id}${module.storage_account_default.name}blobowner")
+  name                 = uuidv5("dns", "${local.rg_name}${azurerm_user_assigned_identity.workspace_identity.principal_id}${module.storage_account_default.name}blobowner")
   scope                = module.storage_account_default.id # Individual storage account resource
   role_definition_name = "Storage Blob Data Owner"
   principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
@@ -773,7 +769,7 @@ resource "azurerm_role_assignment" "workspace_storage_blob_owner" {
 
 # Diagnostic settings for Application Insights
 resource "azurerm_monitor_diagnostic_setting" "appinsights_diagnostics" {
-  name                       = "${azurerm_application_insights.aml-appins.name}-diagnostics-${var.purpose}-${var.random_string}"
+  name                       = "${azurerm_application_insights.aml-appins.name}-diagnostics-${var.purpose}-${local.resolved_suffix}"
   target_resource_id         = azurerm_application_insights.aml-appins.id
   log_analytics_workspace_id = var.log_analytics_workspace_id
 
@@ -828,7 +824,7 @@ resource "azurerm_monitor_diagnostic_setting" "appinsights_diagnostics" {
 
 # Azure ML workspace diagnostic settings with ALL supported log categories
 resource "azurerm_monitor_diagnostic_setting" "ml_workspace_diagnostics" {
-  name                       = "${azapi_resource.aml_workspace.name}-diagnostics-${var.purpose}-${var.random_string}"
+  name                       = "${azapi_resource.aml_workspace.name}-diagnostics-${var.purpose}-${local.resolved_suffix}"
   target_resource_id         = azapi_resource.aml_workspace.id
   log_analytics_workspace_id = var.log_analytics_workspace_id
 
@@ -1104,7 +1100,7 @@ resource "azapi_update_resource" "workspace_image_build_config" {
 
   # Add verification step
   provisioner "local-exec" {
-    command = "Start-Sleep -Seconds 10; Write-Host 'Image build compute configuration applied. Please verify manually with: az ml workspace show --name ${azapi_resource.aml_workspace.name} --resource-group ${azurerm_resource_group.rgwork.name} --query image_build_compute'"
+  command = "Start-Sleep -Seconds 10; Write-Host 'Image build compute configuration applied. Please verify manually with: az ml workspace show --name ${azapi_resource.aml_workspace.name} --resource-group ${local.rg_name} --query image_build_compute'"
     interpreter = ["pwsh", "-Command"]
   }
 }

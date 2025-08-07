@@ -1,9 +1,10 @@
 locals {
-  rg_name = var.resource_group_name
+  rg_name         = var.resource_group_name
+  resolved_suffix = coalesce(var.naming_suffix, "")
 }
 
 resource "azurerm_virtual_network" "aml_vnet" {
-  name                = "${local.vnet_prefix}${var.purpose}${var.location_code}${var.random_string}"
+  name                = "${local.vnet_prefix}${var.purpose}${var.location_code}${local.resolved_suffix}"
   address_space       = [var.vnet_address_space]
   location            = var.location
   resource_group_name = local.rg_name
@@ -11,7 +12,7 @@ resource "azurerm_virtual_network" "aml_vnet" {
 }
 
 resource "azurerm_subnet" "aml_subnet" {
-  name                 = "${local.subnet_prefix}${var.purpose}${var.location_code}${var.random_string}"
+  name                 = "${local.subnet_prefix}${var.purpose}${var.location_code}${local.resolved_suffix}"
   resource_group_name  = local.rg_name
   virtual_network_name = azurerm_virtual_network.aml_vnet.name
   address_prefixes     = [var.subnet_address_prefix]
@@ -177,7 +178,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "aml_instances_link" {
 
 # Log Analytics Workspace for VNet monitoring
 resource "azurerm_log_analytics_workspace" "vnet_logs" {
-  name                = "${local.log_analytics_prefix}${var.purpose}${var.location_code}${var.random_string}"
+  name                = "${local.log_analytics_prefix}${var.purpose}${var.location_code}${local.resolved_suffix}"
   location            = var.location
   resource_group_name = local.rg_name
   sku                 = var.log_analytics_sku
@@ -192,7 +193,7 @@ data "azurerm_client_config" "identity_config" {}
 
 # Virtual Network diagnostic settings with supported log categories
 resource "azurerm_monitor_diagnostic_setting" "vnet_diagnostics" {
-  name                       = "${azurerm_virtual_network.aml_vnet.name}-diagnostics-${var.purpose}-${var.random_string}"
+  name                       = "${azurerm_virtual_network.aml_vnet.name}-diagnostics-${var.purpose}-${local.resolved_suffix}"
   target_resource_id         = azurerm_virtual_network.aml_vnet.id
   log_analytics_workspace_id = azurerm_log_analytics_workspace.vnet_logs.id
 

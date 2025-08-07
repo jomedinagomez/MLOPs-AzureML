@@ -32,9 +32,15 @@ variable "location_code" {
   type        = string
 }
 
-variable "random_string" {
-  description = "Unique string for resource naming"
+variable "resource_group_name" {
+  description = "The name of the existing resource group where all AML workspace resources will be deployed"
   type        = string
+}
+
+variable "naming_suffix" {
+  description = "Suffix for resource naming (preferred over random_string)"
+  type        = string
+  default     = null
 }
 
 variable "vnet_address_space" {

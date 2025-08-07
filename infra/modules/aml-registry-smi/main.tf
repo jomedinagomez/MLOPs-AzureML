@@ -4,6 +4,7 @@
 locals {
   rg_name = var.resource_group_name
   rg_id   = "/subscriptions/${data.azurerm_client_config.identity_config.subscription_id}/resourceGroups/${local.rg_name}"
+  resolved_suffix = coalesce(var.naming_suffix, "")
 }
 
 ## Resource group is expected to be created by the root module
@@ -15,7 +16,7 @@ locals {
 ##
 resource "azapi_resource" "registry" {
   type                      = "Microsoft.MachineLearningServices/registries@2025-01-01-preview"
-  name                      = "${local.aml_registry_prefix}${var.purpose}${var.location_code}${var.random_string}"
+  name                      = "${local.aml_registry_prefix}${var.purpose}${var.location_code}${local.resolved_suffix}"
   parent_id                 = local.rg_id
   location                  = var.location
   schema_validation_enabled = false
@@ -90,8 +91,7 @@ module "private_endpoint_aml_registry" {
   ]
 
   source = "../private-endpoint"
-
-  random_string       = var.random_string
+  naming_suffix       = local.resolved_suffix
   location            = var.workload_vnet_location
   location_code       = var.workload_vnet_location_code
   resource_group_name = local.rg_name

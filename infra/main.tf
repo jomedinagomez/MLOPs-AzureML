@@ -21,13 +21,9 @@ terraform {
       source  = "hashicorp/null"
       version = "~> 3.2"
     }
-    time = {
+  time = {
       source  = "hashicorp/time"
       version = "~> 0.13"
-    }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.1"
     }
   }
 }
@@ -57,13 +53,7 @@ provider "azuread" {}
 # Get current client configuration
 data "azurerm_client_config" "current" {}
 
-# Generate random string for resource naming
-resource "random_string" "main" {
-  length  = 4
-  special = false
-  upper   = false
-  numeric = true
-}
+# Fixed naming suffix provided via var.naming_suffix
 
 # ===============================
 # LOCAL VALUES
@@ -118,7 +108,7 @@ resource "azuread_application_password" "deployment_sp_secret" {
 
 # Development Environment Resource Groups
 resource "azurerm_resource_group" "dev_vnet_rg" {
-  name     = "rg-${var.prefix}-vnet-dev-${var.location_code}${random_string.main.result}"
+  name     = "rg-${var.prefix}-vnet-dev-${var.location_code}${var.naming_suffix}"
   location = var.location
   tags = merge(var.tags, {
     environment = "development"
@@ -128,7 +118,7 @@ resource "azurerm_resource_group" "dev_vnet_rg" {
 }
 
 resource "azurerm_resource_group" "dev_workspace_rg" {
-  name     = "rg-${var.prefix}-ws-dev-${var.location_code}${random_string.main.result}"
+  name     = "rg-${var.prefix}-ws-dev-${var.location_code}${var.naming_suffix}"
   location = var.location
   tags = merge(var.tags, {
     environment = "development"
@@ -138,7 +128,7 @@ resource "azurerm_resource_group" "dev_workspace_rg" {
 }
 
 resource "azurerm_resource_group" "dev_registry_rg" {
-  name     = "rg-${var.prefix}-reg-dev-${var.location_code}${random_string.main.result}"
+  name     = "rg-${var.prefix}-reg-dev-${var.location_code}${var.naming_suffix}"
   location = var.location
   tags = merge(var.tags, {
     environment = "development"
@@ -149,7 +139,7 @@ resource "azurerm_resource_group" "dev_registry_rg" {
 
 # Production Environment Resource Groups
 resource "azurerm_resource_group" "prod_vnet_rg" {
-  name     = "rg-${var.prefix}-vnet-prod-${var.location_code}${random_string.main.result}"
+  name     = "rg-${var.prefix}-vnet-prod-${var.location_code}${var.naming_suffix}"
   location = var.location
   tags = merge(var.tags, {
     environment = "production"
@@ -159,7 +149,7 @@ resource "azurerm_resource_group" "prod_vnet_rg" {
 }
 
 resource "azurerm_resource_group" "prod_workspace_rg" {
-  name     = "rg-${var.prefix}-ws-prod-${var.location_code}${random_string.main.result}"
+  name     = "rg-${var.prefix}-ws-prod-${var.location_code}${var.naming_suffix}"
   location = var.location
   tags = merge(var.tags, {
     environment = "production"
@@ -169,7 +159,7 @@ resource "azurerm_resource_group" "prod_workspace_rg" {
 }
 
 resource "azurerm_resource_group" "prod_registry_rg" {
-  name     = "rg-${var.prefix}-reg-prod-${var.location_code}${random_string.main.result}"
+  name     = "rg-${var.prefix}-reg-prod-${var.location_code}${var.naming_suffix}"
   location = var.location
   tags = merge(var.tags, {
     environment = "production"
@@ -180,7 +170,7 @@ resource "azurerm_resource_group" "prod_registry_rg" {
 
 # Hub Network Resource Group
 resource "azurerm_resource_group" "hub_network_rg" {
-  name     = "rg-${var.prefix}-hub-${var.location_code}${random_string.main.result}"
+  name     = "rg-${var.prefix}-hub-${var.location_code}${var.naming_suffix}"
   location = var.location
   tags = merge(var.tags, {
     environment = "shared"
@@ -376,7 +366,7 @@ module "dev_vnet" {
   purpose                   = "dev"
   location                  = var.location
   location_code            = var.location_code
-  random_string            = random_string.main.result
+  naming_suffix            = var.naming_suffix
   resource_prefixes        = local.resource_prefixes
   vnet_address_space       = "10.1.0.0/16"
   subnet_address_prefix    = "10.1.1.0/24"
@@ -402,8 +392,9 @@ module "dev_managed_umi" {
   purpose                   = "dev"
   location                  = var.location
   location_code            = var.location_code
-  random_string            = random_string.main.result
+  naming_suffix            = var.naming_suffix
   resource_prefixes        = local.resource_prefixes
+  resource_group_name      = azurerm_resource_group.dev_workspace_rg.name
   subnet_id                = module.dev_vnet.subnet_id
   log_analytics_workspace_id = module.dev_vnet.log_analytics_workspace_id
   enable_auto_purge        = true
@@ -442,7 +433,7 @@ module "dev_registry" {
   purpose                   = "dev"
   location                  = var.location
   location_code            = var.location_code
-  random_string            = random_string.main.result
+  naming_suffix            = var.naming_suffix
   resource_prefixes        = local.resource_prefixes
   resource_group_name      = azurerm_resource_group.dev_registry_rg.name
   
@@ -480,7 +471,7 @@ module "prod_vnet" {
   purpose                   = "prod"
   location                  = var.location
   location_code            = var.location_code
-  random_string            = random_string.main.result
+  naming_suffix            = var.naming_suffix
   resource_prefixes        = local.resource_prefixes
   vnet_address_space       = "10.2.0.0/16"
   subnet_address_prefix    = "10.2.1.0/24"
@@ -506,8 +497,9 @@ module "prod_managed_umi" {
   purpose                   = "prod"
   location                  = var.location
   location_code            = var.location_code
-  random_string            = random_string.main.result
+  naming_suffix            = var.naming_suffix
   resource_prefixes        = local.resource_prefixes
+  resource_group_name      = azurerm_resource_group.prod_workspace_rg.name
   subnet_id                = module.prod_vnet.subnet_id
   log_analytics_workspace_id = module.prod_vnet.log_analytics_workspace_id
   enable_auto_purge        = true
@@ -550,7 +542,7 @@ module "prod_registry" {
   purpose                   = "prod"
   location                  = var.location
   location_code            = var.location_code
-  random_string            = random_string.main.result
+  naming_suffix            = var.naming_suffix
   resource_prefixes        = local.resource_prefixes
   resource_group_name      = azurerm_resource_group.prod_registry_rg.name
   
@@ -893,7 +885,7 @@ module "hub_network" {
   prefix                         = var.prefix
   location                       = var.location
   location_code                  = var.location_code
-  random_string                  = random_string.main.result
+  naming_suffix                  = var.naming_suffix
   resource_group_name            = azurerm_resource_group.hub_network_rg.name
   
   hub_vnet_address_space         = "10.0.0.0/16"

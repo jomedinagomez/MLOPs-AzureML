@@ -56,9 +56,10 @@ variable "purpose" {
   type        = string
 }
 
-variable "random_string" {
-  description = "The random string to append to the resource name"
+variable "naming_suffix" {
+  description = "Suffix for resource naming (preferred over random_string)"
   type        = string
+  default     = null
 }
 
 variable "resource_group_name" {

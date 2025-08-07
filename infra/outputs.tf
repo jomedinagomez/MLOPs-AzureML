@@ -191,7 +191,7 @@ output "platform_deployment_summary" {
     }
     
     resource_naming = {
-      pattern      = "[prefix][service][purpose][location_code][random_string]"
+      pattern      = "[prefix][service][purpose][location_code][naming_suffix]"
       example_dev  = module.dev_managed_umi.workspace_name
       example_prod = module.prod_managed_umi.workspace_name
     }

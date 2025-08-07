@@ -33,9 +33,10 @@ variable "location_code" {
   type        = string
 }
 
-variable "random_string" {
-  description = "Unique string for resource naming"
+variable "naming_suffix" {
+  description = "Suffix for resource naming (preferred over random_string)"
   type        = string
+  default     = null
 }
 
 variable "vnet_address_space" {

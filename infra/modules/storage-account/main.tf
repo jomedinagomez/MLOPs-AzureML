@@ -1,6 +1,10 @@
+locals {
+  resolved_suffix = coalesce(var.naming_suffix, "")
+}
+
 # Create a storage account
 resource "azurerm_storage_account" "storage_account" {
-  name                = "${local.storage_account_name}${var.purpose}${var.location_code}${var.random_string}"
+  name                = "${local.storage_account_name}${var.purpose}${var.location_code}${local.resolved_suffix}"
   resource_group_name = var.resource_group_name
   location            = var.location
   tags                = var.tags
@@ -55,7 +59,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag-base" {
 
   depends_on = [azurerm_storage_account.storage_account]
 
-  name                       = "${azurerm_storage_account.storage_account.name}-diag-base-${var.purpose}-${var.random_string}"
+  name                       = "${azurerm_storage_account.storage_account.name}-diag-base-${var.purpose}-${local.resolved_suffix}"
   target_resource_id         = azurerm_storage_account.storage_account.id
   log_analytics_workspace_id = var.law_resource_id
 
@@ -74,7 +78,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag-blob" {
     azurerm_storage_account.storage_account,
   azurerm_monitor_diagnostic_setting.diag-base]
 
-  name                       = "${azurerm_storage_account.storage_account.name}-diag-blob-${var.purpose}-${var.random_string}"
+  name                       = "${azurerm_storage_account.storage_account.name}-diag-blob-${var.purpose}-${local.resolved_suffix}"
   target_resource_id         = "${azurerm_storage_account.storage_account.id}/blobServices/default"
   log_analytics_workspace_id = var.law_resource_id
 
@@ -97,7 +101,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag-file" {
     azurerm_monitor_diagnostic_setting.diag-blob
   ]
 
-  name                       = "${azurerm_storage_account.storage_account.name}-diag-file-${var.purpose}-${var.random_string}"
+  name                       = "${azurerm_storage_account.storage_account.name}-diag-file-${var.purpose}-${local.resolved_suffix}"
   target_resource_id         = "${azurerm_storage_account.storage_account.id}/fileServices/default"
   log_analytics_workspace_id = var.law_resource_id
 
@@ -120,7 +124,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag-queue" {
     azurerm_monitor_diagnostic_setting.diag-file
   ]
 
-  name                       = "${azurerm_storage_account.storage_account.name}-diag-queue-${var.purpose}-${var.random_string}"
+  name                       = "${azurerm_storage_account.storage_account.name}-diag-queue-${var.purpose}-${local.resolved_suffix}"
   target_resource_id         = "${azurerm_storage_account.storage_account.id}/queueServices/default"
   log_analytics_workspace_id = var.law_resource_id
 
@@ -144,7 +148,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag-table" {
     azurerm_monitor_diagnostic_setting.diag-queue
   ]
 
-  name                       = "${azurerm_storage_account.storage_account.name}-diag-table-${var.purpose}-${var.random_string}"
+  name                       = "${azurerm_storage_account.storage_account.name}-diag-table-${var.purpose}-${local.resolved_suffix}"
   target_resource_id         = "${azurerm_storage_account.storage_account.id}/tableServices/default"
   log_analytics_workspace_id = var.law_resource_id
 

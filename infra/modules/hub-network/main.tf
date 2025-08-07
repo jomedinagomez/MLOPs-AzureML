@@ -1,8 +1,12 @@
 # Hub Network Module Main Configuration
 
+locals {
+  resolved_suffix = coalesce(var.naming_suffix, "")
+}
+
 # Hub VNet
 resource "azurerm_virtual_network" "hub_vnet" {
-  name                = "vnet-${var.prefix}-hub-${var.location_code}${var.random_string}"
+  name                = "vnet-${var.prefix}-hub-${var.location_code}${local.resolved_suffix}"
   address_space       = [var.hub_vnet_address_space]
   location            = var.location
   resource_group_name = var.resource_group_name
@@ -23,7 +27,7 @@ resource "azurerm_subnet" "gateway_subnet" {
 
 # Public IP for VPN Gateway
 resource "azurerm_public_ip" "vpn_gateway_pip" {
-  name                = "pip-vpngw-${var.prefix}-hub-${var.location_code}${var.random_string}"
+  name                = "pip-vpngw-${var.prefix}-hub-${var.location_code}${local.resolved_suffix}"
   location            = var.location
   resource_group_name = var.resource_group_name
   allocation_method   = "Static"
@@ -37,7 +41,7 @@ resource "azurerm_public_ip" "vpn_gateway_pip" {
 
 # VPN Gateway
 resource "azurerm_virtual_network_gateway" "vpn_gateway" {
-  name                = "vpngw-${var.prefix}-hub-${var.location_code}${var.random_string}"
+  name                = "vpngw-${var.prefix}-hub-${var.location_code}${local.resolved_suffix}"
   location            = var.location
   resource_group_name = var.resource_group_name
 

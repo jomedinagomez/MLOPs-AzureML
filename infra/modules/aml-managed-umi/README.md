@@ -1,6 +1,6 @@
 # Azure ML Workspace Infrastructure Module
 
-This Terraform module deploys a complete, production-ready Azure Machine Learning workspace with managed virtual network, supporting services, comprehensive security, and RBAC configuration. This module creates the core ML platform for development and production workloads.
+This Terraform module deploys a complete, production-ready Azure Machine Learning workspace with managed virtual network, supporting services, comprehensive security, and RBAC configuration. This module assumes the resource group already exists and is passed in by the root module. It creates the core ML platform for development and production workloads.
 
 ## 🎯 **Module Overview**
 
@@ -19,7 +19,7 @@ This module creates a secure, enterprise-ready Azure ML workspace featuring:
 
 ```mermaid
 graph TB
-    subgraph "Resource Group: {resource-group-name}"
+  subgraph "Resource Group: {resource-group-name} (provided by root)"
         subgraph "Core ML Platform"
             MLW[Azure ML Workspace<br/>Managed VNet: Approved Outbound Only]
             CC[Compute Cluster<br/>0-4 nodes, Standard_DS3_v2]
@@ -77,7 +77,7 @@ graph TB
 
 ### **Critical Settings to Update**
 
-This module depends on outputs from the `aml-vnet` module. When using the root orchestration, these dependencies are automatically resolved. For standalone deployment, you must provide:
+This module depends on outputs from the `aml-vnet` module and an existing resource group name. When using the root orchestration, these dependencies are automatically resolved. For standalone deployment, you must provide:
 
 #### 1. **User Identity Configuration** 👤
 ```hcl
@@ -119,6 +119,9 @@ random_string = "001"             # Unique identifier
 
 # Azure subscription
 sub_id = "your-subscription-id"   # Target subscription
+
+# Existing resource group to deploy into
+resource_group_name = "rg-aml-ws-dev-cc001"
 ```
 
 ## 🔑 **RBAC Configuration**
@@ -288,7 +291,7 @@ az storage account network-rule add \
 This module creates the following Azure resources:
 
 ### Core Infrastructure
-- **Resource Group**: Container for all ML workspace resources
+- **Resource Group**: Provided by root; container for all ML workspace resources
 - **Log Analytics Workspace**: Centralized logging and monitoring
 - **Application Insights**: Application performance monitoring
 
@@ -322,6 +325,7 @@ The module provides the following outputs:
 - `workspace_name`: Name of the created ML workspace
 - `workspace_id`: Full resource ID of the ML workspace
 - `resource_group_name`: Name of the created resource group
+  (now provided by the root module)
 
 ## Troubleshooting
 

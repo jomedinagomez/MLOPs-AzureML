@@ -15,9 +15,10 @@ variable "location_code" {
   type        = string
 }
 
-variable "random_string" {
-  description = "Random string for unique resource naming"
+variable "naming_suffix" {
+  description = "Suffix for unique resource naming (preferred over random_string)"
   type        = string
+  default     = null
 }
 
 variable "resource_group_name" {

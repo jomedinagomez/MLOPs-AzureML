@@ -162,7 +162,7 @@ prefix        = "aml"
 purpose       = "$($envConfig.Purpose)"
 location      = "$($Config.Location)"
 location_code = "$($Config.LocationCode)"
-random_string = "$($envConfig.RandomString)"
+naming_suffix = "$($envConfig.NamingSuffix)"
 
 # Resource prefixes
 resource_prefixes = {

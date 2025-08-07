@@ -1,5 +1,9 @@
+locals {
+  resolved_suffix = coalesce(var.naming_suffix, "")
+}
+
 resource "azurerm_key_vault" "kv" {
-  name                = "${local.kv_name}${var.purpose}${var.location_code}${var.random_string}"
+  name                = "${local.kv_name}${var.purpose}${var.location_code}${local.resolved_suffix}"
   location            = var.location
   resource_group_name = var.resource_group_name
 
@@ -64,7 +68,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag-base" {
     azurerm_role_assignment.assign-admin
   ]
 
-  name                       = "${azurerm_key_vault.kv.name}-diagnostics-${var.purpose}-${var.random_string}"
+  name                       = "${azurerm_key_vault.kv.name}-diagnostics-${var.purpose}-${local.resolved_suffix}"
   target_resource_id         = azurerm_key_vault.kv.id
   log_analytics_workspace_id = var.law_resource_id
 

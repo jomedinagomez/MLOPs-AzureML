@@ -25,7 +25,7 @@ module "keyvault_aml" {
   source = "../modules/key-vault"
   
   # Basic Configuration
-  random_string       = var.random_string
+  naming_suffix       = var.naming_suffix
   location            = var.location
   location_code       = var.location_code
   resource_group_name = azurerm_resource_group.rgwork.name
