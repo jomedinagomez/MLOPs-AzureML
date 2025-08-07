@@ -26,7 +26,6 @@ resource "azurerm_application_insights" "aml-appins" {
   location            = var.location
   resource_group_name = local.rg_name
   workspace_id        = var.log_analytics_workspace_id
-  name                = "${local.app_insights_prefix}${var.purpose}${var.location_code}${local.resolved_suffix}"
   application_type    = "other"
 }
 

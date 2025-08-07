@@ -162,7 +162,7 @@ Edit `terraform.tfvars` with your specific values:
 purpose       = "dev"                    # Change to your environment
 location      = "canadacentral"          # Change to your preferred region
 location_code = "cc"                     # Update accordingly
-random_string = "001"                    # Your unique identifier
+naming_suffix = "01"                     # Deterministic suffix replacing random string
 
 # Azure Subscription (REQUIRED)
 sub_id = "your-subscription-id-here"     # Replace with actual subscription ID
@@ -277,7 +277,7 @@ Root Orchestration (main.tf)
 | `purpose` | `"dev"` | Environment identifier |
 | `location` | `"canadacentral"` | Azure region |
 | `location_code` | `"cc"` | Short region code |
-| `random_string` | `"001"` | Unique identifier |
+| `naming_suffix` | `"01"` | Deterministic suffix for naming |
 | `vnet_address_space` | `"10.1.0.0/16"` | VNet CIDR block |
 | `subnet_address_prefix` | `"10.1.1.0/24"` | Subnet CIDR block |
 
@@ -562,8 +562,8 @@ az account set --subscription <subscription-id>
 
 #### 2. Resource Naming Conflicts
 ```bash
-# Update random_string in terraform.tfvars
-random_string = "002"  # Change to new unique value
+# Update naming_suffix in terraform.tfvars
+ naming_suffix = "02"  # Change to desired suffix when needed
 ```
 
 #### 3. Network Connectivity Issues
@@ -606,8 +606,8 @@ az account show
 
 #### 2. **Resource Naming Conflicts**
 ```bash
-# Update random_string in terraform.tfvars to make names unique
-random_string = "002"  # Change to new unique value
+# Update naming_suffix in terraform.tfvars to adjust names
+ naming_suffix = "02"  # Change to desired suffix
 
 # Or check existing resources
 az resource list --resource-group {resource-group-name}

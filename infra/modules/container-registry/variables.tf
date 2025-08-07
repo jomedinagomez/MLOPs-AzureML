@@ -57,7 +57,7 @@ variable "purpose" {
 }
 
 variable "naming_suffix" {
-  description = "Suffix for resource naming (preferred over random_string)"
+  description = "Suffix for resource naming"
   type        = string
   default     = null
 }

@@ -121,7 +121,7 @@ subnet_address_prefix  = "10.1.1.0/24"        # ML subnet (254 IPs)
 location               = "canadacentral"       # Azure region for deployment
 location_code          = "cc"                 # Short region identifier
 purpose                = "dev"                # Environment (dev/test/prod)
-random_string          = "001"               # Unique identifier for naming
+naming_suffix          = "01"                # Deterministic suffix for naming
 ```
 
 #### 3. **Resource Tagging** 🏷️
@@ -139,8 +139,8 @@ tags = {
 
 Resources follow this standardized pattern:
 - **Resource Group**: `rg-aml-vnet-{purpose}-{location_code}`
-- **VNet**: `vnet-{purpose}-{location_code}-{random_string}`
-- **Subnet**: `snet-{purpose}-ml-{location_code}-{random_string}`
+- **VNet**: `vnet-{purpose}-{location_code}{naming_suffix}`
+- **Subnet**: `snet-{purpose}-ml-{location_code}{naming_suffix}`
 - **DNS Zones**: Standard Azure private DNS zone names
 - **Managed Identities**: `{purpose}-mi-{type}` (cluster/endpoint)
 
@@ -347,7 +347,7 @@ The module provides the following outputs for use by other modules:
    - Check subscription limits for VNets and DNS zones
 
 4. **Resource Naming Conflicts:**
-   - Ensure `random_string` provides sufficient uniqueness
+    - Ensure `naming_suffix` follows your naming standard
    - Check for existing resources with similar names
 
 ### Useful Commands

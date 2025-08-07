@@ -259,7 +259,7 @@ Configure the following key variables in `infra/terraform.tfvars`:
 purpose                = "dev"                    # Environment: dev/test/prod
 location               = "canadacentral"          # Azure region
 location_code          = "cc"                     # Short region code
-random_string          = "003"                    # Unique identifier
+naming_suffix          = "01"                     # Deterministic suffix for naming
 
 # Network Configuration  
 vnet_address_space     = "10.1.0.0/16"           # VNet address range

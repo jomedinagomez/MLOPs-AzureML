@@ -50,7 +50,7 @@ prefix        = "aml"
 purpose       = "dev"
 location      = "canadacentral"
 location_code = "cc"
-random_string = "01"  # Updated to match your configuration
+naming_suffix = "01"  # Updated to match your configuration
 
 # Resource prefixes (from your existing templates)
 resource_prefixes = {
@@ -89,7 +89,7 @@ prefix        = "aml"
 purpose       = "prod"
 location      = "canadacentral"
 location_code = "cc"
-random_string = "01"  # Same random string as dev for consistency
+naming_suffix = "01"  # Same suffix as dev for consistency
 
 # Resource prefixes (same as dev for consistency)
 resource_prefixes = {
@@ -131,7 +131,7 @@ cd c:\Users\jomedin\Documents\MLOPs-AzureML\infra
 # Initialize Terraform (if not already done)
 terraform init
 
-# Update your existing terraform.tfvars with random_string = "01"
+# Update your existing terraform.tfvars with naming_suffix = "01"
 # Your existing file already has most configurations ready
 
 # Plan development deployment using your existing terraform.tfvars
@@ -159,7 +159,7 @@ terraform output > dev-outputs.txt
 
 ### Step 1.2: Verify Development Deployment
 ```bash
-# Verify key resources exist (updated with random_string = "01")
+# Verify key resources exist (updated with naming_suffix = "01")
 az ml workspace show --name "amlwsdevcc01" --resource-group "rg-aml-ws-dev-cc"
 az ml registry show --name "amlregdevcc01" --resource-group "rg-aml-reg-dev-cc"
 

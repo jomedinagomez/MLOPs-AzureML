@@ -68,7 +68,7 @@ resource_prefixes = { ... }       # See above
 purpose = "dev" | "prod"         # Environment identifier
 location = "canadacentral"       # Same region for both environments
 location_code = "cc"             # Region abbreviation
-random_string = "01"             # Unique identifier
+naming_suffix = "01"             # Deterministic suffix for naming
 enable_auto_purge = true | false # Dev: true, Prod: false (CRITICAL)
 ```
 
@@ -225,7 +225,7 @@ Managed identities will use different types based on component requirements:
 ```
 Workspace UAMI:
 ├── Name: "${purpose}-mi-workspace"
-├── Location: rg-aml-vnet-${purpose}-${location_code}${random_string}
+├── Location: rg-aml-vnet-${purpose}-${location_code}${naming_suffix}
 ├── Used by: Azure ML Workspace for management operations
 ├── Roles:
 │   ├── Azure AI Administrator (on resource group): Configure workspace settings and AI services integration - [Learn more](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-assign-roles?view=azureml-api-2#troubleshooting)
@@ -254,7 +254,7 @@ Terraform (azapi):
 ```hcl
 resource "azapi_resource" "registry" {
     type      = "Microsoft.MachineLearningServices/registries@2025-01-01-preview"
-    name      = "${local.aml_registry_prefix}${var.purpose}${var.location_code}${var.random_string}"
+    name      = "${local.aml_registry_prefix}${var.purpose}${var.location_code}${var.naming_suffix}"
     parent_id = azurerm_resource_group.rgwork.id
     location  = var.location
 
@@ -278,7 +278,7 @@ Key points:
 
 Compute Cluster & Compute Instance UAMI (Shared):
 ├── Name: "${purpose}-mi-compute" 
-├── Location: rg-aml-vnet-${purpose}-${location_code}${random_string}
+├── Location: rg-aml-vnet-${purpose}-${location_code}${naming_suffix}
 ├── Used by: Both compute cluster and compute instance
 ├── Roles:
 │   ├── AcrPull (on container registry): Access base images for ML training and inference environments - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/containers#acrpull)

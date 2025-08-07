@@ -24,7 +24,7 @@ module "hub_network" {
   prefix                      = var.prefix
   location                    = var.location
   location_code              = var.location_code
-  random_string              = random_string.main.result
+  naming_suffix              = "01"
   resource_group_name        = azurerm_resource_group.hub_network_rg.name
   
   hub_vnet_address_space           = "10.0.0.0/16"
@@ -101,7 +101,7 @@ VPN Clients (172.16.0.0/24)
 | prefix | Prefix for resource naming | string | n/a | yes |
 | location | Azure region | string | n/a | yes |
 | location_code | Short location code | string | n/a | yes |
-| random_string | Random string for naming | string | n/a | yes |
+| naming_suffix | Suffix for naming | string | n/a | yes |
 | resource_group_name | Resource group name | string | n/a | yes |
 | vpn_root_certificate_data | Base64 certificate data | string | n/a | yes |
 | hub_vnet_address_space | Hub VNet address space | string | "10.0.0.0/16" | no |

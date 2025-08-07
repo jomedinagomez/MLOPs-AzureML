@@ -115,7 +115,7 @@ compute_cluster_identity_principal_id = "87654321-4321-4321-4321-210987654321"
 purpose = "dev"                    # Environment identifier
 location = "canadacentral"         # Azure region
 location_code = "cc"              # Short region code
-random_string = "001"             # Unique identifier
+naming_suffix = "01"              # Deterministic suffix for naming
 
 # Azure subscription
 sub_id = "your-subscription-id"   # Target subscription
@@ -162,7 +162,7 @@ az account show --query id -o tsv
 - `location`: Azure region for resources (default: canadacentral)
 - `location_code`: Short code for the region (e.g., "cc" for Canada Central)
 - `purpose`: Environment identifier (e.g., "dev", "test", "prod")
-- `random_string`: Unique identifier to ensure resource name uniqueness
+- `naming_suffix`: Deterministic suffix to ensure resource name consistency
 
 ### Compute Configuration
 - `compute_cluster_min_nodes`: Minimum number of nodes in the compute cluster (default: 2)
@@ -449,7 +449,7 @@ This module works in conjunction with the `aml-vnet` module:
 2. **Deploy `aml-managed-smi` second**: Creates ML workspace and references resources from step 1
 
 The modules are designed to use consistent variable naming:
-- Both use `purpose`, `location_code`, `random_string` for naming consistency
+- Both use `purpose`, `location_code`, `naming_suffix` for naming consistency
 - `resource_group_name_dns` references the resource group containing DNS zones and managed identities
 - Managed identity naming follows `${purpose}-mi-cluster` pattern
 

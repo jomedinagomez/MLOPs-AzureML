@@ -113,7 +113,7 @@ compute_cluster_identity_principal_id = "87654321-4321-4321-4321-210987654321"
 purpose = "dev"                    # Environment identifier
 location = "canadacentral"         # Azure region for registry
 location_code = "cc"              # Short region code
-random_string = "001"             # Unique identifier
+naming_suffix = "01"              # Deterministic suffix for naming
 
 # Azure subscription
 sub_id = "your-subscription-id"   # Target subscription
@@ -203,7 +203,7 @@ ml_client.models.create_or_update(
 - `location`: Azure region for resources (default: canadacentral)
 - `location_code`: Short code for the region (e.g., "cc" for Canada Central)
 - `purpose`: Environment identifier (e.g., "dev", "test", "prod")
-- `random_string`: Unique identifier to ensure resource name uniqueness
+- `naming_suffix`: Deterministic suffix to ensure resource name consistency
 
 ### Tags
 Customize the `tags` section to match your organization's tagging strategy.

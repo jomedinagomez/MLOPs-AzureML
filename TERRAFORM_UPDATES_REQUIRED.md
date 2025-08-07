@@ -9,7 +9,7 @@ This document outlines all the required updates to the Terraform templates to al
 **Current State**: The Terraform templates provide a solid foundation with modular architecture, managed identities, private networking, and basic RBAC.
 
 **Critical Gaps Identified**:
-1. ❌ **Resource naming mismatch**: Current `random_string = "004"` vs required `"01"`
+1. ❌ **Resource naming mismatch**: Ensure `naming_suffix = "01"` per deployment strategy
 2. ❌ **Missing cross-environment RBAC** for asset promotion workflows
 3. ❌ **Missing Azure AI Administrator roles** for workspace UAMIs
 4. ❌ **Missing Storage Blob Data Owner** assignments
@@ -22,13 +22,13 @@ This document outlines all the required updates to the Terraform templates to al
 ### Current Problem
 ```hcl
 # terraform.tfvars (CURRENT - INCORRECT)
-random_string = "004"  # ❌ Does not match deployment strategy
+naming_suffix = "004"  # ❌ Does not match deployment strategy
 ```
 
 ### Required Fix
 ```hcl
 # terraform.tfvars (REQUIRED UPDATE)
-random_string = "01"   # ✅ Matches deployment strategy specification
+naming_suffix = "01"   # ✅ Matches deployment strategy specification
 ```
 
 **Impact**: This affects ALL resource names across the infrastructure. Must be updated immediately to align with deployment strategy.
@@ -62,7 +62,7 @@ resource_prefixes = {
 purpose       = "dev"
 location      = "canadacentral"
 location_code = "cc"
-random_string = "01"                # ✅ CRITICAL: Fixed from "004"
+naming_suffix = "01"                # ✅ CRITICAL: Fixed from "004"
 
 # Development Network Configuration
 vnet_address_space    = "10.1.0.0/16"    # ✅ Dev CIDR
@@ -102,7 +102,7 @@ resource_prefixes = {
 purpose       = "prod"
 location      = "canadacentral"
 location_code = "cc"
-random_string = "01"                  # ✅ Same as dev per strategy
+naming_suffix = "01"                  # ✅ Same as dev per strategy
 
 # Production Network Configuration (DIFFERENT CIDR)
 vnet_address_space    = "10.2.0.0/16"    # ✅ Prod CIDR - isolated
@@ -448,22 +448,7 @@ variable "purpose" {
   }
 }
 
-# Enhanced random_string validation
-variable "random_string" {
-  description = "Unique string for resource naming (must be '01' per deployment strategy)"
-  type        = string
-  default     = "01"
-
-  validation {
-    condition     = var.random_string == "01"
-    error_message = "DEPLOYMENT STRATEGY REQUIREMENT: random_string must be '01' for both dev and prod environments."
-  }
-
-  validation {
-    condition     = can(regex("^[a-z0-9]{2,8}$", var.random_string))
-    error_message = "Random string must be between 2-8 characters, lowercase letters and numbers only."
-  }
-}
+# Use naming_suffix for deterministic naming across environments
 
 # Network validation for environment isolation
 variable "vnet_address_space" {
@@ -604,7 +589,7 @@ output "environment_location" {
 ## 12. Implementation Priority and Sequence
 
 ### Phase 1: Critical Fixes (IMMEDIATE)
-1. **Update `random_string = "01"`** in current terraform.tfvars
+1. **Update `naming_suffix = "01"`** in current terraform.tfvars
 2. **Create separate dev/prod tfvars files**
 3. **Add Azure AI Administrator role** to workspace UAMI
 4. **Add default compute cluster assignment** for image creation

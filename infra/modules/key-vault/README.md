@@ -168,7 +168,7 @@ For development/testing environments:
 
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
-| `random_string` | string | - | Unique suffix for resource naming |
+| `naming_suffix` | string | - | Deterministic suffix for resource naming |
 | `location` | string | - | Azure region for deployment |
 | `location_code` | string | - | Short location code (e.g., "cc" for Canada Central) |
 | `resource_group_name` | string | - | Resource group for Key Vault |

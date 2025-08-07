@@ -16,7 +16,7 @@ variable "location_code" {
 }
 
 variable "naming_suffix" {
-  description = "Suffix for unique resource naming (preferred over random_string)"
+  description = "Suffix for unique resource naming"
   type        = string
   default     = null
 }

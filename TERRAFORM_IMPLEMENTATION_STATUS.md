@@ -10,8 +10,8 @@ This document tracks the implementation of the Terraform template updates identi
 #### ✅ 1. Resource Naming Strategy (CRITICAL)
 - **Status**: COMPLETED
 - **Files Updated**: 
-  - `infra/terraform.tfvars` - Fixed random_string from "004" to "01"
-  - `infra/variables.tf` - Added validation requiring random_string="01"
+  - `infra/terraform.tfvars` - Uses naming_suffix set to "01"
+  - `infra/variables.tf` - Added naming_suffix variable and removed legacy random suffix usage
 - **Impact**: Ensures consistent naming across both environments
 
 #### ✅ 2. Environment-Specific Configuration Files (CRITICAL)
@@ -115,7 +115,7 @@ To enable asset promotion between environments:
 ## 📋 IMPLEMENTATION NOTES
 
 ### Resource Naming Verification
-- All resources now use random_string="01" as required by deployment strategy
+- All resources now use naming_suffix="01" per deployment strategy
 - Validation prevents deployment with incorrect naming
 
 ### Network Architecture
