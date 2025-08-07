@@ -87,7 +87,7 @@ module "private_endpoint_aml_registry" {
     azapi_resource.registry
   ]
 
-  source = "../modules/private-endpoint"
+  source = "../private-endpoint"
 
   random_string       = var.random_string
   location            = var.workload_vnet_location

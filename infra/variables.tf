@@ -81,3 +81,9 @@ variable "vpn_root_certificate_data" {
     error_message = "The vpn_root_certificate_data must be a valid base64 encoded string."
   }
 }
+
+variable "user_object_id" {
+  description = "The object ID of the user who will manage the Azure Machine Learning Workspace"
+  type        = string
+  default     = null
+}

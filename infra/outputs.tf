@@ -26,47 +26,47 @@ output "service_principal_display_name" {
 
 output "dev_workspace_name" {
   description = "Name of the development Azure ML workspace"
-  value       = azurerm_machine_learning_workspace.dev_workspace.name
+  value       = module.dev_managed_umi.workspace_name
 }
 
 output "dev_workspace_id" {
   description = "ID of the development Azure ML workspace"
-  value       = azurerm_machine_learning_workspace.dev_workspace.id
+  value       = module.dev_managed_umi.workspace_id
 }
 
 output "dev_registry_name" {
   description = "Name of the development Azure ML registry"
-  value       = azurerm_machine_learning_registry.dev_registry.name
+  value       = module.dev_registry.registry_name
 }
 
 output "dev_registry_id" {
   description = "ID of the development Azure ML registry"
-  value       = azurerm_machine_learning_registry.dev_registry.id
+  value       = module.dev_registry.registry_id
 }
 
 output "dev_container_registry_name" {
   description = "Name of the development container registry"
-  value       = module.dev_container_registry.container_registry_name
+  value       = module.dev_managed_umi.container_registry_name
 }
 
 output "dev_key_vault_name" {
   description = "Name of the development key vault"
-  value       = module.dev_keyvault.key_vault_name
+  value       = module.dev_managed_umi.keyvault_name
 }
 
 output "dev_storage_account_name" {
   description = "Name of the development storage account"
-  value       = module.dev_storage_account.storage_account_name
+  value       = module.dev_managed_umi.storage_account_name
 }
 
 output "dev_vnet_id" {
   description = "ID of the development virtual network"
-  value       = azurerm_virtual_network.dev_vnet.id
+  value       = module.dev_vnet.vnet_id
 }
 
 output "dev_subnet_id" {
   description = "ID of the development subnet"
-  value       = azurerm_subnet.dev_subnet.id
+  value       = module.dev_vnet.subnet_id
 }
 
 # ===============================
@@ -75,47 +75,47 @@ output "dev_subnet_id" {
 
 output "prod_workspace_name" {
   description = "Name of the production Azure ML workspace"
-  value       = azurerm_machine_learning_workspace.prod_workspace.name
+  value       = module.prod_managed_umi.workspace_name
 }
 
 output "prod_workspace_id" {
   description = "ID of the production Azure ML workspace"
-  value       = azurerm_machine_learning_workspace.prod_workspace.id
+  value       = module.prod_managed_umi.workspace_id
 }
 
 output "prod_registry_name" {
   description = "Name of the production Azure ML registry"
-  value       = azurerm_machine_learning_registry.prod_registry.name
+  value       = module.prod_registry.registry_name
 }
 
 output "prod_registry_id" {
   description = "ID of the production Azure ML registry"
-  value       = azurerm_machine_learning_registry.prod_registry.id
+  value       = module.prod_registry.registry_id
 }
 
 output "prod_container_registry_name" {
   description = "Name of the production container registry"
-  value       = module.prod_container_registry.container_registry_name
+  value       = module.prod_managed_umi.container_registry_name
 }
 
 output "prod_key_vault_name" {
   description = "Name of the production key vault"
-  value       = module.prod_keyvault.key_vault_name
+  value       = module.prod_managed_umi.keyvault_name
 }
 
 output "prod_storage_account_name" {
   description = "Name of the production storage account"
-  value       = module.prod_storage_account.storage_account_name
+  value       = module.prod_managed_umi.storage_account_name
 }
 
 output "prod_vnet_id" {
   description = "ID of the production virtual network"
-  value       = azurerm_virtual_network.prod_vnet.id
+  value       = module.prod_vnet.vnet_id
 }
 
 output "prod_subnet_id" {
   description = "ID of the production subnet"
-  value       = azurerm_subnet.prod_subnet.id
+  value       = module.prod_vnet.subnet_id
 }
 
 # ===============================
@@ -175,25 +175,25 @@ output "platform_deployment_summary" {
     
     key_endpoints = {
       development = {
-        workspace_endpoint   = "https://${azurerm_machine_learning_workspace.dev_workspace.name}.api.azureml.ms"
-        registry_endpoint    = "https://${azurerm_machine_learning_registry.dev_registry.name}.registry.azureml.ms"
-        container_registry   = "${module.dev_container_registry.container_registry_name}.azurecr.io"
-        key_vault           = "https://${module.dev_keyvault.key_vault_name}.vault.azure.net"
-        storage_account     = "https://${module.dev_storage_account.storage_account_name}.blob.core.windows.net"
+        workspace_endpoint   = "https://${module.dev_managed_umi.workspace_name}.api.azureml.ms"
+        registry_endpoint    = "https://${module.dev_registry.registry_name}.registry.azureml.ms"
+        container_registry   = "${module.dev_managed_umi.container_registry_name}.azurecr.io"
+        key_vault           = "https://${module.dev_managed_umi.keyvault_name}.vault.azure.net"
+        storage_account     = "https://${module.dev_managed_umi.storage_account_name}.blob.core.windows.net"
       }
       production = {
-        workspace_endpoint   = "https://${azurerm_machine_learning_workspace.prod_workspace.name}.api.azureml.ms"
-        registry_endpoint    = "https://${azurerm_machine_learning_registry.prod_registry.name}.registry.azureml.ms"
-        container_registry   = "${module.prod_container_registry.container_registry_name}.azurecr.io"
-        key_vault           = "https://${module.prod_keyvault.key_vault_name}.vault.azure.net"
-        storage_account     = "https://${module.prod_storage_account.storage_account_name}.blob.core.windows.net"
+        workspace_endpoint   = "https://${module.prod_managed_umi.workspace_name}.api.azureml.ms"
+        registry_endpoint    = "https://${module.prod_registry.registry_name}.registry.azureml.ms"
+        container_registry   = "${module.prod_managed_umi.container_registry_name}.azurecr.io"
+        key_vault           = "https://${module.prod_managed_umi.keyvault_name}.vault.azure.net"
+        storage_account     = "https://${module.prod_managed_umi.storage_account_name}.blob.core.windows.net"
       }
     }
     
     resource_naming = {
       pattern      = "[prefix][service][purpose][location_code][random_string]"
-      example_dev  = azurerm_machine_learning_workspace.dev_workspace.name
-      example_prod = azurerm_machine_learning_workspace.prod_workspace.name
+      example_dev  = module.dev_managed_umi.workspace_name
+      example_prod = module.prod_managed_umi.workspace_name
     }
   }
 }
@@ -204,6 +204,7 @@ output "platform_deployment_summary" {
 
 output "hub_network_info" {
   description = "Hub network connectivity information"
+  sensitive   = true
   value = var.vpn_root_certificate_data != "" ? {
     hub_vnet_id              = module.hub_network.hub_vnet_id
     hub_vnet_address_space   = module.hub_network.hub_vnet_address_space
@@ -220,5 +221,6 @@ output "hub_network_info" {
 
 output "vpn_gateway_public_ip" {
   description = "Public IP address of the VPN Gateway for client configuration"
+  sensitive   = true
   value       = var.vpn_root_certificate_data != "" ? module.hub_network.vpn_gateway_public_ip : null
 }

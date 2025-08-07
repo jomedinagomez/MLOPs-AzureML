@@ -408,6 +408,14 @@ module "dev_managed_umi" {
   enable_auto_purge        = true
   sub_id                   = var.subscription_id
   
+  # Network configuration
+  vnet_address_space       = "10.1.0.0/16"
+  subnet_address_prefix    = "10.1.1.0/24"
+  workload_vnet_location   = var.location
+  workload_vnet_location_code = var.location_code
+  resource_group_name_dns  = azurerm_resource_group.dev_vnet_rg.name
+  user_object_id          = data.azurerm_client_config.current.object_id
+  
   # Pass compute cluster identity from VNet module
   compute_cluster_identity_id    = module.dev_vnet.cc_identity_id
   compute_cluster_principal_id   = module.dev_vnet.cc_identity_principal_id
@@ -439,6 +447,16 @@ module "dev_registry" {
   # Pass compute cluster identity from VNet module
   compute_cluster_identity_id    = module.dev_vnet.cc_identity_id
   compute_cluster_principal_id   = module.dev_vnet.cc_identity_principal_id
+  
+  # Additional required variables
+  user_object_id               = var.user_object_id
+  workload_vnet_location       = var.location
+  workload_vnet_location_code  = var.location_code
+  resource_group_name_dns      = module.dev_vnet.resource_group_name_dns
+  subnet_id                    = module.dev_vnet.subnet_id
+  sub_id                       = var.subscription_id
+  log_analytics_workspace_id   = module.dev_vnet.log_analytics_workspace_id
+  workspace_principal_id       = module.dev_managed_umi.workspace_principal_id
   
   tags                     = merge(var.tags, {
     environment = "development"
@@ -496,6 +514,14 @@ module "prod_managed_umi" {
   enable_auto_purge        = true
   sub_id                   = var.subscription_id
   
+  # Network configuration
+  vnet_address_space       = "10.2.0.0/16"
+  subnet_address_prefix    = "10.2.1.0/24"
+  workload_vnet_location   = var.location
+  workload_vnet_location_code = var.location_code
+  resource_group_name_dns  = azurerm_resource_group.prod_vnet_rg.name
+  user_object_id          = data.azurerm_client_config.current.object_id
+  
   # Pass compute cluster identity from VNet module
   compute_cluster_identity_id    = module.prod_vnet.cc_identity_id
   compute_cluster_principal_id   = module.prod_vnet.cc_identity_principal_id
@@ -533,6 +559,16 @@ module "prod_registry" {
   # Pass compute cluster identity from VNet module
   compute_cluster_identity_id    = module.prod_vnet.cc_identity_id
   compute_cluster_principal_id   = module.prod_vnet.cc_identity_principal_id
+  
+  # Additional required variables
+  user_object_id               = var.user_object_id
+  workload_vnet_location       = var.location
+  workload_vnet_location_code  = var.location_code
+  resource_group_name_dns      = module.prod_vnet.resource_group_name_dns
+  subnet_id                    = module.prod_vnet.subnet_id
+  sub_id                       = var.subscription_id
+  log_analytics_workspace_id   = module.prod_vnet.log_analytics_workspace_id
+  workspace_principal_id       = module.prod_managed_umi.workspace_principal_id
   
   tags                     = merge(var.tags, {
     environment = "production"

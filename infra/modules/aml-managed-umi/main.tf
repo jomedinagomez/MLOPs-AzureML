@@ -36,7 +36,7 @@ resource "azurerm_application_insights" "aml-appins" {
 ## Create the Container Registry for the Azure Machine Learning workspace
 ##
 module "container_registry" {
-  source              = "../modules/container-registry"
+  source              = "../container-registry"
   prefix              = var.prefix
   resource_prefixes   = var.resource_prefixes
   purpose             = var.purpose
@@ -54,7 +54,7 @@ module "container_registry" {
 ##
 module "storage_account_default" {
 
-  source              = "../modules/storage-account"
+  source              = "../storage-account"
   prefix              = var.prefix
   resource_prefixes   = var.resource_prefixes
   purpose             = var.purpose
@@ -88,7 +88,7 @@ module "storage_account_default" {
 ##
 module "keyvault_aml" {
 
-  source              = "../modules/key-vault"
+  source              = "../key-vault"
   prefix              = var.prefix
   resource_prefixes   = var.resource_prefixes
   random_string       = var.random_string
@@ -358,7 +358,7 @@ module "private_endpoint_st_default_blob" {
     module.storage_account_default
   ]
 
-  source              = "../modules/private-endpoint"
+  source              = "../private-endpoint"
   random_string       = var.random_string
   location            = var.workload_vnet_location
   location_code       = var.workload_vnet_location_code
@@ -378,7 +378,7 @@ module "private_endpoint_st_default_file" {
     module.private_endpoint_st_default_blob
   ]
 
-  source              = "../modules/private-endpoint"
+  source              = "../private-endpoint"
   random_string       = var.random_string
   location            = var.workload_vnet_location
   location_code       = var.workload_vnet_location_code
@@ -398,7 +398,7 @@ module "private_endpoint_st_default_table" {
     module.private_endpoint_st_default_file
   ]
 
-  source              = "../modules/private-endpoint"
+  source              = "../private-endpoint"
   random_string       = var.random_string
   location            = var.workload_vnet_location
   location_code       = var.workload_vnet_location_code
@@ -418,7 +418,7 @@ module "private_endpoint_st_default_queue" {
     module.private_endpoint_st_default_table
   ]
 
-  source              = "../modules/private-endpoint"
+  source              = "../private-endpoint"
   random_string       = var.random_string
   location            = var.workload_vnet_location
   location_code       = var.workload_vnet_location_code
@@ -438,7 +438,7 @@ module "private_endpoint_kv" {
     module.private_endpoint_st_default_queue
   ]
 
-  source              = "../modules/private-endpoint"
+  source              = "../private-endpoint"
   random_string       = var.random_string
   location            = var.workload_vnet_location
   location_code       = var.workload_vnet_location_code
@@ -459,7 +459,7 @@ module "private_endpoint_container_registry" {
     module.private_endpoint_kv
   ]
 
-  source              = "../modules/private-endpoint"
+  source              = "../private-endpoint"
   random_string       = var.random_string
   location            = var.workload_vnet_location
   location_code       = var.workload_vnet_location_code
@@ -484,7 +484,7 @@ module "private_endpoint_aml_workspace" {
     module.private_endpoint_container_registry
   ]
 
-  source              = "../modules/private-endpoint"
+  source              = "../private-endpoint"
   random_string       = var.random_string
   location            = var.workload_vnet_location
   location_code       = var.workload_vnet_location_code
