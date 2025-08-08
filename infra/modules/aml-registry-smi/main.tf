@@ -2,8 +2,8 @@
 #####
 
 locals {
-  rg_name = var.resource_group_name
-  rg_id   = "/subscriptions/${data.azurerm_client_config.identity_config.subscription_id}/resourceGroups/${local.rg_name}"
+  rg_name         = var.resource_group_name
+  rg_id           = "/subscriptions/${data.azurerm_client_config.identity_config.subscription_id}/resourceGroups/${local.rg_name}"
   resolved_suffix = coalesce(var.naming_suffix, "")
 }
 
@@ -90,7 +90,7 @@ module "private_endpoint_aml_registry" {
     azapi_resource.registry
   ]
 
-  source = "../private-endpoint"
+  source              = "../private-endpoint"
   naming_suffix       = local.resolved_suffix
   location            = var.workload_vnet_location
   location_code       = var.workload_vnet_location_code

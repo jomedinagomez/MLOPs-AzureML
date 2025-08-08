@@ -33,24 +33,28 @@ resource "azurerm_user_assigned_identity" "cc" {
 
 # Storage Account Private DNS Zones
 resource "azurerm_private_dns_zone" "blob" {
+  count               = var.manage_supporting_private_dns_zones ? 1 : 0
   name                = "privatelink.blob.core.windows.net"
   resource_group_name = local.rg_name
   tags                = var.tags
 }
 
 resource "azurerm_private_dns_zone" "file" {
+  count               = var.manage_supporting_private_dns_zones ? 1 : 0
   name                = "privatelink.file.core.windows.net"
   resource_group_name = local.rg_name
   tags                = var.tags
 }
 
 resource "azurerm_private_dns_zone" "table" {
+  count               = var.manage_supporting_private_dns_zones ? 1 : 0
   name                = "privatelink.table.core.windows.net"
   resource_group_name = local.rg_name
   tags                = var.tags
 }
 
 resource "azurerm_private_dns_zone" "queue" {
+  count               = var.manage_supporting_private_dns_zones ? 1 : 0
   name                = "privatelink.queue.core.windows.net"
   resource_group_name = local.rg_name
   tags                = var.tags
@@ -58,6 +62,7 @@ resource "azurerm_private_dns_zone" "queue" {
 
 # Key Vault Private DNS Zone
 resource "azurerm_private_dns_zone" "keyvault" {
+  count               = var.manage_supporting_private_dns_zones ? 1 : 0
   name                = "privatelink.vaultcore.azure.net"
   resource_group_name = local.rg_name
   tags                = var.tags
@@ -65,6 +70,7 @@ resource "azurerm_private_dns_zone" "keyvault" {
 
 # Container Registry Private DNS Zone
 resource "azurerm_private_dns_zone" "acr" {
+  count               = var.manage_supporting_private_dns_zones ? 1 : 0
   name                = "privatelink.azurecr.io"
   resource_group_name = local.rg_name
   tags                = var.tags
@@ -96,54 +102,60 @@ resource "azurerm_private_dns_zone" "aml_instances" {
 #####
 
 resource "azurerm_private_dns_zone_virtual_network_link" "blob_link" {
+  count                 = var.manage_supporting_private_dns_zones ? 1 : 0
   name                  = "blob-vnet-link"
   resource_group_name   = local.rg_name
-  private_dns_zone_name = azurerm_private_dns_zone.blob.name
+  private_dns_zone_name = azurerm_private_dns_zone.blob[0].name
   virtual_network_id    = azurerm_virtual_network.aml_vnet.id
   registration_enabled  = false
   tags                  = var.tags
 }
 
 resource "azurerm_private_dns_zone_virtual_network_link" "file_link" {
+  count                 = var.manage_supporting_private_dns_zones ? 1 : 0
   name                  = "file-vnet-link"
   resource_group_name   = local.rg_name
-  private_dns_zone_name = azurerm_private_dns_zone.file.name
+  private_dns_zone_name = azurerm_private_dns_zone.file[0].name
   virtual_network_id    = azurerm_virtual_network.aml_vnet.id
   registration_enabled  = false
   tags                  = var.tags
 }
 
 resource "azurerm_private_dns_zone_virtual_network_link" "table_link" {
+  count                 = var.manage_supporting_private_dns_zones ? 1 : 0
   name                  = "table-vnet-link"
   resource_group_name   = local.rg_name
-  private_dns_zone_name = azurerm_private_dns_zone.table.name
+  private_dns_zone_name = azurerm_private_dns_zone.table[0].name
   virtual_network_id    = azurerm_virtual_network.aml_vnet.id
   registration_enabled  = false
   tags                  = var.tags
 }
 
 resource "azurerm_private_dns_zone_virtual_network_link" "queue_link" {
+  count                 = var.manage_supporting_private_dns_zones ? 1 : 0
   name                  = "queue-vnet-link"
   resource_group_name   = local.rg_name
-  private_dns_zone_name = azurerm_private_dns_zone.queue.name
+  private_dns_zone_name = azurerm_private_dns_zone.queue[0].name
   virtual_network_id    = azurerm_virtual_network.aml_vnet.id
   registration_enabled  = false
   tags                  = var.tags
 }
 
 resource "azurerm_private_dns_zone_virtual_network_link" "keyvault_link" {
+  count                 = var.manage_supporting_private_dns_zones ? 1 : 0
   name                  = "keyvault-vnet-link"
   resource_group_name   = local.rg_name
-  private_dns_zone_name = azurerm_private_dns_zone.keyvault.name
+  private_dns_zone_name = azurerm_private_dns_zone.keyvault[0].name
   virtual_network_id    = azurerm_virtual_network.aml_vnet.id
   registration_enabled  = false
   tags                  = var.tags
 }
 
 resource "azurerm_private_dns_zone_virtual_network_link" "acr_link" {
+  count                 = var.manage_supporting_private_dns_zones ? 1 : 0
   name                  = "acr-vnet-link"
   resource_group_name   = local.rg_name
-  private_dns_zone_name = azurerm_private_dns_zone.acr.name
+  private_dns_zone_name = azurerm_private_dns_zone.acr[0].name
   virtual_network_id    = azurerm_virtual_network.aml_vnet.id
   registration_enabled  = false
   tags                  = var.tags

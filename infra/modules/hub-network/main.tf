@@ -23,7 +23,7 @@ resource "azurerm_virtual_network" "hub_vnet" {
 
 # Gateway Subnet (required for VPN Gateway)
 resource "azurerm_subnet" "gateway_subnet" {
-  name                 = "GatewaySubnet"  # This name is required by Azure
+  name                 = "GatewaySubnet" # This name is required by Azure
   resource_group_name  = var.resource_group_name
   virtual_network_name = azurerm_virtual_network.hub_vnet.name
   address_prefixes     = [var.gateway_subnet_address_prefix]
@@ -49,9 +49,9 @@ resource "azurerm_virtual_network_gateway" "vpn_gateway" {
   location            = var.location
   resource_group_name = var.resource_group_name
 
-  type     = "Vpn"
-  vpn_type = "RouteBased"
-  sku      = var.vpn_gateway_sku
+  type       = "Vpn"
+  vpn_type   = "RouteBased"
+  sku        = var.vpn_gateway_sku
   enable_bgp = var.enable_bgp
 
   ip_configuration {
@@ -68,9 +68,9 @@ resource "azurerm_virtual_network_gateway" "vpn_gateway" {
     content {
       address_space        = [var.vpn_client_address_space]
       vpn_client_protocols = ["OpenVPN"]
-  aad_tenant   = local.aad_tenant_id
-  aad_issuer   = "https://sts.windows.net/${local.aad_tenant_id}/"
-  aad_audience = var.azure_ad_p2s_audience
+      aad_tenant           = local.aad_tenant_id
+      aad_issuer           = "https://sts.windows.net/${local.aad_tenant_id}/"
+      aad_audience         = var.azure_ad_p2s_audience
     }
   }
 
@@ -138,7 +138,7 @@ resource "azurerm_virtual_network_peering" "hub_to_dev" {
   allow_virtual_network_access = true
   allow_forwarded_traffic      = true
   allow_gateway_transit        = true
-  use_remote_gateways         = false
+  use_remote_gateways          = false
 
   depends_on = [
     azurerm_virtual_network.hub_vnet,
@@ -156,7 +156,7 @@ resource "azurerm_virtual_network_peering" "hub_to_prod" {
   allow_virtual_network_access = true
   allow_forwarded_traffic      = true
   allow_gateway_transit        = true
-  use_remote_gateways         = false
+  use_remote_gateways          = false
 
   depends_on = [
     azurerm_virtual_network.hub_vnet,

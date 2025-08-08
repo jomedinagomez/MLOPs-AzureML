@@ -8,8 +8,8 @@ data "azurerm_client_config" "current" {}
 #####
 
 locals {
-  rg_name = var.resource_group_name
-  rg_id   = "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name}"
+  rg_name         = var.resource_group_name
+  rg_id           = "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name}"
   resolved_suffix = coalesce(var.naming_suffix, "")
 }
 
@@ -102,6 +102,7 @@ module "keyvault_aml" {
 
   # Enable auto-purge for dev/test environments
   enable_auto_purge = var.enable_auto_purge
+  purge_protection  = var.key_vault_purge_protection_enabled
 }
 
 ##### Create the Azure Machine Learning Workspace and its child resources
@@ -172,13 +173,13 @@ resource "azapi_resource" "aml_workspace" {
     module.keyvault_aml,
     module.container_registry,
     azurerm_user_assigned_identity.workspace_identity,
-  azurerm_role_assignment.workspace_key_vault_secrets_user,
-  azurerm_role_assignment.workspace_key_vault_reader,
-  azurerm_role_assignment.rg_reader,
-  azurerm_role_assignment.ai_network_connection_approver,
-  azurerm_role_assignment.ai_administrator,
-  time_sleep.wait_rbac_role_propagation,
-  time_sleep.wait_workspace_slot
+    azurerm_role_assignment.workspace_key_vault_secrets_user,
+    azurerm_role_assignment.workspace_key_vault_reader,
+    azurerm_role_assignment.rg_reader,
+    azurerm_role_assignment.ai_network_connection_approver,
+    azurerm_role_assignment.ai_administrator,
+    time_sleep.wait_rbac_role_propagation,
+    time_sleep.wait_workspace_slot
   ]
 
   type                      = "Microsoft.MachineLearningServices/workspaces@2025-04-01-preview"
@@ -211,8 +212,8 @@ resource "azapi_resource" "aml_workspace" {
       storageAccount      = module.storage_account_default.id
       containerRegistry   = module.container_registry.id
 
-  # For UserAssigned identity workspaces, explicitly set the primary UAI
-  primaryUserAssignedIdentity = azurerm_user_assigned_identity.workspace_identity.id
+      # For UserAssigned identity workspaces, explicitly set the primary UAI
+      primaryUserAssignedIdentity = azurerm_user_assigned_identity.workspace_identity.id
 
       # Block access to the AML Workspace over the public endpoint
       publicNetworkAccess = "disabled"
@@ -548,33 +549,13 @@ module "private_endpoint_aml_workspace" {
   subnet_id = var.subnet_id
   private_dns_zone_ids = [
     local.dns_zone_aml_api_id,
-  local.dns_zone_aml_notebooks_id,
-  local.dns_zone_aml_instances_id
+    local.dns_zone_aml_notebooks_id,
+    local.dns_zone_aml_instances_id
   ]
 }
 
-## Create the A record for the AML Workspace compute instances
-##
-data "azurerm_private_dns_zone" "instances_zone" {
-  # Ensure we lookup the shared instances.azureml.ms zone in the correct RG (hub RG)
-  name                = "instances.azureml.ms"
-  resource_group_name = var.resource_group_name_dns
-}
-
-resource "azurerm_private_dns_a_record" "aml_workspace_compute_instance" {
-  depends_on = [
-    module.private_endpoint_aml_workspace,
-    data.azurerm_private_dns_zone.instances_zone
-  ]
-
-  name                = "*.${var.location}"
-  zone_name           = data.azurerm_private_dns_zone.instances_zone.name
-  resource_group_name = data.azurerm_private_dns_zone.instances_zone.resource_group_name
-  ttl                 = 10
-  records = [
-    module.private_endpoint_aml_workspace.private_endpoint_ip
-  ]
-}
+## (Removed) Per-environment wildcard A record for AML compute instances migrated to root module.
+## Centralized in azurerm_private_dns_a_record.shared_aml_instances_wildcard (root main.tf).
 
 ##### Create non-human role assignments
 #####
@@ -821,8 +802,8 @@ resource "azurerm_role_assignment" "compute_rg_reader" {
 ##
 resource "azurerm_role_assignment" "workspace_storage_blob_owner" {
   depends_on = [
-  module.storage_account_default,
-  azurerm_role_assignment.rg_reader
+    module.storage_account_default,
+    azurerm_role_assignment.rg_reader
   ]
 
   name                 = uuidv5("dns", "${local.rg_name}${azurerm_user_assigned_identity.workspace_identity.principal_id}${module.storage_account_default.name}blobowner")
@@ -1032,7 +1013,7 @@ resource "azapi_resource" "compute_cluster_uami" {
     azurerm_role_assignment.compute_rg_reader
   ]
 
-  type      = "Microsoft.MachineLearningServices/workspaces/computes@2024-10-01"
+  type = "Microsoft.MachineLearningServices/workspaces/computes@2024-10-01"
   # Allow override; default pattern amlcc-<env>-<region><suffix>
   name      = coalesce(var.compute_cluster_name, "amlcc-${var.purpose}-${var.location_code}${local.resolved_suffix}")
   parent_id = azapi_resource.aml_workspace.id
@@ -1093,7 +1074,7 @@ resource "azapi_resource" "compute_instance_uami" {
     azurerm_role_assignment.compute_rg_reader
   ]
 
-  type      = "Microsoft.MachineLearningServices/workspaces/computes@2024-10-01"
+  type = "Microsoft.MachineLearningServices/workspaces/computes@2024-10-01"
   # Allow override via variable; default pattern amli-<env>-<region><suffix>
   name      = coalesce(var.compute_instance_name, "amli-${var.purpose}-${var.location_code}${local.resolved_suffix}")
   parent_id = azapi_resource.aml_workspace.id
@@ -1109,8 +1090,8 @@ resource "azapi_resource" "compute_instance_uami" {
     properties = {
       computeType = "ComputeInstance"
       properties = {
-        vmSize                      = "Standard_F8s_v2"
-        enableNodePublicIp          = false
+        vmSize             = "Standard_F8s_v2"
+        enableNodePublicIp = false
         personalComputeInstanceSettings = {
           assignedUser = {
             objectId = data.azurerm_client_config.current.object_id
@@ -1120,7 +1101,7 @@ resource "azapi_resource" "compute_instance_uami" {
         sshSettings = {
           sshPublicAccess = "Disabled"
         }
-        applicationSharingPolicy = "Personal"
+        applicationSharingPolicy         = "Personal"
         computeInstanceAuthorizationType = "personal"
       }
       description = "Personal compute instance with user-assigned managed identity for interactive ML development"
@@ -1146,7 +1127,7 @@ resource "time_sleep" "wait_for_compute_resources" {
     azapi_resource.compute_cluster_uami,
     azapi_resource.compute_instance_uami
   ]
-  create_duration = "180s"  # Increased to 180 seconds
+  create_duration = "180s" # Increased to 180 seconds
 }
 
 ## Configure workspace to use compute cluster for image builds since ACR is private
@@ -1169,7 +1150,7 @@ resource "azapi_update_resource" "workspace_image_build_config" {
 
   # Add verification step
   provisioner "local-exec" {
-  command = "Start-Sleep -Seconds 10; Write-Host 'Image build compute configuration applied. Please verify manually with: az ml workspace show --name ${azapi_resource.aml_workspace.name} --resource-group ${local.rg_name} --query image_build_compute'"
+    command     = "Start-Sleep -Seconds 10; Write-Host 'Image build compute configuration applied. Please verify manually with: az ml workspace show --name ${azapi_resource.aml_workspace.name} --resource-group ${local.rg_name} --query image_build_compute'"
     interpreter = ["pwsh", "-Command"]
   }
 }

@@ -48,33 +48,33 @@ output "vnet_name" {
 
 # DNS Zone Resource IDs (for private endpoint configuration)
 output "dns_zone_blob_id" {
-  description = "Resource ID of the blob storage DNS zone"
-  value       = azurerm_private_dns_zone.blob.id
+  description = "Resource ID of the blob storage DNS zone (null when managed externally)"
+  value       = try(azurerm_private_dns_zone.blob[0].id, null)
 }
 
 output "dns_zone_file_id" {
-  description = "Resource ID of the file storage DNS zone"
-  value       = azurerm_private_dns_zone.file.id
+  description = "Resource ID of the file storage DNS zone (null when managed externally)"
+  value       = try(azurerm_private_dns_zone.file[0].id, null)
 }
 
 output "dns_zone_table_id" {
-  description = "Resource ID of the table storage DNS zone"
-  value       = azurerm_private_dns_zone.table.id
+  description = "Resource ID of the table storage DNS zone (null when managed externally)"
+  value       = try(azurerm_private_dns_zone.table[0].id, null)
 }
 
 output "dns_zone_queue_id" {
-  description = "Resource ID of the queue storage DNS zone"
-  value       = azurerm_private_dns_zone.queue.id
+  description = "Resource ID of the queue storage DNS zone (null when managed externally)"
+  value       = try(azurerm_private_dns_zone.queue[0].id, null)
 }
 
 output "dns_zone_keyvault_id" {
-  description = "Resource ID of the Key Vault DNS zone"
-  value       = azurerm_private_dns_zone.keyvault.id
+  description = "Resource ID of the Key Vault DNS zone (null when managed externally)"
+  value       = try(azurerm_private_dns_zone.keyvault[0].id, null)
 }
 
 output "dns_zone_acr_id" {
-  description = "Resource ID of the Container Registry DNS zone"
-  value       = azurerm_private_dns_zone.acr.id
+  description = "Resource ID of the Container Registry DNS zone (null when managed externally)"
+  value       = try(azurerm_private_dns_zone.acr[0].id, null)
 }
 
 output "dns_zone_aml_api_id" {

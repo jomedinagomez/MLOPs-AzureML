@@ -1,6 +1,6 @@
 # Terraform Variables
 *.tfvars
-
+outputs.txt
 # Local inventory / exported terraform artifacts (not tracked)
 .local_inventory/
 

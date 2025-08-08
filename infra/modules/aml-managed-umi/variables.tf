@@ -170,8 +170,14 @@ variable "enable_auto_purge" {
   default     = false
 }
 
+variable "key_vault_purge_protection_enabled" {
+  description = "Enable purge protection on the Key Vault created for the AML workspace"
+  type        = bool
+  default     = false
+}
+
 // Cross-environment RBAC inputs removed; RBAC is centralized in infra/main.tf.
- 
+
 variable "compute_instance_name" {
   description = "Optional explicit name for the compute instance (overrides generated). Must be unique per workspace."
   type        = string

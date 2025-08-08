@@ -23,6 +23,8 @@ resource "azurerm_private_endpoint" "pe" {
     ignore_changes = [
       tags["created_date"],
       tags["created_by"]
+      # Avoid forcing recreation when only zone ownership/migration changes upstream
+      , private_dns_zone_group
     ]
   }
 }

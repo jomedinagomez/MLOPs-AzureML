@@ -4,6 +4,54 @@
 
 This Azure ML platform follows the deployment strategy with **complete environment isolation** and uses a **single service principal** approach for infrastructure automation across all environments.
 
+### Optional Point-to-Site (P2S) VPN via Entra ID (OpenVPN)
+
+The platform can (optionally) deploy a RouteBased Virtual Network Gateway in the production VNet to provide administrator or data‑scientist access to private resources (workspace private endpoints, registry, storage, etc.). This is disabled by default and enabled only when the variable `azure_ad_p2s_audience` is set.
+
+Key characteristics:
+- Auth Method: Entra ID (Azure AD) OpenVPN (no certificates maintained).
+- Conditional Creation: Gateway + public IP only when `azure_ad_p2s_audience` is non-empty.
+- Address Pool: Configurable via `vpn_client_address_pool` (default `["10.255.0.0/24"]`). Must not overlap VNet ranges `10.1.0.0/16` (dev) or `10.2.0.0/16` (prod).
+- DNS: Inherits VNet DNS (Azure wire server 168.63.129.16) so Private DNS zones resolve inside the tunnel.
+
+#### Entra ID Application Registrations
+You need TWO app registrations (Server + Client) as per Microsoft guidance:
+1. Server Application (used as audience)
+  - Expose an API (set Application ID URI – can be api://<server_app_client_id> or custom URI).
+  - Add delegated permission: (auto when exposing by default) `user_impersonation`.
+  - Record the Application (client) ID => supply as `azure_ad_p2s_audience`.
+2. Client Application (VPN client)
+  - Add API permission to the Server App: Delegated `user_impersonation`.
+  - Enable Mobile & Desktop Authentication (redirect URI `https://login.microsoftonline.com/common/oauth2/nativeclient`).
+
+No secret/cert is needed for user interactive auth with the Azure VPN client when using OpenVPN + AAD.
+
+#### Terraform Variables
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `azure_ad_p2s_audience` | Enables gateway when set; value is Server App (Application) ID | "" (disabled) |
+| `azure_ad_p2s_tenant_id` | Override tenant (GUID); null uses current | null |
+| `vpn_client_address_pool` | Client IP pool list (non-overlapping CIDRs) | ["10.255.0.0/24"] |
+
+#### Minimal Enable Example (`terraform.tfvars`)
+```hcl
+azure_ad_p2s_audience      = "00000000-0000-0000-0000-000000000000"
+vpn_client_address_pool    = ["10.255.0.0/24"]
+# azure_ad_p2s_tenant_id   = "<tenant-guid-if-different>"
+```
+
+#### Connecting
+1. Install Azure VPN Client (Windows Store) or OpenVPN compatible client supporting AAD.
+2. Download the user profile from the Azure Portal (Virtual Network Gateway > Point-to-site configuration > Download VPN client) after first apply.
+3. Import into client; sign in with Entra ID.
+4. Verify you can resolve private FQDNs (e.g. `privatelink.api.azureml.ms`).
+
+To remove the gateway later, clear `azure_ad_p2s_audience` and apply; Terraform will destroy the gateway resources safely (ensure no active sessions).
+
+> Future Improvement: Enhanced CIDR overlap validation will be added to ensure `vpn_client_address_pool` does not overlap any present or future VNet/subnet ranges (currently only simple equality checks). Manually verify before expanding address spaces.
+
+> VPN Disable Switch: Leaving `azure_ad_p2s_audience` blank (default) fully skips gateway + public IP creation (no cost impact).
+
 ## Deployment Architecture
 
 ### Service Principal Strategy (Updated)
@@ -41,8 +89,25 @@ Service Principal: sp-aml-deployment-platform
 **Deployment Strategy Compliance**: Single SP manages all 6 resource groups as specified  
 **CI/CD Ready**: SP credentials available immediately for pipeline configuration  
 **Environment Agnostic**: Same SP works for both dev and prod deployments  
+**Per-Environment Observability**: Separate Log Analytics workspaces for dev and prod support data segregation and compliance.
 
 This approach aligns with the deployment strategy requirement for a single service principal managing all resource groups across both environments and the hub.
+
+### Tagging Strategy
+All resources inherit the base `var.tags` map merged with contextual tags (environment, purpose, component). Update `terraform.tfvars` to propagate organization-wide metadata consistently.
+
+### Key Vault Purge Protection & Auto-Purge (Sandbox Behavior)
+Variables:
+```
+key_vault_purge_protection_enabled = false  # default (sandbox)
+enable_auto_purge                  = true   # enables destroy-time purge helper
+```
+For production harden by setting:
+```
+key_vault_purge_protection_enabled = true
+enable_auto_purge                  = false
+```
+This ensures soft-deleted vault items are retained and not purged automatically.
 1. **aml-vnet**: Deploys networking, DNS, and managed identities (foundation for all other modules)
 2. **aml-managed-smi**: Deploys ML workspace, storage, Key Vault, ACR, compute, and private endpoints. Consumes outputs from `aml-vnet`.
 3. **aml-registry-smi**: Deploys ML registry, Log Analytics, and private endpoint. Consumes outputs from `aml-vnet` and workspace identity from `aml-managed-smi`.
@@ -288,6 +353,7 @@ The infrastructure provides comprehensive outputs for integration:
 
 ### Summary Output
 - `deployment_summary`: High-level deployment overview
+- `dev_private_endpoint_fqdns` / `prod_private_endpoint_fqdns`: DNS smoke-test list of key private endpoints (workspace API, KV, storage blob/file, ACR)
 
 ## 🔐 Security Features
 
@@ -949,56 +1015,9 @@ terraform apply
 - **Documentation**: Keep README updated
 - **Testing**: Validate before applying
 
-## 🔒 **VPN Access to Private Azure ML Workspace**
+## 🔒 Private Access
 
-Since the Azure ML workspace is deployed with private networking only, you connect via the **Hub-and-Spoke VPN Gateway** (no jumpbox needed!).
-
-### **VPN Connection Setup**
-
-**Step 1: Generate VPN Certificates**
-```powershell
-# Run the certificate generation script (created during deployment)
-.\generate_vpn_certificates.ps1
-```
-
-**Step 2: Add Certificate to terraform.tfvars**
-```hcl
-# Add the generated certificate data
-vpn_root_certificate_data = "MIIC5jCCAc4CAQAwDQYJKoZI..."  # From script output
-```
-
-**Step 3: Deploy Hub Network**
-```bash
-terraform init
-terraform apply -target="module.hub_network"
-```
-
-**Step 4: Install Client Certificate**
-1. Double-click the generated `VPNClientCert.pfx` file
-2. Follow the installation wizard
-3. Install to "Current User" → "Personal" store
-
-**Step 5: Download VPN Client**
-1. Go to Azure Portal → VPN Gateways → `vpn-gateway-hub`
-2. Click "Point-to-site configuration"
-3. Download "VPN client"
-4. Extract and run `WindowsAmd64/VpnClientSetupAmd64.exe`
-
-**Step 6: Connect**
-1. Open Windows VPN settings
-2. Connect to "Azure ML Hub VPN"
-3. Now you can access private Azure ML workspace!
-
-### **Access Your Azure ML Workspace**
-Once connected to VPN:
-```powershell
-# Install Azure CLI and ML extension locally
-az extension add --name ml
-
-# Login and configure
-az login
-az configure --defaults group=rg-aml-ws-dev-cc workspace=amldevcc004
-
+The platform now uses a flat two-VNet model (dev, prod) with private endpoints and shared private DNS. Remote operator access can be enabled later via a lightweight jump host or Azure Bastion if required. Legacy hub-and-spoke VPN guidance removed.
 # Test access
 az ml workspace show
 az ml compute list

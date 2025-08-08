@@ -90,3 +90,9 @@ variable "manage_aml_private_dns_zones" {
   type        = bool
   default     = true
 }
+
+variable "manage_supporting_private_dns_zones" {
+  description = "Whether this module should create supporting service private DNS zones (blob/file/queue/table/vaultcore/azurecr) and links. Disable when using centralized shared supporting DNS zones."
+  type        = bool
+  default     = true
+}
