@@ -2,10 +2,10 @@
 
 ## Overview
 
-This document outlines the deployment strategy for our Azure Machine Learning platform, now refactored to a **flat dual-VNet architecture with optional Entra ID (Azure AD) OpenVPN Point‑to‑Site gateway**. The earlier hub-and-spoke design (central hub VNet + dev/prod spokes) has been removed to simplify topology, reduce operational surface area, and support fully deterministic naming. Remote private access is delivered through an opt‑in Entra ID–integrated OpenVPN gateway created only when explicitly enabled via variables—eliminating gateway cost when not required.
+This document outlines the deployment strategy for our Azure Machine Learning platform implemented as a **flat dual-VNet architecture with optional Entra ID (Azure AD) OpenVPN Point‑to‑Site gateway**. Remote private access is delivered through an opt‑in Entra ID–integrated OpenVPN gateway created only when explicitly enabled via variables—eliminating gateway cost when not required.
 
-**Key Architecture Features (Current – Flat Architecture, Revision 4):**
-- **Flat Dual VNets**: Independent dev and prod VNets (no hub); optional direct peering (removable for stricter isolation)
+**Key Architecture Features (Current):**
+- **Flat Dual VNets**: Independent dev and prod VNets; optional direct peering (removable for stricter isolation)
 - **Optional Entra ID P2S VPN**: Conditional creation; set `azure_ad_p2s_audience` (server app client ID) to enable (AAD auth, OpenVPN protocol)
 - **Deterministic Naming**: Names derive from `prefix`, `purpose`, `location_code`, `naming_suffix`; no random postfixes
 - **Centralized Private DNS Zones (Expanded)**: Azure ML + core service private DNS zones (api, notebooks, instances, blob, file, queue, table, vaultcore, acr) consolidated in a shared DNS RG; only records (not resources) are multi‑tenant
@@ -17,15 +17,11 @@ This document outlines the deployment strategy for our Azure Machine Learning pl
 
 **Two registries remain intentionally for demonstration of cross‑environment asset promotion; a single registry suffices for most production deployments.**
 
-**Last Updated**: August 8, 2025 (Revision 4) – Flattened network (removed hub and transit), introduced conditional Entra ID OpenVPN gateway (Standard static public IP, RouteBased), expanded centralized private DNS approach to include storage, key vault & ACR zones, enforced deterministic naming via `naming_suffix`, parameterized all gateway settings (SKU, allocation, client address pool, protocols), added outputs for VPN gateway & AML private endpoint FQDNs, and documented migration path from hub/spoke to flat. (Revision 3 – centralized AML-only DNS; Revision 2 – outbound rule & Key Vault RBAC fixes retained below.)
-
-> Legacy hub-and-spoke references remain in historical sections for audit; current deployment uses the flat model described above.
+**Last Updated**: August 8, 2025 – Added conditional Entra ID OpenVPN gateway (Standard static public IP, RouteBased), expanded centralized private DNS approach to include storage, key vault & ACR zones, enforced deterministic naming via `naming_suffix`, parameterized all gateway settings (SKU, allocation, client address pool, protocols), added outputs for VPN gateway & AML private endpoint FQDNs, refined outbound rule schema & Key Vault RBAC documentation.
 
 > NOTE: Dev↔Prod VNet peering is presently enabled to simplify shared DNS zone linking and potential future cross-environment diagnostics. If strict network isolation is required, remove the two `azurerm_virtual_network_peering` resources; outbound registry access & managed private endpoints continue to function (they rely on Azure ML managed networks and private endpoints, not on platform VNet transit).
 
-**Revision 3 (Historical)** – Centralized Azure ML private DNS zones (api, notebooks, instances) into shared resource group eliminating per‑environment duplication; added migration toggle `manage_aml_private_dns_zones`; updated workspace private endpoint zone groups; clarified isolation exception.
-
-> Summary of 2025-08-07 (Rev 2) Fixes:
+> Summary of Recent Fixes:
 > - Outbound Rule ValidationError (400) resolved by adding `destination.subresourceTarget = "amlregistry"` when the destination is an Azure ML Registry.
 > - Workspace provisioning 403 on Key Vault resolved by granting **Key Vault Reader** (management plane) alongside **Key Vault Secrets User** (data plane) to the workspace UAMI before creation.
 > - Added staged `time_sleep` resources to ensure RBAC role propagation (90s) plus an additional workspace slot wait (150s) to avoid `FailedIdentityOperation` 409 conflicts after deletes.
@@ -139,7 +135,7 @@ Preventative Guidance:
 | 400 ValidationError outbound rule to registry | Missing `subresourceTarget` | Add `subresourceTarget = "amlregistry"` in destination |
 | 409 RoleAssignmentExists on human user roles | Role already granted out-of-band / drift | Import existing role assignment or enable `skip_service_principal_aad_check`; alternatively use `lifecycle { ignore_changes = [principal_id] }` or conditional creation |
 
-## Centralized Azure ML Private DNS Zones (Revision 3 – 2025-08-08)
+## Centralized Azure ML & Core Service Private DNS Zones
 
 ### Rationale
 Previously each environment module created its own Azure ML private DNS zones:
@@ -158,54 +154,29 @@ Previously each environment module created its own Azure ML private DNS zones:
 | VPN Gateway | Conditional | Only if `azure_ad_p2s_audience` set (resides in prod VNet) |
 
 ### Terraform Implementation
-1. Defined shared zones in root `infra/main.tf` inside hub resource group with `lifecycle { prevent_destroy = true }` during migration hardening.
-2. Added explicit virtual network links: hub (authoritative), dev spoke, prod spoke for each of: `privatelink.api.azureml.ms`, `privatelink.notebooks.azure.net`, `instances.azureml.ms`.
-3. Introduced `manage_aml_private_dns_zones` (bool) variable in `modules/aml-vnet`; set to `false` for dev/prod to suppress legacy per‑environment AML zone creation (conditional resources via `count`).
-4. Guarded AML DNS zone outputs in the vnet module using `try()` to tolerate disabled creation.
-5. Extended managed UMI (workspace) module inputs to accept `dns_zone_aml_api_id`, `dns_zone_aml_notebooks_id`, and new `dns_zone_aml_instances_id` so the workspace private endpoint `private_dns_zone_group` references shared zone IDs.
-6. Updated workspace private endpoint to include all three zone IDs ensuring correct record population (API, notebooks, compute instances wildcard records).
-
-### Migration Phases (Executed)
-| Step | Action | State | Risk Mitigation |
-|------|--------|-------|-----------------|
-| 1 | Create shared zones (hub RG) + add hub link; disable per-env AML zones; add dev/prod spoke links | COMPLETE | `prevent_destroy` enabled to avoid accidental deletion |
-| 2 | Repoint workspace private endpoint `private_dns_zone_group` to shared zone IDs (api, notebooks, instances) | COMPLETE | Idempotent update; records auto-created in shared zones |
-| 3 | Validate resolution (`nslookup <workspace>.<region>.api.azureml.ms` from VPN client & inside spoke), verify registry & compute instance hostnames | PENDING | Keep old toggle logic available until validation signed off |
-| 4 | Remove `prevent_destroy` + optionally delete legacy variable/toggle once confidence high | PENDING | Staged removal after documented validation window |
+1. Shared zones declared once in a dedicated DNS resource group (with `prevent_destroy` for protection).
+2. Virtual network links created for dev and prod VNets for each zone: AML api, notebooks, instances, blob, file, queue, table, vaultcore, acr.
+3. Environment VNet modules consume shared zone IDs as inputs (no per-environment zone creation logic).
+4. Workspace private endpoints reference all required zone IDs via a unified `private_dns_zone_group` list.
 
 ### DNS Record Coexistence
 Workspace and registry endpoints include unique environment-specific prefixes (e.g., `mlwdevcc02` vs `mlwprodcc02`). Azure ML adds records only for the specific PEs created, so dev and prod records coexist in the same zone with no collision. This design enables future scenarios (e.g., secure cross‑env sharing, central policy) without additional DNS orchestration.
-
-### Rollback Strategy
-If an issue surfaced before Step 4:
-1. Set `manage_aml_private_dns_zones = true` for affected environment modules.
-2. Remove the environment's VNet links to shared zones (optional isolation during investigation).
-3. Re‑apply Terraform → per‑environment zones recreated; workspace PE zone group would need to be pointed back (module code currently supports this via conditional outputs).
-4. After remediation, reattempt migration starting at Step 1 (ensuring no duplicate zone names remain).
-
-### Post-Migration Cleanup (Future)
-Planned once validation complete:
-* Remove toggle or leave documented as a feature flag (decision pending governance preference).
-* Drop `prevent_destroy` after adding explicit README note about protective expectation.
-* Optionally centralize additional cross‑service zones if a future enterprise pattern emerges (OUT OF SCOPE currently to maintain strict least sharing principle).
 
 ### Operational Benefits
 | Benefit | Impact |
 |---------|--------|
 | Eliminate duplicate AML zone resources | Simpler state, faster plans |
 | Single update point for AML DNS policy | Reduced drift risk |
-| Easier multi‑subscription future (can move zones first) | Decouples DNS from spoke lifecycle |
+| Easier multi‑subscription future (can move zones first) | Decouples DNS from environment lifecycle |
 | Faster environment teardown (no contention for global zone names) | Speeds re-provision cycles |
 
-### Validation Checklist (To Execute – Step 3)
-1. Connect via VPN (hub) from a client machine.
-2. Resolve: `nslookup mlwdev*.<region>.api.azureml.ms` → private IP in dev spoke subnet range.
-3. Resolve: `nslookup mlwprod*.<region>.api.azureml.ms` → private IP in prod spoke subnet range.
+### Validation Checklist
+1. (If enabled) Connect via VPN from a client machine.
+2. Resolve: `nslookup mlwdev*.<region>.api.azureml.ms` → private IP in dev subnet range.
+3. Resolve: `nslookup mlwprod*.<region>.api.azureml.ms` → private IP in prod subnet range.
 4. Resolve notebook endpoint: `nslookup mlwdev*.<region>.notebooks.azure.net` (and prod analogue).
 5. (Optional) Start a compute instance; verify its hostname A record in `instances.azureml.ms` zone.
 6. Access Azure ML Studio privately for both envs; confirm no public fallback.
-
-Document results in a short table appended to this section, then proceed to Step 4.
 
 ---
 
@@ -219,7 +190,7 @@ Document results in a short table appended to this section, then proceed to Step
 - **Promotion Demonstration**: Dual registries retained solely for cross-environment promotion patterns.
 
 ### 2. Flat Dual-VNet Architecture with Conditional VPN
-- **Flat Topology**: Dev VNet + Prod VNet (no hub) + shared DNS resource group.
+- **Flat Topology**: Dev VNet + Prod VNet + shared DNS resource group.
 - **Conditional Remote Access**: VPN gateway (OpenVPN + Entra ID) created only when `azure_ad_p2s_audience` supplied.
 - **AAD Integrated Auth**: `aad_tenant` (login URL) + `aad_issuer` (sts URL) + `aad_audience` (server app client ID).
 - **Cost Control**: Remove audience to destroy gateway and eliminate monthly gateway cost automatically.
@@ -317,9 +288,6 @@ Both Dev and Prod:
 - Simplified monitoring: Single region to monitor for service health
 - Easier troubleshooting: Consistent region-specific behaviors
 
-### (Legacy) Hub-and-Spoke Network Architecture
-Retained for historical comparison. Superseded by the flat dual-VNet design below.
-
 ### Current Flat Dual-VNet + Optional AAD P2S Gateway
 
 ```
@@ -347,7 +315,7 @@ Cross-Environment Traffic:
 ```
 
 **Benefits (Flat Model):**
-- Reduced routing complexity (no hub orchestration)
+- Reduced routing complexity (no transit layer)
 - Gateway cost incurred only when explicitly enabled
 - Simpler DNS linkage (single layer of VNet links)
 - Identical security posture for private endpoints & managed outbound rules
@@ -364,8 +332,8 @@ Client Machine (Local Development):
 └── DNS: Azure Private DNS resolution for *.api.azureml.ms
 
 Connectivity Flow:
-1. Connect to Azure ML Hub VPN
-2. Automatic routing to dev spoke (10.1.0.0/16) or prod spoke (10.2.0.0/16)
+1. Connect to Azure ML VPN (if enabled)
+2. Automatic routing to dev (10.1.0.0/16) or prod (10.2.0.0/16)
 3. Private DNS resolution for Azure ML workspace endpoints
 4. Direct access to Azure ML Studio and APIs without jumpbox
 
@@ -389,7 +357,7 @@ Enable / disable by setting / unsetting `azure_ad_p2s_audience` (and optionally 
 **Connection Workflow**
 1. **Certificate Setup**: Generate and install VPN client certificates
 2. **VPN Client**: Download and install Azure VPN client from portal
-3. **Connect**: One-click connection to "Azure ML Hub VPN"
+3. **Connect**: One-click connection to configured Azure ML VPN profile
 4. **Access**: Direct access to both dev and prod Azure ML workspaces
 5. **Develop**: Use local tools (VS Code, PyCharm, etc.) with full ML capabilities
 
@@ -405,11 +373,11 @@ Deployment Service Principal:
 ├── Roles: 
 │   ├── Contributor (on all 7 resource groups): Deploy ML workspace, storage accounts, compute resources, and VPN Gateway - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/privileged#contributor)
 │   ├── User Access Administrator (on all 7 resource groups): Configure RBAC for managed identities and user access - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/privileged#user-access-administrator)
-│   └── Network Contributor (on all 7 resource groups): Configure secure networking, VPN Gateway, and hub-spoke peering - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/networking#network-contributor)
+│   └── Network Contributor (on all resource groups): Configure secure networking, VPN Gateway, and private endpoints - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/networking#network-contributor)
 ├── Resource Groups:
 │   ├── Development: rg-aml-vnet-dev-*, rg-aml-ws-dev-*, rg-aml-reg-dev-*
 │   ├── Production: rg-aml-vnet-prod-*, rg-aml-ws-prod-*, rg-aml-reg-prod-*
-│   └── Hub Network: rg-aml-hub-* (VPN Gateway and hub-spoke connectivity)
+│   └── Shared DNS / (Optional) VPN: rg-aml-dns-* (and gateway resources in prod VNet RG if enabled)
 └── Purpose: Terraform deployments via CI/CD pipelines
 ```
 
@@ -508,7 +476,7 @@ Online Endpoints:
 6. **Module Contracts (RG Inputs) (New)**:
     - `modules/aml-vnet`: requires `resource_group_name` (string). All VNet, subnet, UAMI, Private DNS zones, and diagnostics land in this RG.
     - `modules/aml-registry-smi`: requires `resource_group_name` (string). The Azure ML Registry is created in this RG; the Azure-managed registry RG is still handled by the service.
-    - `modules/hub-network`: already requires `resource_group_name` (no changes).
+    - (Legacy network aggregation module removed – not part of current architecture).
 
 7. **Migration Notes (New)**:
     - Remove any `create_resource_group` (bool) inputs from module invocations.
@@ -529,10 +497,9 @@ External Access:
 └── Certificate Management: Self-signed certificates with manual distribution
 
 Internal Network Segmentation:
-├── Hub Network (10.0.0.0/16): VPN Gateway and routing only
-├── Dev Spoke (10.1.0.0/16): Development workloads only
-├── Prod Spoke (10.2.0.0/16): Production workloads only
-└── Cross-Spoke Traffic: Blocked by design (no direct peering)
+├── Dev VNet (10.1.0.0/16): Development workloads only
+├── Prod VNet (10.2.0.0/16): Production workloads only
+└── Optional Peering: Present only if explicitly enabled
 
 Azure ML Private Endpoints:
 ├── Workspace APIs: *.api.azureml.ms
@@ -592,7 +559,7 @@ To support the asset promotion workflow while maintaining security boundaries, s
 
 **Development Compute Cluster UAMI**
 - **Identity**: `{dev-compute-uami-name}` (lives in dev resource group)
-- **Scope**: Dev + Prod + Hub (single apply from root main)
+- **Scope**: Development environment only
 - **Purpose**: Run training jobs, experimentation, model development
 
 **Production Compute Cluster UAMI**
@@ -2157,7 +2124,7 @@ The current infrastructure implementation in `main.tf` fully implements this dep
 ### ✅ **Terraform Dependency Issues Resolved**
 
 **Recent Updates (August 7–8, 2025):**
-1. **Flat Network Refactor**: Removed legacy hub module & transit logic; simplified to direct dev↔prod optional peering.
+1. **Flat Network Implementation**: Direct dev↔prod optional peering (no transit layer).
 2. **Cross-Environment RBAC Optimization**: Removed unnecessary workspace UAMI registry roles; compute UAMIs retain data access; workspace UAMIs limited to network connection approver.
 3. **Outbound Rule Schema Fix**: Added required `subresourceTarget = "amlregistry"` for all registry private endpoint outbound rules.
 4. **Key Vault Provisioning Reliability**: Added dual roles (Reader + Secrets User) to workspace UAMIs pre-create to avoid 403 `vaults/read` errors.
@@ -2225,7 +2192,7 @@ terraform validate
 # Plan deployment
 terraform plan
 
-# Apply infrastructure (deploys all 7 resource groups and hub-spoke network)
+# Apply infrastructure (deploys all resource groups and flat network)
 terraform apply
 ```
 
@@ -2233,14 +2200,14 @@ terraform apply
 ```powershell
 # Install client certificate (double-click VPNClientCert.pfx from script)
 # Download VPN client from Azure Portal:
-# 1. Go to Azure Portal → VPN Gateways → vpn-gateway-hub-*
+# 1. Go to Azure Portal → VPN Gateways → <your vpn gateway name>
 # 2. Click "Point-to-site configuration"
 # 3. Download "VPN client"
 # 4. Extract and run WindowsAmd64/VpnClientSetupAmd64.exe
 
 # Connect to VPN
 # 1. Open Windows VPN settings
-# 2. Connect to "Azure ML Hub VPN"
+# 2. Connect to your configured Azure ML VPN profile
 # 3. Access Azure ML workspaces via private endpoints
 ```
 
@@ -2261,7 +2228,6 @@ az ml workspace show --name mlwprodcc* --resource-group rg-aml-ws-prod-cc*
 - **VPN Gateway (VpnGw2)**: ~$50-85/month
 - **Development Environment**: ~$200-300/month (compute-dependent)
 - **Production Environment**: ~$200-300/month (compute-dependent)
-- **Hub Network**: ~$20-30/month (minimal baseline)
 
 **Total Platform Cost**: ~$470-715/month (vs ~$760-1005/month with jumpbox model)
 
