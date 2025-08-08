@@ -923,38 +923,78 @@ module "hub_network" {
 }
 
 # ------------------------------------------------------------------
-# Hub VNet Private DNS Zone Links (enable VPN clients to resolve AML)
-# Links hub VNet to dev & prod Azure ML private DNS zones: API, Notebooks, Instances
+# SHARED AML PRIVATE DNS ZONES (Option B Migration)
+# New neutral shared zones to replace per-env duplicated AML zones.
+# Step 1: Create zones & link to hub only.
+# Step 2: Link dev/prod VNets after removing their own AML zone links.
+# Step 3: Update PE zone groups to use shared zones; then destroy per-env AML zones.
+# lifecycle.prevent_destroy guards during migration.
 # ------------------------------------------------------------------
 
-resource "azurerm_private_dns_zone_virtual_network_link" "hub_dev_aml_api" {
-  name                  = "hub-vnet-link"
-  resource_group_name   = azurerm_resource_group.dev_vnet_rg.name
-  private_dns_zone_name = "privatelink.api.azureml.ms"
-  virtual_network_id    = module.hub_network.hub_vnet_id
-  registration_enabled  = false
-  tags                  = merge(var.tags, { environment = "shared", scope = "dev-aml-api" })
-  depends_on            = [module.hub_network, module.dev_vnet]
+resource "azurerm_resource_group" "shared_aml_dns_rg" {
+  name     = var.shared_aml_dns_rg_name != null ? var.shared_aml_dns_rg_name : "rg-aml-dns-${var.location_code}-${var.naming_suffix}" 
+  location = var.location
+  tags     = merge(var.tags, { environment = "shared", purpose = "aml-dns" })
 }
 
-resource "azurerm_private_dns_zone_virtual_network_link" "hub_dev_aml_notebooks" {
-  name                  = "hub-vnet-link"
-  resource_group_name   = azurerm_resource_group.dev_vnet_rg.name
-  private_dns_zone_name = "privatelink.notebooks.azure.net"
-  virtual_network_id    = module.hub_network.hub_vnet_id
-  registration_enabled  = false
-  tags                  = merge(var.tags, { environment = "shared", scope = "dev-aml-notebooks" })
-  depends_on            = [module.hub_network, module.dev_vnet]
+resource "azurerm_private_dns_zone" "shared_aml_api" {
+  name                = "privatelink.api.azureml.ms"
+  resource_group_name = azurerm_resource_group.shared_aml_dns_rg.name
+  tags                = merge(var.tags, { environment = "shared", scope = "aml-api" })
+  lifecycle { prevent_destroy = true }
 }
 
-resource "azurerm_private_dns_zone_virtual_network_link" "hub_dev_aml_instances" {
-  name                  = "hub-vnet-link"
-  resource_group_name   = azurerm_resource_group.dev_vnet_rg.name
-  private_dns_zone_name = "instances.azureml.ms"
+resource "azurerm_private_dns_zone" "shared_aml_notebooks" {
+  name                = "privatelink.notebooks.azure.net"
+  resource_group_name = azurerm_resource_group.shared_aml_dns_rg.name
+  tags                = merge(var.tags, { environment = "shared", scope = "aml-notebooks" })
+  lifecycle { prevent_destroy = true }
+}
+
+resource "azurerm_private_dns_zone" "shared_aml_instances" {
+  name                = "instances.azureml.ms"
+  resource_group_name = azurerm_resource_group.shared_aml_dns_rg.name
+  tags                = merge(var.tags, { environment = "shared", scope = "aml-instances" })
+  lifecycle { prevent_destroy = true }
+}
+
+# Initial hub links (add dev/prod links in later migration steps)
+resource "azurerm_private_dns_zone_virtual_network_link" "shared_hub_api" {
+  name                  = "hub-shared-aml-api"
+  resource_group_name   = azurerm_resource_group.shared_aml_dns_rg.name
+  private_dns_zone_name = azurerm_private_dns_zone.shared_aml_api.name
   virtual_network_id    = module.hub_network.hub_vnet_id
   registration_enabled  = false
-  tags                  = merge(var.tags, { environment = "shared", scope = "dev-aml-instances" })
-  depends_on            = [module.hub_network, module.dev_vnet]
+  tags                  = merge(var.tags, { environment = "shared", scope = "hub-aml-api" })
+  depends_on            = [module.hub_network]
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "shared_hub_notebooks" {
+  name                  = "hub-shared-aml-notebooks"
+  resource_group_name   = azurerm_resource_group.shared_aml_dns_rg.name
+  private_dns_zone_name = azurerm_private_dns_zone.shared_aml_notebooks.name
+  virtual_network_id    = module.hub_network.hub_vnet_id
+  registration_enabled  = false
+  tags                  = merge(var.tags, { environment = "shared", scope = "hub-aml-notebooks" })
+  depends_on            = [module.hub_network]
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "shared_hub_instances" {
+  name                  = "hub-shared-aml-instances"
+  resource_group_name   = azurerm_resource_group.shared_aml_dns_rg.name
+  private_dns_zone_name = azurerm_private_dns_zone.shared_aml_instances.name
+  virtual_network_id    = module.hub_network.hub_vnet_id
+  registration_enabled  = false
+  tags                  = merge(var.tags, { environment = "shared", scope = "hub-aml-instances" })
+  depends_on            = [module.hub_network]
+}
+
+output "shared_aml_dns_zone_ids" {
+  value = {
+    api        = azurerm_private_dns_zone.shared_aml_api.id
+    notebooks  = azurerm_private_dns_zone.shared_aml_notebooks.id
+    instances  = azurerm_private_dns_zone.shared_aml_instances.id
+  }
 }
 
 # Dev Spoke to Hub Peering

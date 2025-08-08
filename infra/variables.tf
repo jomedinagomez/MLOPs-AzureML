@@ -27,7 +27,8 @@ variable "location_code" {
 variable "naming_suffix" {
   description = "Suffix for resource naming"
   type        = string
-  default     = "01"
+  # Updated from 01 to 02 for new deployment baseline
+  default     = "02"
 }
 
 variable "tags" {
@@ -84,6 +85,12 @@ variable "vpn_root_certificate_data" {
 
 variable "user_object_id" {
   description = "The object ID of the user who will manage the Azure Machine Learning Workspace"
+  type        = string
+  default     = null
+}
+
+variable "shared_aml_dns_rg_name" {
+  description = "Optional explicit name for the shared AML private DNS resource group (if null a name is generated)."
   type        = string
   default     = null
 }
