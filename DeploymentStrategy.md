@@ -13,7 +13,122 @@ This document outlines the deployment strategy for our Azure Machine Learning pl
 
 **This implementation uses two registries to showcase comprehensive MLOps asset promotion workflows, though a single registry would be sufficient for most production scenarios.**
 
-**Last Updated**: August 7, 2025 - Added registry managed resource group pre-authorization via assignedIdentities, enforced private-only posture for storage and Key Vault, clarified workspace→registry outbound rules (dev→dev, prod→prod, and prod→dev) on managed VNets, and centralized resource group (RG) creation at root (modules now require an explicit `resource_group_name`; module-internal RG creation/count logic removed).
+**Last Updated**: August 7, 2025 (Revision 2) – Added registry managed resource group pre-authorization via `assignedIdentities`; enforced private-only posture for Storage and Key Vault; centralized resource group (RG) creation at root (modules now require an explicit `resource_group_name`); clarified workspace → registry outbound rules (dev→dev, prod→prod, prod→dev) on managed VNets; documented required `subresourceTarget = "amlregistry"` for outbound rules to registries; and updated Key Vault RBAC strategy (added explicit **Key Vault Reader** role to mitigate `vaults/read` 403 during workspace provisioning in addition to **Key Vault Secrets User** for data-plane access). A duplicate `name` field inside the workspace `properties` block was removed (previously caused potential identity operation conflicts). Additional timed waits were introduced to allow RBAC propagation and soft-delete slot clearance before workspace creation.
+
+> Summary of 2025-08-07 (Rev 2) Fixes:
+> - Outbound Rule ValidationError (400) resolved by adding `destination.subresourceTarget = "amlregistry"` when the destination is an Azure ML Registry.
+> - Workspace provisioning 403 on Key Vault resolved by granting **Key Vault Reader** (management plane) alongside **Key Vault Secrets User** (data plane) to the workspace UAMI before creation.
+> - Added staged `time_sleep` resources to ensure RBAC role propagation (90s) plus an additional workspace slot wait (150s) to avoid `FailedIdentityOperation` 409 conflicts after deletes.
+> - Removed erroneous duplicate `name` property inside azapi workspace resource body.
+> - Documentation now reflects RBAC separation (management-plane vs data-plane) for Key Vault.
+
+### Key Vault Configuration (Updated)
+
+The Key Vaults (`kvdev…`, `kvprod…`) are deployed with a **private-only** network posture and RBAC authorization (no access policies). Provider features:
+
+```hcl
+provider "azurerm" {
+    features {
+        key_vault {
+            purge_soft_delete_on_destroy    = true
+            recover_soft_deleted_key_vaults = true
+        }
+    }
+}
+```
+
+#### Rationale for Dual Roles
+
+During Azure ML Workspace creation via `azapi_resource` the service performs both:
+1. **Management-plane read** of the Key Vault resource (needs `Microsoft.KeyVault/vaults/read`).
+2. **Data-plane secret operations** later in lifecycle (needs data-plane secrets permission – satisfied by RBAC role granting secret list/get).
+
+Observed issue: Only granting **Key Vault Secrets User** resulted in 403 errors (`vaults/read`) because that role does not include management-plane read. Fix: add **Key Vault Reader** to the *same* UAMI (and, in some cases, to the deployment SP if it must enumerate properties pre-create) before workspace creation.
+
+#### Assigned Roles
+
+| Principal | Scope | Role | Purpose |
+|----------|-------|------|---------|
+| Workspace UAMI | Key Vault | Key Vault Reader | Management-plane metadata read during provisioning |
+| Workspace UAMI | Key Vault | Key Vault Secrets User | Data-plane secret access (read secrets) |
+| Compute UAMI | Key Vault | Key Vault Secrets User (optional depending on workload) | Access secrets during training/inference |
+| Deployment SP | (Optional) Key Vault | Reader or Key Vault Reader | Plan-time introspection / drift detection |
+
+> Note: No legacy access policies are used; RBAC-only simplifies auditing and avoids mixed authorization modes.
+
+#### Purge & Soft-Delete Considerations
+
+Because purge protection and soft-delete retention can delay name re-use, a `time_sleep.wait_workspace_slot` was inserted after Key Vault & role assignment creation to avoid immediate workspace recreation conflicts (`FailedIdentityOperation` 409) when iterating quickly. This gives Azure sufficient time to finalize identity bindings.
+
+### Outbound Rules to Azure ML Registries (Updated)
+
+When defining outbound rules from a workspace to a registry using the preview API `Microsoft.MachineLearningServices/workspaces/outboundRules@2024-10-01-preview`, Azure now **requires** an explicit `subresourceTarget` for registry destinations. Without it the service returns:
+
+```
+ValidationError: Invalid Pair of Target and Sub Target resource ... supports ["amlregistry"], the sub target introduced was: (empty)
+```
+
+#### Correct Terraform (azapi) Shape
+
+```hcl
+resource "azapi_resource" "dev_workspace_to_dev_registry_outbound_rule" {
+    type      = "Microsoft.MachineLearningServices/workspaces/outboundRules@2024-10-01-preview"
+    name      = "AllowDevRegistryAccess"
+    parent_id = module.dev_managed_umi.workspace_id
+
+    body = {
+        properties = {
+            type = "PrivateEndpoint"
+            destination = {
+                serviceResourceId = module.dev_registry.registry_id
+                subresourceTarget = "amlregistry" # REQUIRED for registry targets
+            }
+            category = "UserDefined"
+        }
+    }
+    depends_on = [
+        module.dev_managed_umi,
+        module.dev_registry,
+        azurerm_role_assignment.dev_workspace_network_connection_approver
+    ]
+}
+```
+
+Apply the same `subresourceTarget = "amlregistry"` addition for prod→prod and prod→dev outbound rules. This resolves the 400 ValidationError returned previously. Ensure the workspace UAMI holds **Azure AI Enterprise Network Connection Approver** on the registry scope before creating the rule.
+
+#### Ordering & RBAC Propagation
+
+Outbound rule resources should depend on:
+1. Registry creation (system-assigned identity ready)
+2. Workspace creation & managed network enablement
+3. Network Connection Approver role assignment (workspace UAMI on registry)
+4. Optional sleep for RBAC propagation if creation is immediately after role assignment (empirically ~60–90s sufficient, we use 90s)
+
+#### Post-Mortem Summary (Outbound Rule Failures Resolved)
+
+| Attempt | Payload Shape | Service Response | Root Cause | Resolution |
+|---------|---------------|------------------|------------|------------|
+| 1 | `destination` missing `subresourceTarget` | 400 ValidationError (Invalid Pair of Target and Sub Target) | Registry private endpoint requires subresource qualification | Added `subresourceTarget = "amlregistry"` |
+| 2 | Experimental `privateEndpointDestination` property | 400 ValidationError (unrecognized shape) | Incorrect property name (SDK uses `destination`) | Reverted to `destination` block | 
+| 3 | Repeated REST `az rest` trials (varied casing, api-version) | 415 / 400 | Quoting & schema experimentation noise | Terraform azapi with validated shape | 
+
+Cleanup Action: Removed obsolete troubleshooting script `test-outbound-rule.ps1` after successful apply to reduce repository noise.
+
+Preventative Guidance:
+- Always consult currently published preview swagger / SDK examples; ignore legacy blog posts referencing superseded shapes.
+- For private endpoint style outbound rules, verify whether the target resource type exposes multiple subresources; if yes, expect a required `subresourceTarget`.
+- Keep troubleshooting artifacts (scripts) on a temporary branch; merge only the distilled, working pattern into main documentation.
+
+
+### Troubleshooting Summary (Added)
+
+| Symptom | Root Cause | Resolution |
+|---------|------------|-----------|
+| 403 `vaults/read` during workspace creation | Missing management-plane role on Key Vault | Add Key Vault Reader to workspace UAMI pre-create |
+| 409 `FailedIdentityOperation` after delete | Rapid re-create before soft-delete/identity cleanup | Insert wait (150s) before re-provisioning |
+| 400 ValidationError outbound rule to registry | Missing `subresourceTarget` | Add `subresourceTarget = "amlregistry"` in destination |
+| 409 RoleAssignmentExists on human user roles | Role already granted out-of-band / drift | Import existing role assignment or enable `skip_service_principal_aad_check`; alternatively use `lifecycle { ignore_changes = [principal_id] }` or conditional creation |
+
 
 ## Strategic Principles
 

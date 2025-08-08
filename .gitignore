@@ -1,6 +1,9 @@
 # Terraform Variables
 *.tfvars
 
+# Local inventory / exported terraform artifacts (not tracked)
+.local_inventory/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -11,6 +14,7 @@ __pycache__/
 *.terraform*
 *.tfstate*
 *.tfvars
+import_role_assignments.ps1
 
 # Distribution / packaging
 .Python

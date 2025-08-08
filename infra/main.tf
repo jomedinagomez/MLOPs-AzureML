@@ -654,8 +654,10 @@ resource "azapi_resource" "dev_workspace_to_dev_registry_outbound_rule" {
   body = {
     properties = {
       type = "PrivateEndpoint"
-      destination = {
+  destination = {
         serviceResourceId = module.dev_registry.registry_id
+        # Required subresourceTarget for registry private endpoint outbound rule
+        subresourceTarget = "amlregistry"
       }
       category = "UserDefined"
     }
@@ -677,8 +679,10 @@ resource "azapi_resource" "prod_workspace_to_prod_registry_outbound_rule" {
   body = {
     properties = {
       type = "PrivateEndpoint"
-      destination = {
+  destination = {
         serviceResourceId = module.prod_registry.registry_id
+        # Required subresourceTarget for registry private endpoint outbound rule
+        subresourceTarget = "amlregistry"
       }
       category = "UserDefined"
     }
@@ -700,8 +704,10 @@ resource "azapi_resource" "prod_workspace_to_dev_registry_outbound_rule" {
   body = {
     properties = {
       type = "PrivateEndpoint"
-      destination = {
+  destination = {
         serviceResourceId = module.dev_registry.registry_id
+        # Required subresourceTarget for registry private endpoint outbound rule
+        subresourceTarget = "amlregistry"
       }
       category = "UserDefined"
     }
@@ -914,6 +920,41 @@ module "hub_network" {
     module.dev_vnet,
     module.prod_vnet
   ]
+}
+
+# ------------------------------------------------------------------
+# Hub VNet Private DNS Zone Links (enable VPN clients to resolve AML)
+# Links hub VNet to dev & prod Azure ML private DNS zones: API, Notebooks, Instances
+# ------------------------------------------------------------------
+
+resource "azurerm_private_dns_zone_virtual_network_link" "hub_dev_aml_api" {
+  name                  = "hub-vnet-link"
+  resource_group_name   = azurerm_resource_group.dev_vnet_rg.name
+  private_dns_zone_name = "privatelink.api.azureml.ms"
+  virtual_network_id    = module.hub_network.hub_vnet_id
+  registration_enabled  = false
+  tags                  = merge(var.tags, { environment = "shared", scope = "dev-aml-api" })
+  depends_on            = [module.hub_network, module.dev_vnet]
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "hub_dev_aml_notebooks" {
+  name                  = "hub-vnet-link"
+  resource_group_name   = azurerm_resource_group.dev_vnet_rg.name
+  private_dns_zone_name = "privatelink.notebooks.azure.net"
+  virtual_network_id    = module.hub_network.hub_vnet_id
+  registration_enabled  = false
+  tags                  = merge(var.tags, { environment = "shared", scope = "dev-aml-notebooks" })
+  depends_on            = [module.hub_network, module.dev_vnet]
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "hub_dev_aml_instances" {
+  name                  = "hub-vnet-link"
+  resource_group_name   = azurerm_resource_group.dev_vnet_rg.name
+  private_dns_zone_name = "instances.azureml.ms"
+  virtual_network_id    = module.hub_network.hub_vnet_id
+  registration_enabled  = false
+  tags                  = merge(var.tags, { environment = "shared", scope = "dev-aml-instances" })
+  depends_on            = [module.hub_network, module.dev_vnet]
 }
 
 # Dev Spoke to Hub Peering

@@ -155,6 +155,14 @@ resource "time_sleep" "wait_rbac_role_propagation" {
   ]
 }
 
+## Additional buffer to allow any prior failed workspace (soft delete / identity ops) to fully clear before creation
+resource "time_sleep" "wait_workspace_slot" {
+  create_duration = "150s"
+  depends_on = [
+    time_sleep.wait_rbac_role_propagation
+  ]
+}
+
 ## Create the Azure Machine Learning Workspace in a managed vnet configuration
 ##
 resource "azapi_resource" "aml_workspace" {
@@ -169,7 +177,8 @@ resource "azapi_resource" "aml_workspace" {
   azurerm_role_assignment.rg_reader,
   azurerm_role_assignment.ai_network_connection_approver,
   azurerm_role_assignment.ai_administrator,
-  time_sleep.wait_rbac_role_propagation
+  time_sleep.wait_rbac_role_propagation,
+  time_sleep.wait_workspace_slot
   ]
 
   type                      = "Microsoft.MachineLearningServices/workspaces@2025-04-01-preview"
@@ -196,7 +205,6 @@ resource "azapi_resource" "aml_workspace" {
 
       # The version of the managed network model to use; unsure what v2 is
       managedNetworkKind = "V1"
-  name                      = "${local.aml_workspace_prefix}${var.purpose}${var.location_code}${local.resolved_suffix}"
       # The resources that will be associated with the AML Workspace
       applicationInsights = azurerm_application_insights.aml-appins.id
       keyVault            = module.keyvault_aml.id
