@@ -538,7 +538,8 @@ resource "azurerm_virtual_network_gateway" "prod_vpn_gw" {
   vpn_client_configuration {
     address_space        = var.vpn_client_address_pool
     vpn_client_protocols = var.vpn_client_protocols
-    aad_tenant           = coalesce(var.azure_ad_p2s_tenant_id, data.azurerm_client_config.current.tenant_id)
+  # Azure AD tenant must be full URL form, not bare GUID
+  aad_tenant           = "https://login.microsoftonline.com/${coalesce(var.azure_ad_p2s_tenant_id, data.azurerm_client_config.current.tenant_id)}/"
     aad_audience         = var.azure_ad_p2s_audience
     aad_issuer           = "https://sts.windows.net/${coalesce(var.azure_ad_p2s_tenant_id, data.azurerm_client_config.current.tenant_id)}/"
   }

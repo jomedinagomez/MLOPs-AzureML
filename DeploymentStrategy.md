@@ -2,18 +2,28 @@
 
 ## Overview
 
-This document outlines the deployment strategy for our Azure Machine Learning platform, featuring **hub-and-spoke VPN architecture** with complete isolation between development and production environments. The implementation eliminates traditional jumpbox infrastructure in favor of certificate-based VPN connectivity, providing superior user experience and significant cost savings while maintaining enterprise security standards.
+This document outlines the deployment strategy for our Azure Machine Learning platform, now refactored to a **flat dual-VNet architecture with optional Entra ID (Azure AD) OpenVPN Point‑to‑Site gateway**. The earlier hub-and-spoke design (central hub VNet + dev/prod spokes) has been removed to simplify topology, reduce operational surface area, and support fully deterministic naming. Remote private access is delivered through an opt‑in Entra ID–integrated OpenVPN gateway created only when explicitly enabled via variables—eliminating gateway cost when not required.
 
-**Key Architecture Features:**
-- **Hub-and-Spoke Network**: Centralized VPN Gateway with isolated dev/prod spokes
-- **Zero VM Infrastructure**: No jumpboxes, bastion hosts, or maintenance overhead
-- **Certificate-Based VPN**: Secure Point-to-Site connectivity for development teams
-- **Complete Environment Isolation**: Dev and prod environments remain fully segregated
-- **Cost Optimized**: ~$140-290/month savings compared to traditional jumpbox models
+**Key Architecture Features (Current – Flat Architecture, Revision 4):**
+- **Flat Dual VNets**: Independent dev and prod VNets (no hub); optional direct peering (removable for stricter isolation)
+- **Optional Entra ID P2S VPN**: Conditional creation; set `azure_ad_p2s_audience` (server app client ID) to enable (AAD auth, OpenVPN protocol)
+- **Deterministic Naming**: Names derive from `prefix`, `purpose`, `location_code`, `naming_suffix`; no random postfixes
+- **Centralized Private DNS Zones (Expanded)**: Azure ML + core service private DNS zones (api, notebooks, instances, blob, file, queue, table, vaultcore, acr) consolidated in a shared DNS RG; only records (not resources) are multi‑tenant
+- **Private-Only Posture**: Public network access disabled for workspaces, registries, storage, key vaults, ACR
+- **Per-Environment Log Analytics**: Dedicated dev & prod workspaces for observability isolation
+- **Gateway-less Operation**: If `azure_ad_p2s_audience` unset, gateway resources are omitted (zero remote access cost)
+- **Managed Outbound Rules**: Private endpoint based outbound connectivity (with required `subresourceTarget = "amlregistry"`)
+- **Parameterization**: All tunables (CIDRs, purge protection, diagnostics, VPN settings) exposed via variables
 
-**This implementation uses two registries to showcase comprehensive MLOps asset promotion workflows, though a single registry would be sufficient for most production scenarios.**
+**Two registries remain intentionally for demonstration of cross‑environment asset promotion; a single registry suffices for most production deployments.**
 
-**Last Updated**: August 8, 2025 (Revision 3) – Centralized Azure ML private DNS zones (api, notebooks, instances) into shared hub resource group to eliminate per‑environment duplication and naming conflicts; introduced Terraform toggle `manage_aml_private_dns_zones` to disable legacy per‑environment AML DNS zone creation; added spoke virtual network links (dev & prod) to shared zones; updated workspace private endpoint zone groups to consume shared zone IDs (including `instances.azureml.ms`); documented phased migration (Step 1: link + disable, Step 2: repoint PE zone groups, Step 3: validate & remove legacy outputs, Step 4: drop `prevent_destroy`); clarified that these DNS zones are the only intentionally shared resources across environments (records coexist safely due to fully qualified unique workspace/registry prefixes); and updated isolation principle to reflect this explicit exception. Prior Revision 2 (August 7, 2025) changes retained below for historical traceability.
+**Last Updated**: August 8, 2025 (Revision 4) – Flattened network (removed hub and transit), introduced conditional Entra ID OpenVPN gateway (Standard static public IP, RouteBased), expanded centralized private DNS approach to include storage, key vault & ACR zones, enforced deterministic naming via `naming_suffix`, parameterized all gateway settings (SKU, allocation, client address pool, protocols), added outputs for VPN gateway & AML private endpoint FQDNs, and documented migration path from hub/spoke to flat. (Revision 3 – centralized AML-only DNS; Revision 2 – outbound rule & Key Vault RBAC fixes retained below.)
+
+> Legacy hub-and-spoke references remain in historical sections for audit; current deployment uses the flat model described above.
+
+> NOTE: Dev↔Prod VNet peering is presently enabled to simplify shared DNS zone linking and potential future cross-environment diagnostics. If strict network isolation is required, remove the two `azurerm_virtual_network_peering` resources; outbound registry access & managed private endpoints continue to function (they rely on Azure ML managed networks and private endpoints, not on platform VNet transit).
+
+**Revision 3 (Historical)** – Centralized Azure ML private DNS zones (api, notebooks, instances) into shared resource group eliminating per‑environment duplication; added migration toggle `manage_aml_private_dns_zones`; updated workspace private endpoint zone groups; clarified isolation exception.
 
 > Summary of 2025-08-07 (Rev 2) Fixes:
 > - Outbound Rule ValidationError (400) resolved by adding `destination.subresourceTarget = "amlregistry"` when the destination is an Azure ML Registry.
@@ -135,15 +145,17 @@ Preventative Guidance:
 Previously each environment module created its own Azure ML private DNS zones:
 `privatelink.api.azureml.ms`, `privatelink.notebooks.azure.net`, and the (often implicit) `instances.azureml.ms` zone for compute instance hostnames. Because Azure Private DNS zones are *global* within a subscription for a given name, duplicating these per environment introduced conflicting desired state and prevented future expansion (multi‑subscription later) without manual reconciliation. Centralizing the three AML zones removes duplication, simplifies lifecycle management, and ensures consistent name resolution for shared services (e.g., cross‑environment registry network connections) while preserving full network isolation.
 
-### What Is Shared vs Still Isolated
-| Category | Shared Now? | Notes |
-|---------|-------------|-------|
-| AML Private DNS Zones (api, notebooks, instances) | Yes | Single authoritative set in hub RG; dev & prod VNets linked |
-| VNets / Subnets | No | Remain per environment + hub |
-| Workspaces / Registries | No | Separate resources per environment |
-| Storage, Key Vault, ACR | No | Private-only, per environment |
-| Identities (UAMI) | No | One workspace + one compute UAMI per environment |
-| Other Private DNS Zones (blob, file, queue, table, vault, privatelink.* for storage / key vault / ACR) | No | Still per environment |
+### What Is Shared vs Still Isolated (Updated)
+| Category | Shared? | Notes |
+|----------|---------|-------|
+| AML Private DNS Zones (api, notebooks, instances) | Yes | Central shared DNS RG; record prefixes prevent collisions |
+| Core Service Private DNS Zones (blob, file, queue, table, vaultcore, acr) | Yes | Consolidated (Rev 4) to eliminate duplication |
+| VNets / Subnets | No | Independent dev / prod VNets; peering optional |
+| Workspaces / Registries | No | Provisioned per environment |
+| Storage Accounts / Key Vaults / ACR Registries | No | Per environment; only DNS zones centralized |
+| User-Assigned Managed Identities | No | Distinct per environment (workspace + compute) |
+| Log Analytics Workspaces | No | Separate dev/prod analytics |
+| VPN Gateway | Conditional | Only if `azure_ad_p2s_audience` set (resides in prod VNet) |
 
 ### Terraform Implementation
 1. Defined shared zones in root `infra/main.tf` inside hub resource group with `lifecycle { prevent_destroy = true }` during migration hardening.
@@ -200,20 +212,18 @@ Document results in a short table appended to this section, then proceed to Step
 
 ## Strategic Principles
 
-### 1. Complete Environment Isolation
-- **Minimal Shared Components**: Only the three centralized Azure ML private DNS zones (api, notebooks, instances) are shared; all other resources (networks, workspaces, registries, storage, key vaults, identities, service DNS zones) remain fully isolated
-- **Independent Lifecycles**: Each environment can be created, modified, or destroyed independently
-- **Security Boundaries**: Complete separation prevents cross-environment security risks
-- **Governance**: Clear ownership and access control per environment
-- **Demonstration Purpose**: Two-registry architecture showcases full MLOps promotion capabilities
+### 1. Complete Environment Isolation (Updated)
+- **Shared Components (Deliberate & Minimal)**: Central private DNS zones (AML api/notebooks/instances + core service zones: blob, file, queue, table, vaultcore, acr). All other resources (VNets, workspaces, registries, storage, key vaults, identities, log analytics) remain per-environment.
+- **Optional Network Peering**: Dev↔Prod peering exists for current operational convenience; can be removed for stricter isolation with no impact to registry outbound rules.
+- **Deterministic Naming**: Stable resource names improve drift detection & reproducibility.
+- **Promotion Demonstration**: Dual registries retained solely for cross-environment promotion patterns.
 
-### 2. Hub-and-Spoke Network Architecture
-- **Centralized Connectivity**: Single VPN Gateway serves all environments
-- **Cost Optimization**: Eliminates expensive jumpbox and bastion infrastructure
-- **Enhanced User Experience**: Native local development tools instead of RDP sessions
-- **Automatic Reconnection**: VPN maintains persistent connectivity across sessions
-- **Multi-User Support**: Multiple team members can connect simultaneously
-- **Environment Isolation**: Spokes cannot communicate directly with each other
+### 2. Flat Dual-VNet Architecture with Conditional VPN
+- **Flat Topology**: Dev VNet + Prod VNet (no hub) + shared DNS resource group.
+- **Conditional Remote Access**: VPN gateway (OpenVPN + Entra ID) created only when `azure_ad_p2s_audience` supplied.
+- **AAD Integrated Auth**: `aad_tenant` (login URL) + `aad_issuer` (sts URL) + `aad_audience` (server app client ID).
+- **Cost Control**: Remove audience to destroy gateway and eliminate monthly gateway cost automatically.
+- **Isolation Control**: Delete peering resources to block any direct VNet traffic while preserving private endpoint–based service access.
 
 ### 3. Infrastructure as Code
 - **Terraform Modules**: Reusable modules for consistent deployment across environments
@@ -259,18 +269,16 @@ enable_auto_purge = true | false # Dev: true, Prod: false (CRITICAL)
 - **Development**: `vnet_address_space = "10.1.0.0/16"`, `subnet_address_prefix = "10.1.1.0/24"`
 - **Production**: `vnet_address_space = "10.2.0.0/16"`, `subnet_address_prefix = "10.2.1.0/24"`
 
-**Generated Resource Examples:**
-- VNet: `vnet-aml-{env}-{location_code}{random}` 
-- Workspace: `mlw{env}{location_code}{random}`
-- Storage: `st{env}{location_code}{random}`
-- Container Registry: `cr{env}{location_code}{random}`
-- Key Vault: `kv{env}{location_code}{random}`
-- Registry: `mlr{env}{location_code}{random}`
-- VPN Gateway: `vpn-gateway-hub-{location_code}{random}`
-- Hub VNet: `vnet-hub-{location_code}{random}`
-- Resource Groups: 
-  - Environment: `rg-{prefix}-{component}-{env}-{location_code}{random}`
-  - Hub: `rg-{prefix}-hub-{location_code}{random}`
+**Generated Resource Examples (Deterministic):**
+- VNet: `vnet-{prefix}-{env}-{location_code}-{naming_suffix}`
+- Workspace: `mlw{env}{location_code}{naming_suffix}`
+- Storage: `st{env}{location_code}{naming_suffix}`
+- Container Registry: `cr{env}{location_code}{naming_suffix}`
+- Key Vault: `kv{env}{location_code}{naming_suffix}`
+- Registry: `mlr{env}{location_code}{naming_suffix}`
+- (Optional) VPN Gateway: `vng-{prefix}-prod-{location_code}-{naming_suffix}` (only when audience set)
+- Public IP (VPN): `pip-{prefix}-vpn-{location_code}-{naming_suffix}`
+- Resource Groups (per environment): `rg-{prefix}-{component}-{env}-{location_code}-{naming_suffix}`
 
 ## Architecture Decisions
 
@@ -309,45 +317,45 @@ Both Dev and Prod:
 - Simplified monitoring: Single region to monitor for service health
 - Easier troubleshooting: Consistent region-specific behaviors
 
-### C. Hub-and-Spoke Network Architecture
+### (Legacy) Hub-and-Spoke Network Architecture
+Retained for historical comparison. Superseded by the flat dual-VNet design below.
+
+### Current Flat Dual-VNet + Optional AAD P2S Gateway
 
 ```
-Hub Network (Shared Connectivity):
-├── VNet: 10.0.0.0/16
-├── Gateway Subnet: 10.0.1.0/24
-├── VPN Gateway: Point-to-Site connectivity
-├── Client Address Pool: 172.16.0.0/24
-└── Certificate-based authentication
+Development VNet (vnet-*-dev-*):
+├── Address Space: 10.1.0.0/16
+├── Private Endpoint Subnet: 10.1.1.0/24
+├── DNS: Linked to centralized zones
+└── Peering: Optional (dev_to_prod)
 
-Development Spoke:
-├── VNet: 10.1.0.0/16
-├── Subnet: 10.1.1.0/24
-├── Peering: Hub ↔ Dev (with gateway transit)
-└── Private DNS Zones: Dev-specific instances
+Production VNet (vnet-*-prod-*):
+├── Address Space: 10.2.0.0/16
+├── Gateway Subnet: var.prod_gateway_subnet_prefix (only if VPN enabled)
+├── Private Endpoint Subnet: 10.2.1.0/24
+├── DNS: Linked to centralized zones
+└── Peering: Optional (prod_to_dev)
 
-Production Spoke:
-├── VNet: 10.2.0.0/16
-├── Subnet: 10.2.1.0/24
-├── Peering: Hub ↔ Prod (with gateway transit)
-└── Private DNS Zones: Prod-specific instances
+Optional Remote Access:
+├── Public IP (Standard / Static)
+├── Virtual Network Gateway (RouteBased, OpenVPN)
+├── AAD Auth (tenant login URL + issuer + audience)
+└── Client Address Pool: var.vpn_client_address_pool (default 10.255.0.0/24)
 
-Cross-Environment Connectivity: NONE
-└── Spokes cannot communicate directly (hub prevents spoke-to-spoke traffic)
+Cross-Environment Traffic:
+└── Only via peering (remove to harden), AML service private endpoints unaffected
 ```
 
-**Benefits:**
-- **Cost Optimization**: ~$140-290/month savings vs jumpbox + bastion model
-- **Better User Experience**: Native local development tools instead of RDP sessions
-- **Unified Connectivity**: Single VPN connection provides access to both environments
-- **Automatic Reconnection**: VPN automatically reconnects after sleep/restart
-- **Multiple Users**: Multiple team members can connect simultaneously
-- **No VM Management**: Zero virtual machine infrastructure to maintain
-- **Enhanced Security**: Certificate-based authentication with no exposed RDP ports
-- **Environment Isolation**: Spokes remain completely isolated from each other
+**Benefits (Flat Model):**
+- Reduced routing complexity (no hub orchestration)
+- Gateway cost incurred only when explicitly enabled
+- Simpler DNS linkage (single layer of VNet links)
+- Identical security posture for private endpoints & managed outbound rules
+- Faster Terraform plans (fewer resources)
 
-### D. Workspace Access Strategy
+### D. Workspace Access Strategy (Updated)
 
-**VPN-Based Access Model**
+**Optional AAD OpenVPN Access Model**
 ```
 Client Machine (Local Development):
 ├── VPN Client: Azure Point-to-Site VPN
@@ -371,9 +379,12 @@ Development Tools Support:
 
 **Cost Comparison**
 | **Solution** | **Monthly Cost** | **User Experience** | **Management Overhead** |
-|--------------|------------------|-------------------|------------------------|
-| **Hub VPN** (Current) | ~$50-85/month | ✅ Native local tools | ✅ Minimal (no VMs) |
-| Jumpbox + Bastion | ~$290/month | ❌ RDP browser sessions | ❌ High (VM patching, monitoring) |
+|--------------|------------------|---------------------|------------------------|
+| **AAD VPN Enabled** | ~$50-85/month | ✅ Native local tools | ✅ Minimal (no VMs) |
+| **VPN Disabled** | $0 | ❌ (Requires alternative) | ✅ Minimal |
+| Jumpbox + Bastion (Legacy) | ~$290/month | ❌ RDP sessions | ❌ High |
+
+Enable / disable by setting / unsetting `azure_ad_p2s_audience` (and optionally `azure_ad_p2s_tenant_id`).
 
 **Connection Workflow**
 1. **Certificate Setup**: Generate and install VPN client certificates
@@ -2145,16 +2156,12 @@ The current infrastructure implementation in `main.tf` fully implements this dep
 
 ### ✅ **Terraform Dependency Issues Resolved**
 
-**Recent Updates (August 7, 2025):**
-1. **Hub Network Peering Logic**: ✅ Fixed conditional expressions in `modules/hub-network/main.tf` to prevent "Invalid count argument" errors
-   - Updated peering conditions to use `!= null && != ""` pattern
-   - Ensured count expressions are determinable at plan time
-2. **Cross-Environment RBAC Optimization**: ✅ Removed unnecessary role assignments that could cause dependency cycles
-   - Eliminated prod workspace UAMI access to dev registry (workspace UAMIs only need network connectivity)
-   - Maintained compute UAMI registry access for actual data operations
-3. **VNet Peering Dependencies**: ✅ Resolved circular dependencies in hub-spoke network architecture
-   - Fixed conditional logic to properly handle spoke VNet creation timing
-   - Ensured gateway transit settings work correctly with conditional peering
+**Recent Updates (August 7–8, 2025):**
+1. **Flat Network Refactor**: Removed legacy hub module & transit logic; simplified to direct dev↔prod optional peering.
+2. **Cross-Environment RBAC Optimization**: Removed unnecessary workspace UAMI registry roles; compute UAMIs retain data access; workspace UAMIs limited to network connection approver.
+3. **Outbound Rule Schema Fix**: Added required `subresourceTarget = "amlregistry"` for all registry private endpoint outbound rules.
+4. **Key Vault Provisioning Reliability**: Added dual roles (Reader + Secrets User) to workspace UAMIs pre-create to avoid 403 `vaults/read` errors.
+5. **Optional AAD VPN Gateway**: Added conditional resources (public IP + virtual network gateway) activated via `azure_ad_p2s_audience` with proper AAD tenant URL formatting.
 
 ### ✅ **Architecture Decisions Implemented**
 
@@ -2167,7 +2174,7 @@ The current infrastructure implementation in `main.tf` fully implements this dep
 
 ### ✅ **Infrastructure Ready for Deployment**
 
-The Terraform configuration in `/infra/main.tf` is ready for deployment and fully implements this strategy with all dependency issues resolved. **Validation completed**: `terraform plan` successfully generates 231 resources with no errors.
+The Terraform configuration in `/infra/main.tf` implements the flat architecture, centralized DNS, deterministic naming and conditional VPN gateway. (Resource count varies with gateway toggle and user role assignment flags.)
 
 ## Deployment Workflow
 
