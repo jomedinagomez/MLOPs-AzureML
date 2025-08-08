@@ -2,7 +2,11 @@
 
 locals {
   resolved_suffix = coalesce(var.naming_suffix, "")
+  p2s_use_aad     = var.azure_ad_p2s_audience != ""
+  aad_tenant_id   = coalesce(var.azure_ad_p2s_tenant_id, data.azurerm_client_config.current.tenant_id)
 }
+
+data "azurerm_client_config" "current" {}
 
 # Hub VNet
 resource "azurerm_virtual_network" "hub_vnet" {
@@ -57,9 +61,21 @@ resource "azurerm_virtual_network_gateway" "vpn_gateway" {
     subnet_id                     = azurerm_subnet.gateway_subnet.id
   }
 
-  # Only configure Point-to-Site (P2S) when a root certificate is provided
+  # Point-to-Site (P2S) configuration supporting either Azure AD auth or certificate auth.
+  # Mutual exclusivity enforced via validation below.
   dynamic "vpn_client_configuration" {
-    for_each = var.vpn_root_certificate_data != "" ? [1] : []
+    for_each = local.p2s_use_aad ? [1] : []
+    content {
+      address_space        = [var.vpn_client_address_space]
+      vpn_client_protocols = ["OpenVPN"]
+  aad_tenant   = local.aad_tenant_id
+  aad_issuer   = "https://sts.windows.net/${local.aad_tenant_id}/"
+  aad_audience = var.azure_ad_p2s_audience
+    }
+  }
+
+  dynamic "vpn_client_configuration" {
+    for_each = (!local.p2s_use_aad && var.vpn_root_certificate_data != "") ? [1] : []
     content {
       address_space        = [var.vpn_client_address_space]
       vpn_client_protocols = ["OpenVPN", "IkeV2"]
@@ -80,6 +96,36 @@ resource "azurerm_virtual_network_gateway" "vpn_gateway" {
     azurerm_public_ip.vpn_gateway_pip,
     azurerm_subnet.gateway_subnet
   ]
+}
+
+# Validation to ensure only one auth method configured when enforcement enabled
+resource "null_resource" "validate_p2s_auth" {
+  count = var.aad_enforce_mutual_exclusion && var.azure_ad_p2s_audience != "" && var.vpn_root_certificate_data != "" ? 1 : 0
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = "echo 'destroy noop'"
+  }
+
+  lifecycle {
+    prevent_destroy = false
+  }
+
+  triggers = {
+    error = "Cannot set both azure_ad_p2s_audience and vpn_root_certificate_data. Choose one authentication method."
+  }
+}
+
+locals {
+  _p2s_auth_conflict = var.aad_enforce_mutual_exclusion && var.azure_ad_p2s_audience != "" && var.vpn_root_certificate_data != ""
+}
+
+terraform {
+  required_version = ">= 1.0.0"
+}
+
+locals {
+  p2s_auth_method = local.p2s_use_aad ? "AzureAD" : (var.vpn_root_certificate_data != "" ? "Certificate" : "None")
 }
 
 # VNet Peering to Dev Environment

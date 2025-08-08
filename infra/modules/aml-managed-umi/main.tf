@@ -548,20 +548,28 @@ module "private_endpoint_aml_workspace" {
   subnet_id = var.subnet_id
   private_dns_zone_ids = [
     local.dns_zone_aml_api_id,
-    local.dns_zone_aml_notebooks_id
+  local.dns_zone_aml_notebooks_id,
+  local.dns_zone_aml_instances_id
   ]
 }
 
 ## Create the A record for the AML Workspace compute instances
 ##
+data "azurerm_private_dns_zone" "instances_zone" {
+  # Ensure we lookup the shared instances.azureml.ms zone in the correct RG (hub RG)
+  name                = "instances.azureml.ms"
+  resource_group_name = var.resource_group_name_dns
+}
+
 resource "azurerm_private_dns_a_record" "aml_workspace_compute_instance" {
   depends_on = [
-    module.private_endpoint_aml_workspace
+    module.private_endpoint_aml_workspace,
+    data.azurerm_private_dns_zone.instances_zone
   ]
 
   name                = "*.${var.location}"
-  zone_name           = "instances.azureml.ms"
-  resource_group_name = var.resource_group_name_dns
+  zone_name           = data.azurerm_private_dns_zone.instances_zone.name
+  resource_group_name = data.azurerm_private_dns_zone.instances_zone.resource_group_name
   ttl                 = 10
   records = [
     module.private_endpoint_aml_workspace.private_endpoint_ip
@@ -1025,7 +1033,8 @@ resource "azapi_resource" "compute_cluster_uami" {
   ]
 
   type      = "Microsoft.MachineLearningServices/workspaces/computes@2024-10-01"
-  name      = "cpu-cluster-uami"
+  # Allow override; default pattern amlcc-<env>-<region><suffix>
+  name      = coalesce(var.compute_cluster_name, "amlcc-${var.purpose}-${var.location_code}${local.resolved_suffix}")
   parent_id = azapi_resource.aml_workspace.id
   location  = var.location
 
@@ -1085,7 +1094,8 @@ resource "azapi_resource" "compute_instance_uami" {
   ]
 
   type      = "Microsoft.MachineLearningServices/workspaces/computes@2024-10-01"
-  name      = "ci-dev-${var.purpose}"
+  # Allow override via variable; default pattern amli-<env>-<region><suffix>
+  name      = coalesce(var.compute_instance_name, "amli-${var.purpose}-${var.location_code}${local.resolved_suffix}")
   parent_id = azapi_resource.aml_workspace.id
   location  = var.location
 

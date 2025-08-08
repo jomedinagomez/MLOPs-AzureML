@@ -13,7 +13,7 @@ This document outlines the deployment strategy for our Azure Machine Learning pl
 
 **This implementation uses two registries to showcase comprehensive MLOps asset promotion workflows, though a single registry would be sufficient for most production scenarios.**
 
-**Last Updated**: August 7, 2025 (Revision 2) – Added registry managed resource group pre-authorization via `assignedIdentities`; enforced private-only posture for Storage and Key Vault; centralized resource group (RG) creation at root (modules now require an explicit `resource_group_name`); clarified workspace → registry outbound rules (dev→dev, prod→prod, prod→dev) on managed VNets; documented required `subresourceTarget = "amlregistry"` for outbound rules to registries; and updated Key Vault RBAC strategy (added explicit **Key Vault Reader** role to mitigate `vaults/read` 403 during workspace provisioning in addition to **Key Vault Secrets User** for data-plane access). A duplicate `name` field inside the workspace `properties` block was removed (previously caused potential identity operation conflicts). Additional timed waits were introduced to allow RBAC propagation and soft-delete slot clearance before workspace creation.
+**Last Updated**: August 8, 2025 (Revision 3) – Centralized Azure ML private DNS zones (api, notebooks, instances) into shared hub resource group to eliminate per‑environment duplication and naming conflicts; introduced Terraform toggle `manage_aml_private_dns_zones` to disable legacy per‑environment AML DNS zone creation; added spoke virtual network links (dev & prod) to shared zones; updated workspace private endpoint zone groups to consume shared zone IDs (including `instances.azureml.ms`); documented phased migration (Step 1: link + disable, Step 2: repoint PE zone groups, Step 3: validate & remove legacy outputs, Step 4: drop `prevent_destroy`); clarified that these DNS zones are the only intentionally shared resources across environments (records coexist safely due to fully qualified unique workspace/registry prefixes); and updated isolation principle to reflect this explicit exception. Prior Revision 2 (August 7, 2025) changes retained below for historical traceability.
 
 > Summary of 2025-08-07 (Rev 2) Fixes:
 > - Outbound Rule ValidationError (400) resolved by adding `destination.subresourceTarget = "amlregistry"` when the destination is an Azure ML Registry.
@@ -129,11 +129,79 @@ Preventative Guidance:
 | 400 ValidationError outbound rule to registry | Missing `subresourceTarget` | Add `subresourceTarget = "amlregistry"` in destination |
 | 409 RoleAssignmentExists on human user roles | Role already granted out-of-band / drift | Import existing role assignment or enable `skip_service_principal_aad_check`; alternatively use `lifecycle { ignore_changes = [principal_id] }` or conditional creation |
 
+## Centralized Azure ML Private DNS Zones (Revision 3 – 2025-08-08)
+
+### Rationale
+Previously each environment module created its own Azure ML private DNS zones:
+`privatelink.api.azureml.ms`, `privatelink.notebooks.azure.net`, and the (often implicit) `instances.azureml.ms` zone for compute instance hostnames. Because Azure Private DNS zones are *global* within a subscription for a given name, duplicating these per environment introduced conflicting desired state and prevented future expansion (multi‑subscription later) without manual reconciliation. Centralizing the three AML zones removes duplication, simplifies lifecycle management, and ensures consistent name resolution for shared services (e.g., cross‑environment registry network connections) while preserving full network isolation.
+
+### What Is Shared vs Still Isolated
+| Category | Shared Now? | Notes |
+|---------|-------------|-------|
+| AML Private DNS Zones (api, notebooks, instances) | Yes | Single authoritative set in hub RG; dev & prod VNets linked |
+| VNets / Subnets | No | Remain per environment + hub |
+| Workspaces / Registries | No | Separate resources per environment |
+| Storage, Key Vault, ACR | No | Private-only, per environment |
+| Identities (UAMI) | No | One workspace + one compute UAMI per environment |
+| Other Private DNS Zones (blob, file, queue, table, vault, privatelink.* for storage / key vault / ACR) | No | Still per environment |
+
+### Terraform Implementation
+1. Defined shared zones in root `infra/main.tf` inside hub resource group with `lifecycle { prevent_destroy = true }` during migration hardening.
+2. Added explicit virtual network links: hub (authoritative), dev spoke, prod spoke for each of: `privatelink.api.azureml.ms`, `privatelink.notebooks.azure.net`, `instances.azureml.ms`.
+3. Introduced `manage_aml_private_dns_zones` (bool) variable in `modules/aml-vnet`; set to `false` for dev/prod to suppress legacy per‑environment AML zone creation (conditional resources via `count`).
+4. Guarded AML DNS zone outputs in the vnet module using `try()` to tolerate disabled creation.
+5. Extended managed UMI (workspace) module inputs to accept `dns_zone_aml_api_id`, `dns_zone_aml_notebooks_id`, and new `dns_zone_aml_instances_id` so the workspace private endpoint `private_dns_zone_group` references shared zone IDs.
+6. Updated workspace private endpoint to include all three zone IDs ensuring correct record population (API, notebooks, compute instances wildcard records).
+
+### Migration Phases (Executed)
+| Step | Action | State | Risk Mitigation |
+|------|--------|-------|-----------------|
+| 1 | Create shared zones (hub RG) + add hub link; disable per-env AML zones; add dev/prod spoke links | COMPLETE | `prevent_destroy` enabled to avoid accidental deletion |
+| 2 | Repoint workspace private endpoint `private_dns_zone_group` to shared zone IDs (api, notebooks, instances) | COMPLETE | Idempotent update; records auto-created in shared zones |
+| 3 | Validate resolution (`nslookup <workspace>.<region>.api.azureml.ms` from VPN client & inside spoke), verify registry & compute instance hostnames | PENDING | Keep old toggle logic available until validation signed off |
+| 4 | Remove `prevent_destroy` + optionally delete legacy variable/toggle once confidence high | PENDING | Staged removal after documented validation window |
+
+### DNS Record Coexistence
+Workspace and registry endpoints include unique environment-specific prefixes (e.g., `mlwdevcc02` vs `mlwprodcc02`). Azure ML adds records only for the specific PEs created, so dev and prod records coexist in the same zone with no collision. This design enables future scenarios (e.g., secure cross‑env sharing, central policy) without additional DNS orchestration.
+
+### Rollback Strategy
+If an issue surfaced before Step 4:
+1. Set `manage_aml_private_dns_zones = true` for affected environment modules.
+2. Remove the environment's VNet links to shared zones (optional isolation during investigation).
+3. Re‑apply Terraform → per‑environment zones recreated; workspace PE zone group would need to be pointed back (module code currently supports this via conditional outputs).
+4. After remediation, reattempt migration starting at Step 1 (ensuring no duplicate zone names remain).
+
+### Post-Migration Cleanup (Future)
+Planned once validation complete:
+* Remove toggle or leave documented as a feature flag (decision pending governance preference).
+* Drop `prevent_destroy` after adding explicit README note about protective expectation.
+* Optionally centralize additional cross‑service zones if a future enterprise pattern emerges (OUT OF SCOPE currently to maintain strict least sharing principle).
+
+### Operational Benefits
+| Benefit | Impact |
+|---------|--------|
+| Eliminate duplicate AML zone resources | Simpler state, faster plans |
+| Single update point for AML DNS policy | Reduced drift risk |
+| Easier multi‑subscription future (can move zones first) | Decouples DNS from spoke lifecycle |
+| Faster environment teardown (no contention for global zone names) | Speeds re-provision cycles |
+
+### Validation Checklist (To Execute – Step 3)
+1. Connect via VPN (hub) from a client machine.
+2. Resolve: `nslookup mlwdev*.<region>.api.azureml.ms` → private IP in dev spoke subnet range.
+3. Resolve: `nslookup mlwprod*.<region>.api.azureml.ms` → private IP in prod spoke subnet range.
+4. Resolve notebook endpoint: `nslookup mlwdev*.<region>.notebooks.azure.net` (and prod analogue).
+5. (Optional) Start a compute instance; verify its hostname A record in `instances.azureml.ms` zone.
+6. Access Azure ML Studio privately for both envs; confirm no public fallback.
+
+Document results in a short table appended to this section, then proceed to Step 4.
+
+---
+
 
 ## Strategic Principles
 
 ### 1. Complete Environment Isolation
-- **Zero Shared Components**: No resources, networks, DNS zones, or identities shared between dev and prod
+- **Minimal Shared Components**: Only the three centralized Azure ML private DNS zones (api, notebooks, instances) are shared; all other resources (networks, workspaces, registries, storage, key vaults, identities, service DNS zones) remain fully isolated
 - **Independent Lifecycles**: Each environment can be created, modified, or destroyed independently
 - **Security Boundaries**: Complete separation prevents cross-environment security risks
 - **Governance**: Clear ownership and access control per environment

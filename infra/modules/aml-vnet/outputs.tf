@@ -78,18 +78,18 @@ output "dns_zone_acr_id" {
 }
 
 output "dns_zone_aml_api_id" {
-  description = "Resource ID of the Azure ML API DNS zone"
-  value       = azurerm_private_dns_zone.aml_api.id
+  description = "Resource ID of the Azure ML API DNS zone (null when managed externally)"
+  value       = try(azurerm_private_dns_zone.aml_api[0].id, null)
 }
 
 output "dns_zone_aml_notebooks_id" {
-  description = "Resource ID of the Azure ML Notebooks DNS zone"
-  value       = azurerm_private_dns_zone.aml_notebooks.id
+  description = "Resource ID of the Azure ML Notebooks DNS zone (null when managed externally)"
+  value       = try(azurerm_private_dns_zone.aml_notebooks[0].id, null)
 }
 
 output "dns_zone_aml_instances_id" {
-  description = "Resource ID of the Azure ML Instances DNS zone"
-  value       = azurerm_private_dns_zone.aml_instances.id
+  description = "Resource ID of the Azure ML Instances DNS zone (null when managed externally)"
+  value       = try(azurerm_private_dns_zone.aml_instances[0].id, null)
 }
 
 ##### Log Analytics and Monitoring Outputs

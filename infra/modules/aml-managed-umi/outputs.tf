@@ -95,3 +95,9 @@ output "compute_uami_principal_id" {
   description = "Principal ID of the compute user-assigned managed identity"
   value       = var.compute_cluster_principal_id
 }
+
+# Private endpoint IP for the AML workspace (used for DNS validation / nslookup checks)
+output "workspace_private_endpoint_ip" {
+  description = "Private IP address of the AML workspace private endpoint"
+  value       = module.private_endpoint_aml_workspace.private_endpoint_ip
+}

@@ -15,4 +15,6 @@ locals {
   dns_zone_aml_api_id = var.dns_zone_aml_api_id != null ? var.dns_zone_aml_api_id : "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.api.azureml.ms"
 
   dns_zone_aml_notebooks_id = var.dns_zone_aml_notebooks_id != null ? var.dns_zone_aml_notebooks_id : "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.notebooks.azure.net"
+
+  dns_zone_aml_instances_id = var.dns_zone_aml_instances_id != null ? var.dns_zone_aml_instances_id : "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/instances.azureml.ms"
 }

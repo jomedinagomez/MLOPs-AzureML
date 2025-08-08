@@ -50,6 +50,28 @@ variable "vpn_root_certificate_data" {
   sensitive   = true
 }
 
+variable "azure_ad_p2s_audience" {
+  description = "Application (client) ID of the Azure AD Server App used as audience for P2S AAD auth. Empty disables AAD auth."
+  type        = string
+  default     = ""
+  validation {
+    condition     = !(var.azure_ad_p2s_audience != "" && var.vpn_root_certificate_data != "")
+    error_message = "Provide only one P2S auth method: azure_ad_p2s_audience or vpn_root_certificate_data."
+  }
+}
+
+variable "azure_ad_p2s_tenant_id" {
+  description = "Tenant ID for Azure AD P2S auth. If null current tenant will be used (passed from root)."
+  type        = string
+  default     = null
+}
+
+variable "aad_enforce_mutual_exclusion" {
+  description = "Internal safety toggle to ensure only one auth method configured."
+  type        = bool
+  default     = true
+}
+
 variable "vpn_gateway_sku" {
   description = "SKU for the VPN Gateway"
   type        = string

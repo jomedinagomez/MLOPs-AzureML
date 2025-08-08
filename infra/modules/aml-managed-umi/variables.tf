@@ -137,6 +137,12 @@ variable "dns_zone_aml_notebooks_id" {
   default     = null
 }
 
+variable "dns_zone_aml_instances_id" {
+  description = "ID of the Azure ML Instances DNS zone"
+  type        = string
+  default     = null
+}
+
 variable "compute_cluster_identity_id" {
   description = "ID of the compute cluster managed identity from VNet module"
   type        = string
@@ -145,6 +151,12 @@ variable "compute_cluster_identity_id" {
 variable "compute_cluster_principal_id" {
   description = "Principal ID of the compute cluster managed identity from VNet module"
   type        = string
+}
+
+variable "compute_cluster_name" {
+  description = "Optional explicit name for the AML compute cluster (overrides generated)."
+  type        = string
+  default     = null
 }
 
 variable "log_analytics_workspace_id" {
@@ -159,3 +171,9 @@ variable "enable_auto_purge" {
 }
 
 // Cross-environment RBAC inputs removed; RBAC is centralized in infra/main.tf.
+ 
+variable "compute_instance_name" {
+  description = "Optional explicit name for the compute instance (overrides generated). Must be unique per workspace."
+  type        = string
+  default     = null
+}

@@ -69,6 +69,11 @@ output "dev_subnet_id" {
   value       = module.dev_vnet.subnet_id
 }
 
+output "dev_workspace_private_endpoint_ip" {
+  description = "Private IP of the development workspace private endpoint (for DNS validation)"
+  value       = module.dev_managed_umi.workspace_private_endpoint_ip
+}
+
 # ===============================
 # PRODUCTION ENVIRONMENT OUTPUTS
 # ===============================
@@ -116,6 +121,11 @@ output "prod_vnet_id" {
 output "prod_subnet_id" {
   description = "ID of the production subnet"
   value       = module.prod_vnet.subnet_id
+}
+
+output "prod_workspace_private_endpoint_ip" {
+  description = "Private IP of the production workspace private endpoint (for DNS validation)"
+  value       = module.prod_managed_umi.workspace_private_endpoint_ip
 }
 
 # ===============================
@@ -223,4 +233,36 @@ output "vpn_gateway_public_ip" {
   description = "Public IP address of the VPN Gateway for client configuration"
   sensitive   = true
   value       = var.vpn_root_certificate_data != "" ? module.hub_network.vpn_gateway_public_ip : null
+}
+
+# Additional explicit VPN outputs (always exposed for operator readiness)
+# These complement the conditional outputs above so that operators can prepare
+# VPN client configuration (e.g., exporting profile once root cert is provided)
+
+output "vpn_gateway_id" {
+  description = "Resource ID of the VPN Gateway (always exposed)"
+  value       = module.hub_network.vpn_gateway_id
+}
+
+output "vpn_gateway_fqdn" {
+  description = "FQDN of the VPN Gateway (may resolve after provisioning)"
+  sensitive   = true
+  value       = module.hub_network.vpn_gateway_fqdn
+}
+
+output "vpn_client_address_space" {
+  description = "Address space reserved for VPN clients"
+  value       = module.hub_network.vpn_client_address_space
+}
+
+output "vpn_client_profile_ready" {
+  description = "Indicates if P2S auth is configured (AzureAD or Certificate)"
+  value       = (var.vpn_root_certificate_data != "" || var.azure_ad_p2s_audience != "") ? true : false
+  sensitive   = true
+}
+
+output "vpn_p2s_auth_method" {
+  description = "Configured Point-to-Site authentication method (AzureAD | Certificate | None)"
+  value       = module.hub_network.p2s_auth_method
+  sensitive   = true
 }

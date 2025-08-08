@@ -83,6 +83,25 @@ variable "vpn_root_certificate_data" {
   }
 }
 
+# Azure AD (Entra ID) Point-to-Site VPN authentication
+# Provide the Server Application (audience) App Registration ID created per
+# https://learn.microsoft.com/azure/vpn-gateway/point-to-site-entra-gateway#create-the-azure-ad-apps
+variable "azure_ad_p2s_audience" {
+  description = "Application (client) ID of the Azure AD Server App used as audience for P2S AAD auth. Leave empty to disable AAD auth."
+  type        = string
+  default     = ""
+  validation {
+    condition     = !(var.azure_ad_p2s_audience != "" && var.vpn_root_certificate_data != "")
+    error_message = "Provide either azure_ad_p2s_audience (AAD auth) OR vpn_root_certificate_data (certificate auth), not both."
+  }
+}
+
+variable "azure_ad_p2s_tenant_id" {
+  description = "Tenant ID to use for Azure AD P2S VPN auth. Defaults to current context tenant when null."
+  type        = string
+  default     = null
+}
+
 variable "user_object_id" {
   description = "The object ID of the user who will manage the Azure Machine Learning Workspace"
   type        = string

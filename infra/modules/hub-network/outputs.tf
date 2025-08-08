@@ -39,3 +39,8 @@ output "vpn_client_address_space" {
   description = "Address space configured for VPN clients"
   value       = var.vpn_client_address_space
 }
+
+output "p2s_auth_method" {
+  description = "Authentication method configured for Point-to-Site (AzureAD | Certificate | None)"
+  value       = local.p2s_auth_method
+}

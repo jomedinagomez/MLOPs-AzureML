@@ -84,3 +84,9 @@ variable "resource_group_name" {
   description = "Resource group name where the VNet and DNS resources will be deployed (must exist)"
   type        = string
 }
+
+variable "manage_aml_private_dns_zones" {
+  description = "Whether this module should create per-environment AML private DNS zones (api/notebooks/instances) and link them. Disable when using centralized shared AML DNS zones."
+  type        = bool
+  default     = true
+}

@@ -72,18 +72,21 @@ resource "azurerm_private_dns_zone" "acr" {
 
 # Azure ML Workspace Private DNS Zones
 resource "azurerm_private_dns_zone" "aml_api" {
+  count               = var.manage_aml_private_dns_zones ? 1 : 0
   name                = "privatelink.api.azureml.ms"
   resource_group_name = local.rg_name
   tags                = var.tags
 }
 
 resource "azurerm_private_dns_zone" "aml_notebooks" {
+  count               = var.manage_aml_private_dns_zones ? 1 : 0
   name                = "privatelink.notebooks.azure.net"
   resource_group_name = local.rg_name
   tags                = var.tags
 }
 
 resource "azurerm_private_dns_zone" "aml_instances" {
+  count               = var.manage_aml_private_dns_zones ? 1 : 0
   name                = "instances.azureml.ms"
   resource_group_name = local.rg_name
   tags                = var.tags
@@ -147,27 +150,30 @@ resource "azurerm_private_dns_zone_virtual_network_link" "acr_link" {
 }
 
 resource "azurerm_private_dns_zone_virtual_network_link" "aml_api_link" {
+  count                 = var.manage_aml_private_dns_zones ? 1 : 0
   name                  = "aml-api-vnet-link"
   resource_group_name   = local.rg_name
-  private_dns_zone_name = azurerm_private_dns_zone.aml_api.name
+  private_dns_zone_name = azurerm_private_dns_zone.aml_api[0].name
   virtual_network_id    = azurerm_virtual_network.aml_vnet.id
   registration_enabled  = false
   tags                  = var.tags
 }
 
 resource "azurerm_private_dns_zone_virtual_network_link" "aml_notebooks_link" {
+  count                 = var.manage_aml_private_dns_zones ? 1 : 0
   name                  = "aml-notebooks-vnet-link"
   resource_group_name   = local.rg_name
-  private_dns_zone_name = azurerm_private_dns_zone.aml_notebooks.name
+  private_dns_zone_name = azurerm_private_dns_zone.aml_notebooks[0].name
   virtual_network_id    = azurerm_virtual_network.aml_vnet.id
   registration_enabled  = false
   tags                  = var.tags
 }
 
 resource "azurerm_private_dns_zone_virtual_network_link" "aml_instances_link" {
+  count                 = var.manage_aml_private_dns_zones ? 1 : 0
   name                  = "aml-instances-vnet-link"
   resource_group_name   = local.rg_name
-  private_dns_zone_name = azurerm_private_dns_zone.aml_instances.name
+  private_dns_zone_name = azurerm_private_dns_zone.aml_instances[0].name
   virtual_network_id    = azurerm_virtual_network.aml_vnet.id
   registration_enabled  = false
   tags                  = var.tags
