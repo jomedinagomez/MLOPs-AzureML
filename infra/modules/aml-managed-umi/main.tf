@@ -117,6 +117,44 @@ resource "azurerm_user_assigned_identity" "workspace_identity" {
   tags                = var.tags
 }
 
+## Grant Key Vault access (secrets user) to the workspace user-assigned identity BEFORE workspace creation
+## AML control plane needs to read/write secrets in the KV during workspace provisioning.
+resource "azurerm_role_assignment" "workspace_key_vault_secrets_user" {
+  scope                = module.keyvault_aml.id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
+
+  depends_on = [
+    module.keyvault_aml,
+    azurerm_user_assigned_identity.workspace_identity
+  ]
+}
+
+## Small delay to allow RBAC propagation for the workspace identity before workspace creation (avoids 403 on KV read)
+## Additional management plane permission + extended propagation wait
+## Assign Key Vault Reader (management plane) explicitly; Reader at RG should suffice but this removes ambiguity.
+resource "azurerm_role_assignment" "workspace_key_vault_reader" {
+  scope                = module.keyvault_aml.id
+  role_definition_name = "Key Vault Reader"
+  principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
+  depends_on = [
+    module.keyvault_aml,
+    azurerm_user_assigned_identity.workspace_identity
+  ]
+  name = uuidv5("dns", "${module.keyvault_aml.id}${azurerm_user_assigned_identity.workspace_identity.principal_id}kvreader")
+}
+
+resource "time_sleep" "wait_rbac_role_propagation" {
+  create_duration = "90s"
+  depends_on = [
+    azurerm_role_assignment.workspace_key_vault_secrets_user,
+    azurerm_role_assignment.workspace_key_vault_reader,
+    azurerm_role_assignment.rg_reader,
+    azurerm_role_assignment.ai_network_connection_approver,
+    azurerm_role_assignment.ai_administrator
+  ]
+}
+
 ## Create the Azure Machine Learning Workspace in a managed vnet configuration
 ##
 resource "azapi_resource" "aml_workspace" {
@@ -125,7 +163,13 @@ resource "azapi_resource" "aml_workspace" {
     module.storage_account_default,
     module.keyvault_aml,
     module.container_registry,
-    azurerm_user_assigned_identity.workspace_identity
+    azurerm_user_assigned_identity.workspace_identity,
+  azurerm_role_assignment.workspace_key_vault_secrets_user,
+  azurerm_role_assignment.workspace_key_vault_reader,
+  azurerm_role_assignment.rg_reader,
+  azurerm_role_assignment.ai_network_connection_approver,
+  azurerm_role_assignment.ai_administrator,
+  time_sleep.wait_rbac_role_propagation
   ]
 
   type                      = "Microsoft.MachineLearningServices/workspaces@2025-04-01-preview"
@@ -158,6 +202,9 @@ resource "azapi_resource" "aml_workspace" {
       keyVault            = module.keyvault_aml.id
       storageAccount      = module.storage_account_default.id
       containerRegistry   = module.container_registry.id
+
+  # For UserAssigned identity workspaces, explicitly set the primary UAI
+  primaryUserAssignedIdentity = azurerm_user_assigned_identity.workspace_identity.id
 
       # Block access to the AML Workspace over the public endpoint
       publicNetworkAccess = "disabled"
@@ -516,19 +563,16 @@ resource "azurerm_private_dns_a_record" "aml_workspace_compute_instance" {
 ##### Create non-human role assignments
 #####
 
-resource "time_sleep" "wait_aml_workspace_identities" {
-  depends_on = [
-    azapi_resource.aml_workspace,
-    azurerm_user_assigned_identity.workspace_identity
-  ]
-  create_duration = "10s"
-}
+## Removed post-create identity wait; RBAC moves pre workspace creation.
 
 ## Create role assignments granting Reader role over the resource group to AML Workspace's
 ## user-assigned managed identity
 resource "azurerm_role_assignment" "rg_reader" {
+  # Ensure assigned before workspace provisioning so control plane can enumerate RG resources
   depends_on = [
-    time_sleep.wait_aml_workspace_identities
+    azurerm_user_assigned_identity.workspace_identity,
+    module.keyvault_aml,
+    module.storage_account_default
   ]
   name                 = uuidv5("dns", "${local.rg_name}${azurerm_user_assigned_identity.workspace_identity.principal_id}reader")
   scope                = local.rg_id
@@ -539,8 +583,12 @@ resource "azurerm_role_assignment" "rg_reader" {
 ## Create role assignments granting Azure AI Enterprise Network Connection Approver role over the resource group to the AML Workspace's
 ## user-assigned managed identity
 resource "azurerm_role_assignment" "ai_network_connection_approver" {
+  # Ensure foundational resources & identity exist; reader implicitly assures RG enumeration
   depends_on = [
-    azurerm_role_assignment.rg_reader
+    azurerm_role_assignment.rg_reader,
+    module.keyvault_aml,
+    module.storage_account_default,
+    azurerm_user_assigned_identity.workspace_identity
   ]
   name                 = uuidv5("dns", "${local.rg_name}${azurerm_user_assigned_identity.workspace_identity.principal_id}netapprover")
   scope                = local.rg_id
@@ -551,8 +599,12 @@ resource "azurerm_role_assignment" "ai_network_connection_approver" {
 ## Create role assignments granting Azure AI Administrator role over the resource group to the AML Workspace's
 ## user-assigned managed identity - Required for image creation and registry operations
 resource "azurerm_role_assignment" "ai_administrator" {
+  # Chain after network connection approver to guarantee ordering
   depends_on = [
-    azurerm_role_assignment.ai_network_connection_approver
+    azurerm_role_assignment.ai_network_connection_approver,
+    module.keyvault_aml,
+    module.storage_account_default,
+    azurerm_user_assigned_identity.workspace_identity
   ]
   name                 = uuidv5("dns", "${local.rg_name}${azurerm_user_assigned_identity.workspace_identity.principal_id}aiadmin")
   scope                = local.rg_id
@@ -753,8 +805,8 @@ resource "azurerm_role_assignment" "compute_rg_reader" {
 ##
 resource "azurerm_role_assignment" "workspace_storage_blob_owner" {
   depends_on = [
-    module.storage_account_default,
-    time_sleep.wait_aml_workspace_identities
+  module.storage_account_default,
+  azurerm_role_assignment.rg_reader
   ]
 
   name                 = uuidv5("dns", "${local.rg_name}${azurerm_user_assigned_identity.workspace_identity.principal_id}${module.storage_account_default.name}blobowner")
