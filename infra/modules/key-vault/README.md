@@ -14,7 +14,7 @@ This Terraform module creates an Azure Key Vault with enterprise-grade security 
 | Resource | Purpose |
 |----------|---------|
 | `azurerm_key_vault` | Main Key Vault with security configurations |
-| `azurerm_role_assignment` | Key Vault Administrator role for specified admin |
+| `azurerm_role_assignment` | [Key Vault Administrator](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/security#key-vault-administrator) role for specified admin |
 | `azurerm_key_vault_access_policy` | Access policies for service principals/users |
 | `azurerm_monitor_diagnostic_setting` | Comprehensive audit logging and metrics |
 
@@ -79,7 +79,7 @@ These settings ensure full observability and compliance with security monitoring
 
 ### RBAC Authorization
 - **Enabled by default**: Uses Azure RBAC instead of access policies
-- **Key Vault Administrator**: Automatically assigned to specified admin
+- **Key Vault Administrator**: Automatically assigned to specified admin ([role reference](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/security#key-vault-administrator))
 - **Flexible Policies**: Support for additional access policies if needed
 
 ### Access Policy Structure

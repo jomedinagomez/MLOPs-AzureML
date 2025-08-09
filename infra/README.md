@@ -24,9 +24,9 @@ The service principal is created by the root `main.tf` during deployment and is 
 Service Principal: sp-aml-deployment-platform
 ├── Scope: 7 resource groups across dev, prod, and shared DNS
 ├── Permissions per resource group:
-│   ├── Contributor: Deploy ML infrastructure
-│   ├── User Access Administrator: Configure RBAC  
-│   └── Network Contributor: Configure networking
+│   ├── [Contributor](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#contributor): Deploy ML infrastructure
+│   ├── [User Access Administrator](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#user-access-administrator): Configure RBAC  
+│   └── [Network Contributor](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/networking#network-contributor): Configure networking
 └── Created and assigned by root main.tf
 ```
 

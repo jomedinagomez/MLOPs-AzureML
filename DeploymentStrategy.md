@@ -74,10 +74,10 @@ Observed issue: Only granting **Key Vault Secrets User** resulted in 403 errors 
 
 | Principal | Scope | Role | Purpose |
 |----------|-------|------|---------|
-| Workspace UAMI | Key Vault | Key Vault Reader | Management-plane metadata read during provisioning |
-| Workspace UAMI | Key Vault | Key Vault Secrets User | Data-plane secret access (read secrets) |
-| Compute UAMI | Key Vault | Key Vault Secrets User (optional depending on workload) | Access secrets during training/inference |
-| Deployment SP | (Optional) Key Vault | Reader or Key Vault Reader | Plan-time introspection / drift detection |
+| Workspace UAMI | Key Vault | [Key Vault Reader](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/security#key-vault-reader) | Management-plane metadata read during provisioning |
+| Workspace UAMI | Key Vault | [Key Vault Secrets User](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/security#key-vault-secrets-user) | Data-plane secret access (read secrets) |
+| Compute UAMI | Key Vault | [Key Vault Secrets User](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/security#key-vault-secrets-user) (optional depending on workload) | Access secrets during training/inference |
+| Deployment SP | (Optional) Key Vault | [Reader](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#reader) or [Key Vault Reader](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/security#key-vault-reader) | Plan-time introspection / drift detection |
 
 > Note: No legacy access policies are used; RBAC-only simplifies auditing and avoids mixed authorization modes.
 
@@ -299,11 +299,11 @@ Managed identities use different types based on component requirements:
 - Used by: Azure ML Workspace for management operations
 - Roles:
     - Azure AI Administrator (resource group) – configure workspace settings and AI services integration
-    - Azure AI Enterprise Network Connection Approver (resource group) – enable secure connectivity and cross-environment sharing
-    - Azure AI Enterprise Network Connection Approver (registries) – allow private endpoint creation for outbound rules
-    - Storage Blob Data Contributor (default storage account)
-    - Storage Blob Data Owner (default storage account)
-    - Reader (on private endpoints for storage accounts)
+    - [Azure AI Enterprise Network Connection Approver](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/ai-machine-learning#azure-ai-enterprise-network-connection-approver) (resource group) – enable secure connectivity and cross-environment sharing
+    - [Azure AI Enterprise Network Connection Approver](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/ai-machine-learning#azure-ai-enterprise-network-connection-approver) (registries) – allow private endpoint creation for outbound rules
+    - [Storage Blob Data Contributor](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/storage#storage-blob-data-contributor) (default storage account)
+    - [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/storage#storage-blob-data-owner) (default storage account)
+    - [Reader](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#reader) (on private endpoints for storage accounts)
 - Note: Workspace UAMIs do NOT have AzureML Registry User roles. They create network connections only; registry data access is handled by compute UAMIs and human users.
 
 #### Registry SMI (System-Assigned)
@@ -348,15 +348,15 @@ Key points:
 - Location: rg-aml-vnet-${purpose}-${location_code}${naming_suffix}
 - Used by: Both compute cluster and compute instance
 - Roles:
-    - AcrPull (container registry)
-    - AcrPush (container registry)
-    - Storage Blob Data Contributor (default storage account)
-    - Storage File Data Privileged Contributor (default storage account)
-    - AzureML Data Scientist (workspace)
-    - Key Vault Secrets User (key vault)
-    - Reader (resource group)
-    - AzureML Registry User (registry)
-    - Contributor (workspace) – for CI auto-shutdown
+    - [AcrPull](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/containers#acrpull) (container registry)
+    - [AcrPush](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/containers#acrpush) (container registry)
+    - [Storage Blob Data Contributor](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/storage#storage-blob-data-contributor) (default storage account)
+    - [Storage File Data Privileged Contributor](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/storage#storage-file-data-privileged-contributor) (default storage account)
+    - [AzureML Data Scientist](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/ai-machine-learning#azureml-data-scientist) (workspace)
+    - [Key Vault Secrets User](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/security#key-vault-secrets-user) (key vault)
+    - [Reader](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#reader) (resource group)
+    - [AzureML Registry User](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/ai-machine-learning#azureml-registry-user) (registry)
+    - [Contributor](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#contributor) (workspace) – for CI auto-shutdown
 
 #### Online Endpoints
 - Identity: System-assigned managed identity (default)
@@ -395,14 +395,14 @@ Role assignment summary (human users):
 - Resource Group Level
     - Reader (on resource group): Discover ML resources and monitor workspace infrastructure
 - Workspace Level
-    - AzureML Data Scientist (on workspace): Core ML development and model management
-    - Azure AI Developer (on workspace): Develop generative AI solutions and prompt engineering
-    - AzureML Compute Operator (on workspace): Manage personal compute instances and clusters
+    - [AzureML Data Scientist](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/ai-machine-learning#azureml-data-scientist) (on workspace): Core ML development and model management
+    - [Azure AI Developer](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/ai-machine-learning#azure-ai-developer) (on workspace): Develop generative AI solutions and prompt engineering
+    - [AzureML Compute Operator](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/ai-machine-learning#azureml-compute-operator) (on workspace): Manage personal compute instances and clusters
 - Storage Level
-    - Storage Blob Data Contributor (on default storage account): Manage training data and experimental outputs
-    - Storage File Data Privileged Contributor (on default storage account): Share code and collaborate on ML projects
+    - [Storage Blob Data Contributor](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/storage#storage-blob-data-contributor) (on default storage account): Manage training data and experimental outputs
+    - [Storage File Data Privileged Contributor](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/storage#storage-file-data-privileged-contributor) (on default storage account): Share code and collaborate on ML projects
 - Registry Level
-    - Azure ML Registry User (on registry): Access org-wide ML assets and promote models
+    - [AzureML Registry User](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/ai-machine-learning#azureml-registry-user) (on registry): Access org-wide ML assets and promote models
 
 
 ### Cross-Environment Permissions

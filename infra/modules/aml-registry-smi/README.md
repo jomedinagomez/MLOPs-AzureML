@@ -124,12 +124,12 @@ sub_id = "your-subscription-id"   # Target subscription
 ### **User Registry Access**
 | Role | Scope | Purpose |
 |------|-------|---------|
-| `AzureML Registry User` | Registry | Access models, components, and environments |
+| [AzureML Registry User](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/ai-machine-learning#azureml-registry-user) | Registry | Access models, components, and environments |
 
 ### **Managed Identity Access** 
 | Role | Scope | Purpose |
 |------|-------|---------|
-| `AzureML Registry User` | Registry | Allow compute clusters to access shared assets |
+| [AzureML Registry User](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/ai-machine-learning#azureml-registry-user) | Registry | Allow compute clusters to access shared assets |
 
 ## Registry Features
 
@@ -242,11 +242,11 @@ This module creates the following Azure resources:
 The module automatically creates the following role assignments:
 
 **User Account:**
-- Azure AI Developer (Registry scope)
-- AzureML Registry User (Registry scope)
+- [Azure AI Developer](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/ai-machine-learning#azure-ai-developer) (Registry scope)
+- [AzureML Registry User](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/ai-machine-learning#azureml-registry-user) (Registry scope)
 
 **Registry System Identity:**
-- Contributor (Resource Group scope) - for managing system resources
+- [Contributor](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#contributor) (Resource Group scope) - for managing system resources
 
 ## Prerequisites
 
@@ -323,7 +323,7 @@ This module creates the following Azure resources:
 - **System Container Registry**: Automatic ACR (Premium SKU) - **Do not modify**
 - **Internal Components**: Other Azure-managed infrastructure - **Do not modify**
 
-> ⚠️ **Important**: The Microsoft-managed resource group is automatically created by Azure and contains system-level infrastructure. You will see this resource group in your subscription, but you should never interact with, modify, or delete these resources as it will break the ML Registry functionality.
+> Important: The Microsoft-managed resource group is automatically created by Azure and contains system-level infrastructure. You will see this resource group in your subscription, but you should never interact with, modify, or delete these resources as it will break the ML Registry functionality.
 
 ## Outputs
 
