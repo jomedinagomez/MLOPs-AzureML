@@ -1,5 +1,24 @@
 # Azure ML Platform Deployment Strategy
 
+## Table of Contents
+- [Overview](#overview)
+- [Centralized Azure ML & Core Service Private DNS Zones](#centralized-azure-ml--core-service-private-dns-zones)
+- [Strategic Principles](#strategic-principles)
+- [Current Infrastructure Configuration](#current-infrastructure-configuration)
+- [Architecture Decisions](#architecture-decisions)
+- [Identity and Access Management](#identity-and-access-management)
+- [Network Security and Compliance](#network-security-and-compliance)
+- [Verify After Apply](#verify-after-apply)
+- [Asset Promotion Strategy](#asset-promotion-strategy)
+- [Implementation Plan](#implementation-plan)
+- [Cost Considerations](#cost-considerations)
+- [Disaster Recovery and Business Continuity](#disaster-recovery-and-business-continuity)
+- [Decision Log](#decision-log)
+- [Next Steps](#next-steps)
+- [Implementation Status](#implementation-status)
+- [Deployment Workflow](#deployment-workflow)
+- [References](#references)
+
 ## Overview
 
 This document outlines the deployment strategy for our Azure Machine Learning platform implemented as a **flat dual-VNet architecture with Azure Bastion jumpbox access**. Remote private access is delivered exclusively through Azure Bastion to a Windows DSVM. No VPN gateway or SSH ingress is used.
@@ -307,17 +326,6 @@ Cross-Environment Traffic:
 - Simpler DNS linkage (single layer of VNet links)
 - Identical security posture for private endpoints & managed outbound rules
 - Faster Terraform plans (fewer resources)
-
-### D. Workspace Access Strategy (Updated)
-
-**Bastion RDP Access Model**
-```
-Operator Workflow:
-1. Use Azure Bastion to open an RDP session to the Windows DSVM jumpbox.
-2. Run Azure CLI, Python SDK, and tooling from the jumpbox to interact with Azure ML.
-3. All workspace access occurs over private endpoints; no public ingress and no VPN.
-```
-
 
 ## Identity and Access Management
 
@@ -1972,22 +1980,7 @@ Your parameterized modules are ready for production deployment:
 3. Storage Tiers: Implement intelligent tiering for model artifacts
 4. Monitoring: Set up cost alerts and budget controls
 
-## Security and Compliance
-
-### Data Protection
-- Encryption: All data encrypted at rest and in transit
-- Key Management: Separate Key Vaults per environment
-- Access Controls: Least privilege access principles
-
-### Network Security
-- Private Endpoints: All Azure services accessible via private endpoints only
-- DNS Resolution: Private DNS zones prevent data exfiltration
-- Network Segmentation: Complete network isolation between environments
-
-### Audit and Compliance
-- Activity Logging: All operations logged to separate Log Analytics workspaces
-- Access Reviews: Regular review of environment access
-- Change Management: All infrastructure changes via pull request approval
+<!-- Removed duplicate 'Security and Compliance' section (content already covered earlier) -->
 
 ## Disaster Recovery and Business Continuity
 
