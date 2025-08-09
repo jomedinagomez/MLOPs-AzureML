@@ -24,7 +24,7 @@
 This document outlines the deployment strategy for our Azure Machine Learning platform implemented as a **flat dual-VNet architecture with Azure Bastion jumpbox access**. Remote private access is delivered exclusively through Azure Bastion to a Windows DSVM. No VPN gateway or SSH ingress is used.
 
 **Key Architecture Features (Current):**
-- **Flat Dual VNets**: Independent dev and prod VNets; no VNet peering between environments
+- **Flat Dual VNets**: Independent dev and prod VNets with required VNet peering for admin VM access
 - **Bastion-Only Access**: Azure Bastion provides browser-based RDP to a Windows DSVM jumpbox; no VPN/SSH
 - **Deterministic Naming**: Names derive from `prefix`, `purpose`, `location_code`, `naming_suffix`; no random postfixes
 - **Centralized Private DNS Zones (Expanded)**: Azure ML + core service private DNS zones (api, notebooks, instances, blob, file, queue, table, vaultcore, acr) consolidated in a shared DNS RG; only records (not resources) are multi‑tenant
@@ -38,7 +38,7 @@ This document outlines the deployment strategy for our Azure Machine Learning pl
 
 **Last Updated**: August 9, 2025 – Enforced Bastion-only access (no VPN, no peering), centralized Private DNS for AML/storage/KV/ACR, deterministic naming via `naming_suffix`, refined outbound rule schema & Key Vault RBAC documentation.
 
-> NOTE: No VNet peering is used between dev and prod. Shared Private DNS is linked to both VNets independently.
+> NOTE: VNet peering is optional. If enabled, it’s solely to allow the prod jumpbox to reach dev resources for admin tasks. DNS remains centralized via shared Private DNS; no gateway transit or forwarded traffic is allowed.
 
 > Summary of Recent Fixes:
 > - Outbound Rule ValidationError (400) resolved by adding `destination.subresourceTarget = "amlregistry"` when the destination is an Azure ML Registry.
@@ -85,64 +85,7 @@ Observed issue: Only granting **Key Vault Secrets User** resulted in 403 errors 
 
 Because purge protection and soft-delete retention can delay name re-use, a `time_sleep.wait_workspace_slot` was inserted after Key Vault & role assignment creation to avoid immediate workspace recreation conflicts (`FailedIdentityOperation` 409) when iterating quickly. This gives Azure sufficient time to finalize identity bindings.
 
-### Outbound Rules to Azure ML Registries (Updated)
-
-When defining outbound rules from a workspace to a registry using the preview API `Microsoft.MachineLearningServices/workspaces/outboundRules@2024-10-01-preview`, Azure now **requires** an explicit `subresourceTarget` for registry destinations. Without it the service returns:
-
-```
-ValidationError: Invalid Pair of Target and Sub Target resource ... supports ["amlregistry"], the sub target introduced was: (empty)
-```
-
-#### Correct Terraform (azapi) Shape
-
-```hcl
-resource "azapi_resource" "dev_workspace_to_dev_registry_outbound_rule" {
-    type      = "Microsoft.MachineLearningServices/workspaces/outboundRules@2024-10-01-preview"
-    name      = "AllowDevRegistryAccess"
-    parent_id = module.dev_managed_umi.workspace_id
-
-    body = {
-        properties = {
-            type = "PrivateEndpoint"
-            destination = {
-                serviceResourceId = module.dev_registry.registry_id
-                subresourceTarget = "amlregistry" # REQUIRED for registry targets
-            }
-            category = "UserDefined"
-        }
-    }
-    depends_on = [
-        module.dev_managed_umi,
-        module.dev_registry,
-        azurerm_role_assignment.dev_workspace_network_connection_approver
-    ]
-}
-```
-
-Apply the same `subresourceTarget = "amlregistry"` addition for prod→prod and prod→dev outbound rules. This resolves the 400 ValidationError returned previously. Ensure the workspace UAMI holds **Azure AI Enterprise Network Connection Approver** on the registry scope before creating the rule.
-
-#### Ordering & RBAC Propagation
-
-Outbound rule resources should depend on:
-1. Registry creation (system-assigned identity ready)
-2. Workspace creation & managed network enablement
-3. Network Connection Approver role assignment (workspace UAMI on registry)
-4. Optional sleep for RBAC propagation if creation is immediately after role assignment (empirically ~60–90s sufficient, we use 90s)
-
-#### Post-Mortem Summary (Outbound Rule Failures Resolved)
-
-| Attempt | Payload Shape | Service Response | Root Cause | Resolution |
-|---------|---------------|------------------|------------|------------|
-| 1 | `destination` missing `subresourceTarget` | 400 ValidationError (Invalid Pair of Target and Sub Target) | Registry private endpoint requires subresource qualification | Added `subresourceTarget = "amlregistry"` |
-| 2 | Experimental `privateEndpointDestination` property | 400 ValidationError (unrecognized shape) | Incorrect property name (SDK uses `destination`) | Reverted to `destination` block | 
-| 3 | Repeated REST `az rest` trials (varied casing, api-version) | 415 / 400 | Quoting & schema experimentation noise | Terraform azapi with validated shape | 
-
-Cleanup Action: Removed obsolete troubleshooting script `test-outbound-rule.ps1` after successful apply to reduce repository noise.
-
-Preventative Guidance:
-- Always consult currently published preview swagger / SDK examples; ignore legacy blog posts referencing superseded shapes.
-- For private endpoint style outbound rules, verify whether the target resource type exposes multiple subresources; if yes, expect a required `subresourceTarget`.
-- Keep troubleshooting artifacts (scripts) on a temporary branch; merge only the distilled, working pattern into main documentation.
+<!-- Outbound Rules section moved under Network Security and Compliance to consolidate networking guidance -->
 
 
 ### Troubleshooting Summary (Added)
@@ -203,14 +146,14 @@ Workspace and registry endpoints include unique environment-specific prefixes (e
 
 ### 1. Complete Environment Isolation (Updated)
 - **Shared Components (Deliberate & Minimal)**: Central private DNS zones (AML api/notebooks/instances + core service zones: blob, file, queue, table, vaultcore, acr). All other resources (VNets, workspaces, registries, storage, key vaults, identities, log analytics) remain per-environment.
-- **No Network Peering**: Dev↔Prod peering is not used; strict isolation is enforced. Managed outbound rules provide required registry connectivity.
+- **Network Peering (Required)**: Dev↔Prod peering is enabled to allow the prod jumpbox to reach dev resources for admin tasks. AML connectivity remains via Private Endpoints and managed outbound rules; no gateway transit/forwarded traffic.
 - **Deterministic Naming**: Stable resource names improve drift detection & reproducibility.
 - **Promotion Demonstration**: Dual registries retained solely for cross-environment promotion patterns.
 
 ### 2. Flat Dual-VNet Architecture with Bastion-only access
 - **Flat Topology**: Dev VNet + Prod VNet + shared DNS resource group.
 - **Access Model**: Bastion-only remote access into a Windows DSVM jumpbox; no VPN is deployed.
-- **Isolation**: No VNet peering; private endpoint–based service access only.
+- **Isolation**: VNet peering is present for admin VM access; service access remains via Private Endpoints.
 
 ### 3. Infrastructure as Code
 - **Terraform Modules**: Reusable modules for consistent deployment across environments
@@ -308,16 +251,16 @@ Development VNet (vnet-*-dev-*):
 ├── Address Space: 10.1.0.0/16
 ├── Private Endpoint Subnet: 10.1.1.0/24
 ├── DNS: Linked to centralized zones
-└── Peering: None
+└── Peering: Present (dev↔prod)
 
 Production VNet (vnet-*-prod-*):
 ├── Address Space: 10.2.0.0/16
 ├── Private Endpoint Subnet: 10.2.1.0/24
 ├── DNS: Linked to centralized zones
-└── Peering: None
+└── Peering: Present (dev↔prod)
 
 Cross-Environment Traffic:
-└── Managed outbound rules to registries; no VNet peering required
+└── Managed outbound rules to registries; peering used only for admin VM access
 ```
 
 **Benefits (Flat Model):**
@@ -445,86 +388,35 @@ Key points:
     - Delete or ignore any internal RG resources in modules; references should use the passed `resource_group_name` via locals.
     - If outputs referenced counted RG IDs, compute the RG ID as `"/subscriptions/${subscription_id}/resourceGroups/${resource_group_name}"` using `data.azurerm_client_config` for the subscription ID.
 
-## Network Security and Compliance
-
-### Security Architecture
-
-**Zero Trust Network Model**
-```
-External Access:
-├── No Public Endpoints: All Azure ML resources are private
-├── No direct RDP/SSH: Access is via Azure Bastion to a jumpbox VM; no public RDP/SSH
-└── Certificate Management: Self-signed certificates with manual distribution
-
-Internal Network Segmentation:
-├── Dev VNet (10.1.0.0/16): Development workloads only
-├── Prod VNet (10.2.0.0/16): Production workloads only
-└── Optional Peering: Present only if explicitly enabled
-
-Azure ML Private Endpoints:
-├── Workspace APIs: *.api.azureml.ms
-├── Workspace UI: *.ml.azure.com
-├── Storage Accounts: *.blob.core.windows.net
-├── Container Registries: *.azurecr.io
-└── Key Vaults: *.vault.azure.net
-```
-
-**Compliance Features**
-- **Data Residency**: All data remains in Canada Central region
-- **Encryption in Transit**: All communication over private endpoints with TLS 1.2+
-- **Encryption at Rest**: Azure-managed keys for all storage services
-- **Access Logging**: Azure Activity Log tracks all management operations
-- **Network Isolation**: No internet-facing endpoints for ML workspaces
-- **Identity Integration**: Azure AD authentication for all human access
-
-**Security Monitoring**
-```
-Azure Monitor Integration:
-├── Private Endpoint Monitoring: DNS resolution and connectivity
-├── Azure ML Audit Logs: Workspace access and operations
-├── Resource Group Activity: All infrastructure changes
-└── Cost Management: Spending anomaly detection
-
-Compliance Reports:
-├── Network Security Groups: Traffic flow analysis
-├── Private DNS Zones: Resolution audit trails  
-├── Key Vault Access: Secret and certificate usage
-└── Role Assignment Changes: Permission modifications
-```
-
-### Human User RBAC
-
-```
-Data Engineers/Scientists:
-├── Scope: Multi-level assignments
+<!-- Removed duplicate Key Vault Configuration block (now consolidated under IAM) -->
 ├── Resource Group Level:
-│   └── Reader (on resource group): Discover ML resources and monitor workspace infrastructure - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/general#reader)
+│   └── Reader (on resource group): Discover ML resources and monitor workspace infrastructure
 ├── Workspace Level:
-│   ├── AzureML Data Scientist (on workspace): Core ML development and model management - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/ai-machine-learning#azureml-data-scientist)
-│   ├── Azure AI Developer (on workspace): Develop generative AI solutions and prompt engineering - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/ai-machine-learning#azure-ai-developer)
-│   └── AzureML Compute (on workspace): Manage personal compute instances and clusters - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/ai-machine-learning#azureml-compute-operator)
+│   ├── AzureML Data Scientist (on workspace): Core ML development and model management
+│   ├── Azure AI Developer (on workspace): Develop generative AI solutions and prompt engineering
+│   └── AzureML Compute (on workspace): Manage personal compute instances and clusters
 ├── Storage Level:
-│   ├── Storage Blob Data Contributor (on default storage account): Manage training data and experimental outputs - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/storage#storage-blob-data-contributor)
-│   └── Storage File Data Privileged Contributor (on default storage account): Share code and collaborate on ML projects - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/storage#storage-file-data-privileged-contributor)
+│   ├── Storage Blob Data Contributor (on default storage account): Manage training data and experimental outputs
+│   └── Storage File Data Privileged Contributor (on default storage account): Share code and collaborate on ML projects
 └── Registry Level:
-    └── Azure ML Registry User (on registry): Access organization-wide ML assets and promote models - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/ai-machine-learning#azureml-registry-user)
+        └── Azure ML Registry User (on registry): Access org-wide ML assets and promote models
 ```
 
 ### Cross-Environment Permissions
 
-To support the asset promotion workflow while maintaining security boundaries, specific cross-environment permissions are required for compute cluster User-Assigned Managed Identities (UAMIs).
+To support the asset promotion workflow while maintaining security boundaries, specific cross-environment permissions are required for compute cluster UAMIs.
 
 #### Environment-Specific UAMI Identities
 
 **Development Compute Cluster UAMI**
-- **Identity**: `{dev-compute-uami-name}` (lives in dev resource group)
-- **Scope**: Development environment only
-- **Purpose**: Run training jobs, experimentation, model development
+- Identity: `{dev-compute-uami-name}` (dev RG)
+- Scope: Development only
+- Purpose: Training jobs, experimentation, model development
 
 **Production Compute Cluster UAMI**
-- **Identity**: `{prod-compute-uami-name}` (lives in prod resource group)  
-- **Scope**: Production environment + limited dev registry access
-- **Purpose**: Run inference jobs, model deployment, production workloads
+- Identity: `{prod-compute-uami-name}` (prod RG)
+- Scope: Production + limited dev registry access
+- Purpose: Inference, deployment, production workloads
 
 #### Development UAMI Permissions (`{dev-compute-uami-name}`)
 
@@ -543,7 +435,7 @@ NO ACCESS to Production Environment:
 └── {prod-key-vault}: No access
 ```
 
-**Security Principle**: Complete isolation from production to prevent any development workloads from affecting production systems.
+Security Principle: Complete isolation from production.
 
 #### Production UAMI Permissions (`{prod-compute-uami-name}`)
 
@@ -564,31 +456,72 @@ NO WRITE ACCESS to Development Environment:
 └── {dev-key-vault}: No access
 ```
 
-**Security Principle**: Minimal cross-environment access following the principle of least privilege. Production can read promoted assets from dev registry but cannot modify development resources.
+Security Principle: Minimal cross-environment access; prod can read dev registry assets but cannot modify dev resources.
 
 #### Production Workspace UAMI Permissions (`{prod-workspace-uami-name}`)
 
 ```
 Production Environment Resources:
-├── Azure AI Administrator (on {prod-resource-group}): Configure workspace settings and AI services integration
-├── Azure AI Enterprise Network Connection Approver (on {prod-resource-group}): Enable secure connectivity and cross-environment sharing
-├── Azure AI Enterprise Network Connection Approver (on {prod-registry}): Enable cross-environment model sharing
-├── Storage Blob Data Contributor (on {prod-storage-account}): Manage workspace artifacts and datasets
-├── Storage Blob Data Owner (on {prod-storage-account}): Complete workspace storage management and permissions
-└── Reader (on private endpoints for {prod-storage-account}): Monitor and validate secure storage connectivity
+├── Azure AI Administrator (on {prod-resource-group})
+├── Azure AI Enterprise Network Connection Approver (on {prod-resource-group})
+├── Azure AI Enterprise Network Connection Approver (on {prod-registry})
+├── Storage Blob Data Contributor (on {prod-storage-account})
+├── Storage Blob Data Owner (on {prod-storage-account})
+└── Reader (on private endpoints for {prod-storage-account})
 
 Cross-Environment Access (REQUIRED for Automatic Private Endpoint Creation):
-└── Azure AI Enterprise Network Connection Approver (on {dev-registry}): Enable automatic private endpoint creation for outbound rules
+└── Azure AI Enterprise Network Connection Approver (on {dev-registry})
 
 NO DATA ACCESS to Registries:
-├── {dev-registry}: No AzureML Registry User role (only network connection approver)
-├── {prod-registry}: No AzureML Registry User role (only network connection approver)
+├── {dev-registry}: No AzureML Registry User
+├── {prod-registry}: No AzureML Registry User
 └── Registry data access is handled by compute UAMIs and human users
 
 NO WRITE ACCESS to Development Environment:
 ├── {dev-storage-account}: No access
 ├── {dev-workspace}: No access
 └── {dev-key-vault}: No access
+```
+
+Critical Permission: The prod workspace UAMI requires Azure AI Enterprise Network Connection Approver on the dev registry to automatically create private endpoints when outbound rules are configured.
+
+Important: Workspace UAMIs do NOT have AzureML Registry User roles; they only create network connectivity via private endpoints. Data access is via compute UAMIs and human users.
+
+#### Cross-Environment Access Justification
+
+The production compute UAMI requires AzureML Registry User access to the development registry to support:
+1. Environment references using `azureml://registries/{dev-registry}/...` URIs.
+2. Docker image pulls via registry’s Microsoft-managed ACR.
+3. Model lineage across promotions.
+
+#### Network Connectivity for Cross-Environment Access
+
+Managed VNet with `isolationMode = "AllowOnlyApprovedOutbound"` creates private endpoints automatically when outbound rules specify `type = "PrivateEndpoint"`.
+
+```terraform
+# Cross-environment connectivity (from main.tf)
+resource "azapi_resource" "prod_workspace_to_dev_registry_outbound_rule" {
+    type      = "Microsoft.MachineLearningServices/workspaces/outboundRules@2024-10-01-preview"
+    name      = "AllowDevRegistryAccess"
+    parent_id = module.prod_managed_umi.workspace_id
+
+    body = {
+        properties = {
+            type = "PrivateEndpoint"
+            destination = {
+                serviceResourceId = module.dev_registry.registry_id
+                subresourceTarget = "amlregistry" # required for registry targets
+            }
+            category = "UserDefined"
+        }
+    }
+
+    depends_on = [
+        module.prod_managed_umi,
+        module.dev_registry,
+        azurerm_role_assignment.prod_workspace_network_connection_approver
+    ]
+}
 ```
 
 **Critical Permission**: The production workspace UAMI requires `Azure AI Enterprise Network Connection Approver` on the dev registry to automatically create private endpoints when outbound rules are configured. This permission enables the managed VNet to establish secure connectivity without manual intervention.
@@ -644,7 +577,7 @@ resource "azapi_resource" "prod_workspace_to_dev_registry_outbound_rule" {
 - **Microsoft-Managed ACR Access**: Automatic access to dev registry's internal ACR through the same private endpoint
 
 **No Manual Network Configuration Required:**
-- ❌ No VNet peering needed between environments
+- ✅ VNet peering enabled between environments for admin VM access
 - ❌ No manual private endpoint creation
 - ❌ No manual DNS configuration
 - ❌ No cross-VNet private endpoint setup
@@ -717,6 +650,56 @@ resource "azapi_resource" "prod_workspace_to_dev_registry_outbound_rule" {
 ```
 
 This configuration ensures complete environment isolation while enabling the necessary cross-environment asset access for production deployments using promoted development assets.
+
+## Network Security and Compliance
+
+### Outbound Rules to Azure ML Registries
+
+Outbound rules from a workspace to a registry use `Microsoft.MachineLearningServices/workspaces/outboundRules@2024-10-01-preview`. When the destination is an Azure ML Registry, you must set `destination.subresourceTarget = "amlregistry"` or you’ll receive a 400 ValidationError (“Invalid Pair of Target and Sub Target … supports ["amlregistry"]”).
+
+#### Correct azapi resource shape (example)
+
+```hcl
+resource "azapi_resource" "dev_workspace_to_dev_registry_outbound_rule" {
+    type      = "Microsoft.MachineLearningServices/workspaces/outboundRules@2024-10-01-preview"
+    name      = "AllowDevRegistryAccess"
+    parent_id = module.dev_managed_umi.workspace_id
+
+    body = {
+        properties = {
+            type = "PrivateEndpoint"
+            destination = {
+                serviceResourceId = module.dev_registry.registry_id
+                subresourceTarget = "amlregistry" # REQUIRED for registry targets
+            }
+            category = "UserDefined"
+        }
+    }
+
+    depends_on = [
+        module.dev_managed_umi,
+        module.dev_registry,
+        azurerm_role_assignment.dev_workspace_network_connection_approver
+    ]
+}
+```
+
+Apply the same shape for prod→prod and prod→dev rules. Keep `publicNetworkAccess = "Disabled"` everywhere; connectivity occurs via private endpoints created automatically by the service.
+
+#### Ordering and RBAC propagation
+
+Create outbound rules only after:
+- Registry exists (system-assigned identity ready)
+- Workspace exists and managed network is enabled
+- Workspace UAMI has Azure AI Enterprise Network Connection Approver on the registry scope
+- Optional: insert a short delay (~90s) after role assignment to avoid transient 403s
+
+#### Post-mortem (resolved issues)
+
+| Attempt | Payload | Service response | Root cause | Fix |
+|---|---|---|---|---|
+| 1 | destination without subresourceTarget | 400 ValidationError | Registry target requires subresource qualification | Add `subresourceTarget = "amlregistry"` |
+| 2 | used `privateEndpointDestination` block | 400 ValidationError | Incorrect property name | Use `destination` object with `serviceResourceId` + `subresourceTarget` |
 
 ## Verify After Apply
 
@@ -2060,7 +2043,7 @@ The current infrastructure implementation in `main.tf` fully implements this dep
 ### ✅ **Terraform Dependency Issues Resolved**
 
 **Recent Updates (August 7–8, 2025):**
-1. **Flat Network Implementation**: Direct dev↔prod optional peering (no transit layer).
+1. **Flat Network Implementation**: Flat dual VNets with VNet peering (admin VM access); shared Private DNS only.
 2. **Cross-Environment RBAC Optimization**: Removed unnecessary workspace UAMI registry roles; compute UAMIs retain data access; workspace UAMIs limited to network connection approver.
 3. **Outbound Rule Schema Fix**: Added required `subresourceTarget = "amlregistry"` for all registry private endpoint outbound rules.
 4. **Key Vault Provisioning Reliability**: Added dual roles (Reader + Secrets User) to workspace UAMIs pre-create to avoid 403 `vaults/read` errors.
@@ -2074,6 +2057,14 @@ The current infrastructure implementation in `main.tf` fully implements this dep
 4. **Complete Environment Isolation**: ✅ Zero shared components between dev and prod
 5. **Role Assignment Before Resource Creation**: ✅ All permissions configured before compute provisioning
 6. **Optimized RBAC Strategy**: ✅ Workspace UAMIs handle connectivity, compute UAMIs handle data access
+
+### Verify VNet Peering (if enabled)
+
+Check peering is present and safe:
+
+- Search for `azurerm_virtual_network_peering` in `infra/` and confirm both directions exist.
+- Ensure: `allow_forwarded_traffic=false`, `allow_gateway_transit=false`, `use_remote_gateways=false`.
+- Confirm Private DNS remains via shared zones; no DNS changes are required for peering.
 
 ### ✅ **Infrastructure Ready for Deployment**
 

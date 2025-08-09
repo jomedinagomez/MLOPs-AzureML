@@ -639,7 +639,41 @@ resource "azurerm_subnet" "prod_pe" {
   address_prefixes     = [var.prod_pe_subnet_prefix]
 }
 
-// No VNet peering between environments (strict isolation)
+# Optional VNet peering between environments for admin VM access
+resource "azurerm_virtual_network_peering" "dev_to_prod" {
+  name                      = "dev-to-prod"
+  resource_group_name       = azurerm_resource_group.dev_vnet_rg.name
+  virtual_network_name      = azurerm_virtual_network.dev_vnet.name
+  remote_virtual_network_id = azurerm_virtual_network.prod_vnet.id
+
+  # Tight defaults; do not allow transit or forwarded traffic
+  allow_virtual_network_access = true
+  allow_forwarded_traffic      = false
+  allow_gateway_transit        = false
+  use_remote_gateways          = false
+
+  depends_on = [
+    azurerm_virtual_network.dev_vnet,
+    azurerm_virtual_network.prod_vnet
+  ]
+}
+
+resource "azurerm_virtual_network_peering" "prod_to_dev" {
+  name                      = "prod-to-dev"
+  resource_group_name       = azurerm_resource_group.prod_vnet_rg.name
+  virtual_network_name      = azurerm_virtual_network.prod_vnet.name
+  remote_virtual_network_id = azurerm_virtual_network.dev_vnet.id
+
+  allow_virtual_network_access = true
+  allow_forwarded_traffic      = false
+  allow_gateway_transit        = false
+  use_remote_gateways          = false
+
+  depends_on = [
+    azurerm_virtual_network.dev_vnet,
+    azurerm_virtual_network.prod_vnet
+  ]
+}
 
 # Prod Managed Identity Module
 module "prod_managed_umi" {
