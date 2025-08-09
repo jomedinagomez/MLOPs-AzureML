@@ -13,7 +13,7 @@ This module creates a secure, enterprise-ready Azure ML workspace featuring:
 - **📊 Monitoring**: Application Insights for workspace telemetry and monitoring
 - **⚙️ Compute Infrastructure**: Auto-scaling compute cluster with managed identity
 - **🔒 Network Security**: Private endpoints for all services with DNS integration
-- **👥 RBAC Configuration**: Comprehensive role assignments for users and managed identities
+- **👥 RBAC Configuration**: Managed identity role assignments only; human-user roles are centralized in the root module
 
 ## 🏗️ **Architecture**
 
@@ -79,19 +79,8 @@ graph TB
 
 This module depends on outputs from the `aml-vnet` module and an existing resource group name. When using the root orchestration, these dependencies are automatically resolved. For standalone deployment, you must provide:
 
-#### 1. **User Identity Configuration** 👤
-```hcl
-# Your Azure AD user object ID for RBAC assignments
-user_object_id = "12345678-1234-1234-1234-123456789012"
-
-# Your public IP for workspace access (optional, for additional security)
-user_ip_address = "203.0.113.123/32"
-```
-
-**Get your user object ID:**
-```bash
-az ad signed-in-user show --query id -o tsv
-```
+#### 1. **Identity & Access** 👤
+Human-user (data scientist) RBAC is assigned in the root module (Step 12 barrier). This module does not accept user IDs and does not create human role assignments.
 
 #### 2. **Network Dependencies** 🌐
 ```hcl
@@ -126,15 +115,8 @@ resource_group_name = "rg-aml-ws-dev-cc001"
 
 ## 🔑 **RBAC Configuration**
 
-### **User Account Roles** (Applied to your Azure AD user)
-
-| Role | Scope | Purpose |
-|------|-------|---------|
-| `Azure AI Developer` | Workspace | Full Azure ML development capabilities |
-| `AzureML Compute Operator` | Workspace | Create and manage compute resources |
-| `AzureML Data Scientist` | Workspace | Run experiments and access data |
-| `Storage Blob Data Contributor` | Storage Account | Access training data and model artifacts |
-| `Storage File Data Privileged Contributor` | Storage Account | Access file shares and notebooks |
+### **Human User Roles**
+Managed in root only. See `infra/main.tf` Step 12 for the centralized assignments (workspace + storage + registry). This module does not create any human-user RBAC.
 
 ### **Managed Identity Roles** (Applied to compute cluster identity)
 
@@ -146,7 +128,7 @@ resource_group_name = "rg-aml-ws-dev-cc001"
 | `Key Vault Secrets User` | Key Vault | Access secrets during training |
 | `AzureML Registry User` | Registry | Access shared models and components |
 
-### **Workspace System Identity Roles** (Applied to workspace managed identity)
+### **Workspace User-Assigned Identity Roles** (applied pre/provisioning)
 
 | Role | Scope | Purpose |
 |------|-------|---------|
@@ -165,9 +147,7 @@ az account show --query id -o tsv
 - `naming_suffix`: Deterministic suffix to ensure resource name consistency
 
 ### Compute Configuration
-- `compute_cluster_min_nodes`: Minimum number of nodes in the compute cluster (default: 2)
-- `compute_cluster_max_nodes`: Maximum number of nodes in the compute cluster (default: 2)
-- `compute_cluster_vm_size`: VM size for compute nodes (default: Standard_DS3_v2)
+Scale and size are currently set in code for stability (cluster min=2, max=4, Standard_F8s_v2). Expose as variables if you need to tune.
 
 ### Tags
 Customize the `tags` section to match your organization's tagging strategy.
@@ -206,26 +186,27 @@ This module creates the following Azure resources:
 - **Key Management**: Azure Key Vault integration for secrets
 - **Monitoring**: Application Insights and Log Analytics integration
 
-## Role Assignments
+### Role Assignments
 
-The module automatically creates the following role assignments:
-
-**User Account:**
-- Azure AI Developer (Workspace scope)
-- AzureML Compute Operator (Workspace scope) 
-- AzureML Data Scientist (Workspace scope)
+The module automatically creates the following role assignments for non-human identities only:
 
 **Managed Identity (Compute Cluster):**
 - AzureML Data Scientist (Workspace scope)
 - Storage Blob Data Contributor (Storage Account scope)
+- Storage File Data Privileged Contributor (Storage Account scope)
 - Key Vault Secrets User (Key Vault scope)
+- AcrPull/AcrPush (Registry scope)
+
+**Workspace UAMI (Pre-provisioning to avoid 403s):**
+- Key Vault Secrets User, Key Vault Reader (on workspace Key Vault)
+- Reader, Azure AI Enterprise Network Connection Approver, Azure AI Administrator (on workspace RG)
 
 ## Prerequisites
 
 - Azure CLI installed and authenticated
 - Terraform >= 1.0 installed
 - Existing VNet and subnet for private endpoints
-- Private DNS zones configured and linked to your VNet (deployed via `aml-vnet` module)
+- Private DNS zones configured and linked to your VNet (shared zones created in root; per-env zones disabled)
 - Appropriate Azure RBAC permissions to create resources
 - Azure subscription with sufficient quota for ML resources
 
@@ -243,12 +224,12 @@ cp terraform.tfvars.example terraform.tfvars
 # Edit terraform.tfvars with your specific values
 ```
 
-3. **Plan the deployment:**
+3. **Plan the deployment (from root):**
 ```bash
 terraform plan
 ```
 
-4. **Apply the configuration:**
+4. **Apply the configuration (from root):**
 ```bash
 terraform apply
 ```

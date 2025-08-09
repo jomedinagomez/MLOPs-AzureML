@@ -246,27 +246,7 @@ output "key_vault_purge_protection_enabled" {
   value       = var.key_vault_purge_protection_enabled
 }
 
-# ===============================
-# HUB NETWORK OUTPUTS
-# ===============================
-
-// Hub & VPN outputs removed due to flat network architecture (no hub). If remote access is needed later, introduce a dedicated VPN gateway module and outputs.
-output "vpn_gateway_info" {
-  description = "VPN Gateway (P2S OpenVPN + Entra ID) info (present only if azure_ad_p2s_audience set)"
-  value = var.azure_ad_p2s_audience != "" ? {
-    gateway_name        = try(azurerm_virtual_network_gateway.prod_vpn_gw[0].name, null)
-    public_ip           = try(azurerm_public_ip.prod_vpn_gw[0].ip_address, null)
-    client_address_pool = join(",", var.vpn_client_address_pool)
-    auth_method         = "EntraID-OpenVPN"
-    audience            = var.azure_ad_p2s_audience
-    tenant_id           = coalesce(var.azure_ad_p2s_tenant_id, data.azurerm_client_config.current.tenant_id)
-  } : null
-}
-
-output "vpn_gateway_public_ip" {
-  description = "Public IP address of the VPN gateway (null if gateway not deployed or IP not allocated yet)"
-  value       = var.azure_ad_p2s_audience != "" ? try(azurerm_public_ip.prod_vpn_gw[0].ip_address, null) : null
-}
+## No hub/VPN outputs (flat VNet with Bastion access)
 
 # ===============================
 # AML PRIVATE ENDPOINT FQDNS (Smoke Test Helpers)

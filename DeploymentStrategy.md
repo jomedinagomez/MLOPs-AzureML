@@ -2,24 +2,24 @@
 
 ## Overview
 
-This document outlines the deployment strategy for our Azure Machine Learning platform implemented as a **flat dual-VNet architecture with optional Entra ID (Azure AD) OpenVPN Point‑to‑Site gateway**. Remote private access is delivered through an opt‑in Entra ID–integrated OpenVPN gateway created only when explicitly enabled via variables—eliminating gateway cost when not required.
+This document outlines the deployment strategy for our Azure Machine Learning platform implemented as a **flat dual-VNet architecture with Azure Bastion jumpbox access**. Remote private access is delivered exclusively through Azure Bastion to a Windows DSVM. No VPN gateway or SSH ingress is used.
 
 **Key Architecture Features (Current):**
-- **Flat Dual VNets**: Independent dev and prod VNets; optional direct peering (removable for stricter isolation)
-- **Optional Entra ID P2S VPN**: Conditional creation; set `azure_ad_p2s_audience` (server app client ID) to enable (AAD auth, OpenVPN protocol)
+- **Flat Dual VNets**: Independent dev and prod VNets; no VNet peering between environments
+- **Bastion-Only Access**: Azure Bastion provides browser-based RDP to a Windows DSVM jumpbox; no VPN/SSH
 - **Deterministic Naming**: Names derive from `prefix`, `purpose`, `location_code`, `naming_suffix`; no random postfixes
 - **Centralized Private DNS Zones (Expanded)**: Azure ML + core service private DNS zones (api, notebooks, instances, blob, file, queue, table, vaultcore, acr) consolidated in a shared DNS RG; only records (not resources) are multi‑tenant
 - **Private-Only Posture**: Public network access disabled for workspaces, registries, storage, key vaults, ACR
 - **Per-Environment Log Analytics**: Dedicated dev & prod workspaces for observability isolation
-- **Gateway-less Operation**: If `azure_ad_p2s_audience` unset, gateway resources are omitted (zero remote access cost)
+- **Bastion-Only Operation**: No VPN gateway is deployed; all remote access is via Azure Bastion RDP to a Windows DSVM
 - **Managed Outbound Rules**: Private endpoint based outbound connectivity (with required `subresourceTarget = "amlregistry"`)
-- **Parameterization**: All tunables (CIDRs, purge protection, diagnostics, VPN settings) exposed via variables
+- **Parameterization**: All tunables (CIDRs, purge protection, diagnostics) exposed via variables
 
 **Two registries remain intentionally for demonstration of cross‑environment asset promotion; a single registry suffices for most production deployments.**
 
-**Last Updated**: August 8, 2025 – Added conditional Entra ID OpenVPN gateway (Standard static public IP, RouteBased), expanded centralized private DNS approach to include storage, key vault & ACR zones, enforced deterministic naming via `naming_suffix`, parameterized all gateway settings (SKU, allocation, client address pool, protocols), added outputs for VPN gateway & AML private endpoint FQDNs, refined outbound rule schema & Key Vault RBAC documentation.
+**Last Updated**: August 9, 2025 – Enforced Bastion-only access (no VPN, no peering), centralized Private DNS for AML/storage/KV/ACR, deterministic naming via `naming_suffix`, refined outbound rule schema & Key Vault RBAC documentation.
 
-> NOTE: Dev↔Prod VNet peering is presently enabled to simplify shared DNS zone linking and potential future cross-environment diagnostics. If strict network isolation is required, remove the two `azurerm_virtual_network_peering` resources; outbound registry access & managed private endpoints continue to function (they rely on Azure ML managed networks and private endpoints, not on platform VNet transit).
+> NOTE: No VNet peering is used between dev and prod. Shared Private DNS is linked to both VNets independently.
 
 > Summary of Recent Fixes:
 > - Outbound Rule ValidationError (400) resolved by adding `destination.subresourceTarget = "amlregistry"` when the destination is an Azure ML Registry.
@@ -146,12 +146,11 @@ Previously each environment module created its own Azure ML private DNS zones:
 |----------|---------|-------|
 | AML Private DNS Zones (api, notebooks, instances) | Yes | Central shared DNS RG; record prefixes prevent collisions |
 | Core Service Private DNS Zones (blob, file, queue, table, vaultcore, acr) | Yes | Consolidated (Rev 4) to eliminate duplication |
-| VNets / Subnets | No | Independent dev / prod VNets; peering optional |
+| VNets / Subnets | No | Independent dev / prod VNets; no peering |
 | Workspaces / Registries | No | Provisioned per environment |
 | Storage Accounts / Key Vaults / ACR Registries | No | Per environment; only DNS zones centralized |
 | User-Assigned Managed Identities | No | Distinct per environment (workspace + compute) |
 | Log Analytics Workspaces | No | Separate dev/prod analytics |
-| VPN Gateway | Conditional | Only if `azure_ad_p2s_audience` set (resides in prod VNet) |
 
 ### Terraform Implementation
 1. Shared zones declared once in a dedicated DNS resource group (with `prevent_destroy` for protection).
@@ -171,7 +170,7 @@ Workspace and registry endpoints include unique environment-specific prefixes (e
 | Faster environment teardown (no contention for global zone names) | Speeds re-provision cycles |
 
 ### Validation Checklist
-1. (If enabled) Connect via VPN from a client machine.
+1. Connect via Azure Bastion to the Windows DSVM jumpbox.
 2. Resolve: `nslookup mlwdev*.<region>.api.azureml.ms` → private IP in dev subnet range.
 3. Resolve: `nslookup mlwprod*.<region>.api.azureml.ms` → private IP in prod subnet range.
 4. Resolve notebook endpoint: `nslookup mlwdev*.<region>.notebooks.azure.net` (and prod analogue).
@@ -185,16 +184,14 @@ Workspace and registry endpoints include unique environment-specific prefixes (e
 
 ### 1. Complete Environment Isolation (Updated)
 - **Shared Components (Deliberate & Minimal)**: Central private DNS zones (AML api/notebooks/instances + core service zones: blob, file, queue, table, vaultcore, acr). All other resources (VNets, workspaces, registries, storage, key vaults, identities, log analytics) remain per-environment.
-- **Optional Network Peering**: Dev↔Prod peering exists for current operational convenience; can be removed for stricter isolation with no impact to registry outbound rules.
+- **No Network Peering**: Dev↔Prod peering is not used; strict isolation is enforced. Managed outbound rules provide required registry connectivity.
 - **Deterministic Naming**: Stable resource names improve drift detection & reproducibility.
 - **Promotion Demonstration**: Dual registries retained solely for cross-environment promotion patterns.
 
-### 2. Flat Dual-VNet Architecture with Conditional VPN
+### 2. Flat Dual-VNet Architecture with Bastion-only access
 - **Flat Topology**: Dev VNet + Prod VNet + shared DNS resource group.
-- **Conditional Remote Access**: VPN gateway (OpenVPN + Entra ID) created only when `azure_ad_p2s_audience` supplied.
-- **AAD Integrated Auth**: `aad_tenant` (login URL) + `aad_issuer` (sts URL) + `aad_audience` (server app client ID).
-- **Cost Control**: Remove audience to destroy gateway and eliminate monthly gateway cost automatically.
-- **Isolation Control**: Delete peering resources to block any direct VNet traffic while preserving private endpoint–based service access.
+- **Access Model**: Bastion-only remote access into a Windows DSVM jumpbox; no VPN is deployed.
+- **Isolation**: No VNet peering; private endpoint–based service access only.
 
 ### 3. Infrastructure as Code
 - **Terraform Modules**: Reusable modules for consistent deployment across environments
@@ -217,7 +214,6 @@ resource_prefixes = {
   container_registry = "cr"
   key_vault          = "kv"
   log_analytics      = "log"
-  vpn_gateway        = "vpn-gateway"
   public_ip          = "pip"
 }
 ```
@@ -247,8 +243,6 @@ enable_auto_purge = true | false # Dev: true, Prod: false (CRITICAL)
 - Container Registry: `cr{env}{location_code}{naming_suffix}`
 - Key Vault: `kv{env}{location_code}{naming_suffix}`
 - Registry: `mlr{env}{location_code}{naming_suffix}`
-- (Optional) VPN Gateway: `vng-{prefix}-prod-{location_code}-{naming_suffix}` (only when audience set)
-- Public IP (VPN): `pip-{prefix}-vpn-{location_code}-{naming_suffix}`
 - Resource Groups (per environment): `rg-{prefix}-{component}-{env}-{location_code}-{naming_suffix}`
 
 ## Architecture Decisions
@@ -288,30 +282,23 @@ Both Dev and Prod:
 - Simplified monitoring: Single region to monitor for service health
 - Easier troubleshooting: Consistent region-specific behaviors
 
-### Current Flat Dual-VNet + Optional AAD P2S Gateway
+### Current Flat Dual-VNet + Bastion-only Access
 
 ```
 Development VNet (vnet-*-dev-*):
 ├── Address Space: 10.1.0.0/16
 ├── Private Endpoint Subnet: 10.1.1.0/24
 ├── DNS: Linked to centralized zones
-└── Peering: Optional (dev_to_prod)
+└── Peering: None
 
 Production VNet (vnet-*-prod-*):
 ├── Address Space: 10.2.0.0/16
-├── Gateway Subnet: var.prod_gateway_subnet_prefix (only if VPN enabled)
 ├── Private Endpoint Subnet: 10.2.1.0/24
 ├── DNS: Linked to centralized zones
-└── Peering: Optional (prod_to_dev)
-
-Optional Remote Access:
-├── Public IP (Standard / Static)
-├── Virtual Network Gateway (RouteBased, OpenVPN)
-├── AAD Auth (tenant login URL + issuer + audience)
-└── Client Address Pool: var.vpn_client_address_pool (default 10.255.0.0/24)
+└── Peering: None
 
 Cross-Environment Traffic:
-└── Only via peering (remove to harden), AML service private endpoints unaffected
+└── Managed outbound rules to registries; no VNet peering required
 ```
 
 **Benefits (Flat Model):**
@@ -323,43 +310,14 @@ Cross-Environment Traffic:
 
 ### D. Workspace Access Strategy (Updated)
 
-**Optional AAD OpenVPN Access Model**
+**Bastion RDP Access Model**
 ```
-Client Machine (Local Development):
-├── VPN Client: Azure Point-to-Site VPN
-├── Certificate: Self-signed client certificate (installed locally)
-├── IP Pool: 172.16.0.0/24 (assigned dynamically)
-└── DNS: Azure Private DNS resolution for *.api.azureml.ms
-
-Connectivity Flow:
-1. Connect to Azure ML VPN (if enabled)
-2. Automatic routing to dev (10.1.0.0/16) or prod (10.2.0.0/16)
-3. Private DNS resolution for Azure ML workspace endpoints
-4. Direct access to Azure ML Studio and APIs without jumpbox
-
-Development Tools Support:
-├── VS Code: Direct connection to Azure ML workspace
-├── Azure CLI: Native ml extension support
-├── Python SDK: Full Azure ML SDK functionality
-├── Jupyter: Local Jupyter connects to remote compute
-└── Azure ML Studio: Browser access via private endpoints
+Operator Workflow:
+1. Use Azure Bastion to open an RDP session to the Windows DSVM jumpbox.
+2. Run Azure CLI, Python SDK, and tooling from the jumpbox to interact with Azure ML.
+3. All workspace access occurs over private endpoints; no public ingress and no VPN.
 ```
 
-**Cost Comparison**
-| **Solution** | **Monthly Cost** | **User Experience** | **Management Overhead** |
-|--------------|------------------|---------------------|------------------------|
-| **AAD VPN Enabled** | ~$50-85/month | ✅ Native local tools | ✅ Minimal (no VMs) |
-| **VPN Disabled** | $0 | ❌ (Requires alternative) | ✅ Minimal |
-| Jumpbox + Bastion (Legacy) | ~$290/month | ❌ RDP sessions | ❌ High |
-
-Enable / disable by setting / unsetting `azure_ad_p2s_audience` (and optionally `azure_ad_p2s_tenant_id`).
-
-**Connection Workflow**
-1. **Certificate Setup**: Generate and install VPN client certificates
-2. **VPN Client**: Download and install Azure VPN client from portal
-3. **Connect**: One-click connection to configured Azure ML VPN profile
-4. **Access**: Direct access to both dev and prod Azure ML workspaces
-5. **Develop**: Use local tools (VS Code, PyCharm, etc.) with full ML capabilities
 
 ## Identity and Access Management
 
@@ -371,45 +329,41 @@ Deployment Service Principal:
 ├── Name: "sp-aml-deployment-platform"
 ├── Scope: All 7 resource groups (RG level permissions)
 ├── Roles: 
-│   ├── Contributor (on all 7 resource groups): Deploy ML workspace, storage accounts, compute resources, and VPN Gateway - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/privileged#contributor)
+│   ├── Contributor (on all 7 resource groups): Deploy ML workspace, storage accounts, and compute resources - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/privileged#contributor)
 │   ├── User Access Administrator (on all 7 resource groups): Configure RBAC for managed identities and user access - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/privileged#user-access-administrator)
-│   └── Network Contributor (on all resource groups): Configure secure networking, VPN Gateway, and private endpoints - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/networking#network-contributor)
+│   └── Network Contributor (on all resource groups): Configure secure networking and private endpoints - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/networking#network-contributor)
 ├── Resource Groups:
 │   ├── Development: rg-aml-vnet-dev-*, rg-aml-ws-dev-*, rg-aml-reg-dev-*
 │   ├── Production: rg-aml-vnet-prod-*, rg-aml-ws-prod-*, rg-aml-reg-prod-*
-│   └── Shared DNS / (Optional) VPN: rg-aml-dns-* (and gateway resources in prod VNet RG if enabled)
+│   └── Shared DNS: rg-aml-dns-*
 └── Purpose: Terraform deployments via CI/CD pipelines
 ```
 
 ### Managed Identity Strategy
-Managed identities will use different types based on component requirements:
+Managed identities use different types based on component requirements:
 
-```
-Workspace UAMI:
-├── Name: "${purpose}-mi-workspace"
-├── Location: rg-aml-vnet-${purpose}-${location_code}${naming_suffix}
-├── Used by: Azure ML Workspace for management operations
-├── Roles:
-│   ├── Azure AI Administrator (on resource group): Configure workspace settings and AI services integration - [Learn more](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-assign-roles?view=azureml-api-2#troubleshooting)
-│   ├── Azure AI Enterprise Network Connection Approver (on resource group): Enable secure connectivity and cross-environment sharing - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/ai-machine-learning#azure-ai-enterprise-network-connection-approver)
-│   ├── Azure AI Enterprise Network Connection Approver (on registries): Enable cross-environment private endpoint creation for outbound rules - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/ai-machine-learning#azure-ai-enterprise-network-connection-approver)
-│   ├── Storage Blob Data Contributor (on default storage account): Manage workspace artifacts and datasets - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/storage#storage-blob-data-contributor)
-│   ├── Storage Blob Data Owner (on default storage account): Complete workspace storage management and permissions - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/storage#storage-blob-data-owner)
-│   └── Reader (on private endpoints for storage accounts): Monitor and validate secure storage connectivity - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/general#reader)
-│   
-│   Note: Workspace UAMIs do NOT have AzureML Registry User roles - they only create network connections,
-│         not access registry data directly. Registry access is handled by compute UAMIs and human users.
+#### Workspace UAMI
+- Name: "${purpose}-mi-workspace"
+- Location: rg-aml-vnet-${purpose}-${location_code}${naming_suffix}
+- Used by: Azure ML Workspace for management operations
+- Roles:
+    - Azure AI Administrator (resource group) – configure workspace settings and AI services integration
+    - Azure AI Enterprise Network Connection Approver (resource group) – enable secure connectivity and cross-environment sharing
+    - Azure AI Enterprise Network Connection Approver (registries) – allow private endpoint creation for outbound rules
+    - Storage Blob Data Contributor (default storage account)
+    - Storage Blob Data Owner (default storage account)
+    - Reader (on private endpoints for storage accounts)
+- Note: Workspace UAMIs do NOT have AzureML Registry User roles. They create network connections only; registry data access is handled by compute UAMIs and human users.
 
-Registry SMI (System-Assigned Managed Identity):
-├── Identity Type: System-Assigned (Azure ML Registries do not support user-assigned managed identities)
-├── Automatic Creation: Created automatically when the registry is provisioned
-├── Access: Manages registry's Microsoft-managed storage account and container registry
-├── RBAC: Automatically configured by Azure ML service for registry operations
-└── No Manual Configuration Required: Azure handles all permissions for registry-managed resources
+#### Registry SMI (System-Assigned)
+- Identity Type: System-assigned (registries don’t support UAMI)
+- Created automatically with the registry
+- Manages the registry’s Microsoft-managed storage and ACR
+- RBAC configured by the service; no manual configuration required
 
 ### Registry Managed Resource Group Pre-Authorization
 
-Azure ML Registries create a Microsoft-managed resource group (azureml-rg-<registry>_guid) that hosts internal storage and ACR. To allow the Azure ML service to create private endpoints and network resources from managed VNets during provisioning and outbound rule operations, pre-authorize the deployment service principal by assigning its objectId via `managedResourceGroupSettings.assignedIdentities`.
+Azure ML Registries create a Microsoft-managed resource group (azureml-rg-<registry>_guid) that hosts internal storage and ACR. To allow Azure ML to create private endpoints and network resources from managed VNets during provisioning and outbound rule operations, pre-authorize the deployment service principal by assigning its objectId via `managedResourceGroupSettings.assignedIdentities`.
 
 Terraform (azapi):
 
@@ -421,7 +375,7 @@ resource "azapi_resource" "registry" {
     location  = var.location
 
     body = {
-        identity = { type = "SystemAssigned" }
+        identity   = { type = "SystemAssigned" }
         properties = {
             regionDetails = [{ location = var.location }]
             managedResourceGroupSettings = {
@@ -438,26 +392,25 @@ Key points:
 - This enables Azure ML to finalize private connectivity for the registry under managed VNet constraints.
 - Public network access remains disabled; connectivity occurs via private endpoints only.
 
-Compute Cluster & Compute Instance UAMI (Shared):
-├── Name: "${purpose}-mi-compute" 
-├── Location: rg-aml-vnet-${purpose}-${location_code}${naming_suffix}
-├── Used by: Both compute cluster and compute instance
-├── Roles:
-│   ├── AcrPull (on container registry): Access base images for ML training and inference environments - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/containers#acrpull)
-│   ├── AcrPush (on container registry): Build and store custom training environments and inference images - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/containers#acrpush)
-│   ├── Storage Blob Data Contributor (on default storage account): Store and retrieve training data and pipeline outputs - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/storage#storage-blob-data-contributor)
-│   ├── Storage File Data Privileged Contributor (on default storage account): Share files between compute nodes - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/storage#storage-file-data-privileged-contributor)
-│   ├── AzureML Data Scientist (on workspace): Execute ML pipelines and model registration workflows - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/ai-machine-learning#azureml-data-scientist)
-│   ├── Key Vault Secrets User (on key vault): Access credentials during ML workloads - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/security#key-vault-secrets-user)
-│   ├── Reader (on resource group): Discover resources during pipeline execution - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/general#reader)
-│   ├── AzureML Registry User (on registry): Access shared models and components during training - [Learn more](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/ai-machine-learning#azureml-registry-user)
-│   └── Contributor (on workspace): Enable automatic shutdown of idle compute instances - [Learn more](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-create-compute-instance?view=azureml-api-2#assign-managed-identity)
+#### Compute Cluster & Compute Instance UAMI (Shared)
+- Name: "${purpose}-mi-compute"
+- Location: rg-aml-vnet-${purpose}-${location_code}${naming_suffix}
+- Used by: Both compute cluster and compute instance
+- Roles:
+    - AcrPull (container registry)
+    - AcrPush (container registry)
+    - Storage Blob Data Contributor (default storage account)
+    - Storage File Data Privileged Contributor (default storage account)
+    - AzureML Data Scientist (workspace)
+    - Key Vault Secrets User (key vault)
+    - Reader (resource group)
+    - AzureML Registry User (registry)
+    - Contributor (workspace) – for CI auto-shutdown
 
-Online Endpoints:
-├── Identity: System-Assigned Managed Identity (SMI) - Default behavior
-├── Roles: Automatically managed by Azure ML service
-└── No additional RBAC configuration required
-```
+#### Online Endpoints
+- Identity: System-assigned managed identity (default)
+- Roles: Automatically managed by Azure ML service
+- No additional RBAC configuration required
 
 ### Implementation Notes
 
@@ -491,9 +444,8 @@ Online Endpoints:
 **Zero Trust Network Model**
 ```
 External Access:
-├── VPN Gateway: Certificate-based authentication only
 ├── No Public Endpoints: All Azure ML resources are private
-├── No RDP/SSH: Zero virtual machine infrastructure
+├── No direct RDP/SSH: Access is via Azure Bastion to a jumpbox VM; no public RDP/SSH
 └── Certificate Management: Self-signed certificates with manual distribution
 
 Internal Network Segmentation:
@@ -520,7 +472,6 @@ Azure ML Private Endpoints:
 **Security Monitoring**
 ```
 Azure Monitor Integration:
-├── VPN Gateway Logs: Connection and authentication events
 ├── Private Endpoint Monitoring: DNS resolution and connectivity
 ├── Azure ML Audit Logs: Workspace access and operations
 ├── Resource Group Activity: All infrastructure changes
@@ -640,20 +591,11 @@ NO WRITE ACCESS to Development Environment:
 
 The production **compute** UAMI requires `AzureML Registry User` access to the development registry (`{dev-registry}`) to support the documented asset promotion patterns:
 
-1. **Environment References**: Access environments promoted from dev using references like:
-   ```
-   azureml://registries/{dev-registry}/environments/inference-env/versions/1.0
-   ```
+1. Environment references: access environments promoted from dev using URIs like `azureml://registries/{dev-registry}/environments/inference-env/versions/1.0`.
+2. Docker image access: `AzureML Registry User` grants metadata access and enables pulls of associated images from the registry’s Microsoft-managed ACR.
+3. Model lineage: maintain complete lineage for models promoted via the dev registry.
 
-2. **Docker Image Access**: The `AzureML Registry User` role provides access to environment metadata and automatically handles access to associated Docker images stored in the registry's Microsoft-managed ACR.
-
-3. **Model Lineage**: Maintain complete lineage tracking for models that originated in development and were promoted through the dev registry.
-
-**Important Distinction**: Only **compute UAMIs** and **human users** have `AzureML Registry User` roles for data access. **Workspace UAMIs** only have `Azure AI Enterprise Network Connection Approver` roles to create private endpoint connections, following the principle of separation of concerns.
-
-2. **Docker Image Access**: The `AzureML Registry User` role provides access to environment metadata and automatically handles access to associated Docker images stored in the registry's Microsoft-managed ACR.
-
-3. **Model Lineage**: Maintain complete lineage tracking for models that originated in development and were promoted through the dev registry.
+Important distinction: Only compute UAMIs and human users have `AzureML Registry User` roles for data access. Workspace UAMIs only have `Azure AI Enterprise Network Connection Approver` roles to create private endpoint connections.
 
 #### Network Connectivity for Cross-Environment Access
 
@@ -672,7 +614,8 @@ resource "azapi_resource" "prod_workspace_to_dev_registry_outbound_rule" {
     properties = {
       type = "PrivateEndpoint"
       destination = {
-        serviceResourceId = module.dev_registry.registry_id
+    serviceResourceId = module.dev_registry.registry_id
+    subresourceTarget = "amlregistry" # required for registry targets
       }
       category = "UserDefined"
     }
@@ -1996,7 +1939,7 @@ Your parameterized modules are ready for production deployment:
 ### Phase 2: Access and Security
 - Configure production access controls
 - Restricted RBAC assignments
-- Separate jumpbox or VPN access method
+- Separate jumpbox access method
 - Audit logging and monitoring
 
 ### Phase 3: CI/CD Pipeline Setup
@@ -2128,7 +2071,7 @@ The current infrastructure implementation in `main.tf` fully implements this dep
 2. **Cross-Environment RBAC Optimization**: Removed unnecessary workspace UAMI registry roles; compute UAMIs retain data access; workspace UAMIs limited to network connection approver.
 3. **Outbound Rule Schema Fix**: Added required `subresourceTarget = "amlregistry"` for all registry private endpoint outbound rules.
 4. **Key Vault Provisioning Reliability**: Added dual roles (Reader + Secrets User) to workspace UAMIs pre-create to avoid 403 `vaults/read` errors.
-5. **Optional AAD VPN Gateway**: Added conditional resources (public IP + virtual network gateway) activated via `azure_ad_p2s_audience` with proper AAD tenant URL formatting.
+ 
 
 ### ✅ **Architecture Decisions Implemented**
 
@@ -2141,7 +2084,7 @@ The current infrastructure implementation in `main.tf` fully implements this dep
 
 ### ✅ **Infrastructure Ready for Deployment**
 
-The Terraform configuration in `/infra/main.tf` implements the flat architecture, centralized DNS, deterministic naming and conditional VPN gateway. (Resource count varies with gateway toggle and user role assignment flags.)
+The Terraform configuration in `/infra/main.tf` implements the flat architecture, centralized DNS, deterministic naming, and Bastion-only access. (Resource count varies with user role assignment flags.)
 
 ## Deployment Workflow
 
@@ -2150,38 +2093,22 @@ The Terraform configuration in `/infra/main.tf` implements the flat architecture
 1. **Azure Subscription**: Valid Azure subscription with sufficient permissions
 2. **Terraform**: Version 1.5+ installed locally
 3. **Azure CLI**: Latest version with `az login` completed
-4. **PowerShell**: For certificate generation script
+4. **PowerShell**: Optional, for local scripting convenience
 
 ### Deployment Steps
 
-**Step 1: Generate VPN Certificates**
-```powershell
-# Navigate to infrastructure directory
-cd infra
-
-# Generate self-signed certificates for VPN
-.\generate_vpn_certificates.ps1
-
-# Copy the generated certificate data to terraform.tfvars
-# (Script will output the certificate data to copy)
-```
-
-**Step 2: Configure Variables**
+**Step 1: Configure Variables**
 ```hcl
 # Update terraform.tfvars with your settings
 subscription_id = "your-subscription-id"
 prefix = "aml"
 location = "canadacentral"
 location_code = "cc"
-
-# Add the generated VPN certificate data
-vpn_root_certificate_data = "MIIC5jCCAc4CAQAwDQYJKoZI..."  # From script output
-
 # Optional: Assign user roles automatically
 assign_user_roles = true
 ```
 
-**Step 3: Deploy Infrastructure**
+**Step 2: Deploy Infrastructure**
 ```bash
 # Initialize Terraform
 terraform init
@@ -2196,27 +2123,15 @@ terraform plan
 terraform apply
 ```
 
-**Step 4: Configure VPN Access**
-```powershell
-# Install client certificate (double-click VPNClientCert.pfx from script)
-# Download VPN client from Azure Portal:
-# 1. Go to Azure Portal → VPN Gateways → <your vpn gateway name>
-# 2. Click "Point-to-site configuration"
-# 3. Download "VPN client"
-# 4. Extract and run WindowsAmd64/VpnClientSetupAmd64.exe
-
-# Connect to VPN
-# 1. Open Windows VPN settings
-# 2. Connect to your configured Azure ML VPN profile
-# 3. Access Azure ML workspaces via private endpoints
+**Step 3: Access the Environment (Bastion-only)**
+```text
+1. Open Azure Bastion session to the Windows DSVM jumpbox.
+2. Use Azure CLI/SDK from the jumpbox to access AML workspaces via private endpoints.
+3. No VPN is required; public access remains disabled across services.
 ```
 
-**Step 5: Verify Deployment**
+**Step 4: Verify Deployment**
 ```powershell
-# Test VPN connectivity
-Test-NetConnection 10.1.0.4 -Port 443  # Dev workspace
-Test-NetConnection 10.2.0.4 -Port 443  # Prod workspace
-
 # Test Azure ML access
 az ml workspace show --name mlwdevcc* --resource-group rg-aml-ws-dev-cc*
 az ml workspace show --name mlwprodcc* --resource-group rg-aml-ws-prod-cc*
@@ -2225,11 +2140,10 @@ az ml workspace show --name mlwprodcc* --resource-group rg-aml-ws-prod-cc*
 ### Cost Management
 
 **Monthly Cost Estimates** (Canada Central):
-- **VPN Gateway (VpnGw2)**: ~$50-85/month
 - **Development Environment**: ~$200-300/month (compute-dependent)
 - **Production Environment**: ~$200-300/month (compute-dependent)
 
-**Total Platform Cost**: ~$470-715/month (vs ~$760-1005/month with jumpbox model)
+**Total Platform Cost**: Compute-dependent; Bastion + jumpbox adds minimal overhead compared to VPN gateways.
 
 **Cost Optimization Strategies**:
 - Stop compute clusters when not in use

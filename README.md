@@ -5,7 +5,7 @@ End‑to‑end Azure Machine Learning platform (dev + prod) plus opinionated MLO
 ## Platform Snapshot
 | Aspect | Implementation | Notes |
 |--------|----------------|-------|
-| Network | Hub + dev/prod spokes, P2S VPN | No jumpboxes; private‑only access
+| Network | Flat dev/prod VNets + Bastion jumpbox | Bastion-only; private‑only access
 | DNS | Central shared AML zones (api/notebooks/instances) | Revision 3 migration complete (validation pending)
 | Workspaces | Dev & Prod (managed VNet, approved outbound) | Private endpoints only
 | Registries | Dev & Prod (showcase pattern) | System‑assigned MI; promotion demo
@@ -21,7 +21,7 @@ terraform init
 terraform plan
 terraform apply
 ```
-Configure `infra/terraform.tfvars` (purpose, location, address spaces, user_object_id, tags). Full infra detail: `DeploymentStrategy.md`.
+Configure `infra/terraform.tfvars` (purpose, location, address spaces, tags). Full infra detail: `DeploymentStrategy.md`.
 
 ---
 ## Repository Layout (High-Level)
@@ -161,7 +161,7 @@ az ml job show --name <job-id>
 ## RBAC Snapshot (Operational)
 | Principal | Scope | Roles (selected) |
 |-----------|-------|------------------|
-| Deployment SP | Hub + Env RGs | Contributor, User Access Admin, Network Contributor |
+| Deployment SP | Env + Shared DNS RGs | Contributor, User Access Admin, Network Contributor |
 | Workspace UAMI | Workspace RG + Registries | Azure AI Admin, Network Connection Approver, Storage Blob Data Owner, Key Vault Reader/Secrets User |
 | Compute UAMI | Workspace + Data + Registries | AzureML Data Scientist, Storage Blob/File, Key Vault Secrets User, AzureML Registry User |
 
@@ -176,7 +176,7 @@ Full matrices & nuances (e.g., why workspace UAMI has no Registry User) are in `
 | 3 | DNS validation (checklist in DeploymentStrategy) | PENDING |
 | 4 | Remove `prevent_destroy` & decide on toggle retention | PENDING |
 
-Validation examples (VPN-connected):
+Validation examples (from Bastion-connected jumpbox):
 ```bash
 nslookup <dev-workspace>.<region>.api.azureml.ms
 nslookup <prod-workspace>.<region>.api.azureml.ms
@@ -206,16 +206,15 @@ terraform init
 terraform plan
 terraform apply
 ```
-Configure `infra/terraform.tfvars` (purpose, location, address spaces, user_object_id, tags).
+Configure `infra/terraform.tfvars` (purpose, location, address spaces, tags).
 
 ## Modules
 | Module | Purpose | Key Outputs |
 |--------|---------|-------------|
-| aml-vnet | VNet, subnet, identities (legacy per-env service DNS toggle) | subnet_id, identity IDs |
-| aml-managed-umi | Workspace, storage, kv, acr, compute, outbound rules | workspace_id |
-| aml-registry-smi | Registry (system MI), log analytics | registry_id |
+| aml-managed-umi | Workspace, storage, Key Vault, ACR, compute, private endpoints | workspace_id |
+| aml-registry-smi | Registry (system MI), diagnostics, private endpoint | registry_id |
 
-Central AML DNS zones live in hub RG; per-env AML zones disabled via `manage_aml_private_dns_zones=false`.
+Private DNS for AML (api/notebooks/instances) is centralized in a shared DNS RG and linked to both VNets.
 
 ## Asset Promotion (High-Level)
 1. Dev workspace registers assets → dev registry
@@ -226,7 +225,7 @@ Central AML DNS zones live in hub RG; per-env AML zones disabled via `manage_aml
 ## RBAC Snapshot
 | Principal | Scope | Roles (examples) |
 |-----------|-------|------------------|
-| Deployment SP | Env & Hub RGs | Contributor, User Access Admin, Network Contributor |
+| Deployment SP | Env & Shared DNS RGs | Contributor, User Access Admin, Network Contributor |
 | Workspace UAMI | Workspace RG & registries | Azure AI Admin, Network Connection Approver, Storage Blob Data Owner, Key Vault Reader/Secrets User |
 | Compute UAMI | Workspace + Storage + KV + Registries | AzureML Data Scientist, Storage Blob/File, Key Vault Secrets User, AzureML Registry User |
 

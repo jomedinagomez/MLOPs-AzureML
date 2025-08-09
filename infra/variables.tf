@@ -70,38 +70,6 @@ variable "resource_prefixes" {
   }
 }
 
-## Point-to-Site VPN (Entra ID OpenVPN) Configuration
-# If azure_ad_p2s_audience is non-empty a Virtual Network Gateway + P2S config is created.
-variable "azure_ad_p2s_audience" {
-  description = "Application (client) ID of the Entra ID (Azure AD) 'Server App' used as audience for P2S AAD auth. Leave empty to disable the VPN gateway."
-  type        = string
-  default     = ""
-}
-
-variable "azure_ad_p2s_tenant_id" {
-  description = "Tenant ID to use for Entra ID P2S VPN auth. Defaults to current context tenant when null."
-  type        = string
-  default     = null
-}
-
-variable "vpn_client_address_pool" {
-  description = "List of IPv4 CIDR blocks handed out to VPN clients. Must not overlap any VNet address space."
-  type        = list(string)
-  default     = ["10.255.0.0/24"]
-  validation {
-    condition = alltrue([
-      for cidr in var.vpn_client_address_pool : !contains(["10.1.0.0/16", "10.2.0.0/16"], cidr)
-    ])
-    error_message = "vpn_client_address_pool entries must not equal existing VNet CIDRs (10.1.0.0/16, 10.2.0.0/16)."
-  }
-}
-
-variable "user_object_id" {
-  description = "The object ID of the user who will manage the Azure Machine Learning Workspace"
-  type        = string
-  default     = null
-}
-
 variable "shared_aml_dns_rg_name" {
   description = "Optional explicit name for the shared AML private DNS resource group (if null a name is generated)."
   type        = string
@@ -135,11 +103,7 @@ variable "prod_vnet_address_space" {
   default     = ["10.2.0.0/16"]
 }
 
-variable "prod_gateway_subnet_prefix" {
-  description = "CIDR prefix for the production GatewaySubnet"
-  type        = string
-  default     = "10.2.0.0/24"
-}
+// Gateway subnet is not used; Bastion provides access.
 
 variable "prod_pe_subnet_prefix" {
   description = "CIDR prefix for the production private endpoints subnet"
@@ -177,44 +141,7 @@ variable "enable_auto_purge" {
   default     = true
 }
 
-########################################
-# VPN GATEWAY SETTINGS
-########################################
-variable "vpn_gateway_sku" {
-  description = "SKU for the Virtual Network Gateway when created"
-  type        = string
-  default     = "VpnGw1"
-}
-
-variable "vpn_gateway_generation" {
-  description = "Gateway generation (Generation1 or Generation2)"
-  type        = string
-  default     = "Generation1"
-}
-
-variable "vpn_public_ip_sku" {
-  description = "Public IP SKU for VPN gateway"
-  type        = string
-  default     = "Basic"
-}
-
-variable "vpn_public_ip_allocation_method" {
-  description = "Allocation method for VPN public IP"
-  type        = string
-  default     = "Dynamic"
-}
-
-variable "vpn_gateway_private_ip_allocation_method" {
-  description = "Private IP allocation method for VPN gateway configuration"
-  type        = string
-  default     = "Dynamic"
-}
-
-variable "vpn_client_protocols" {
-  description = "Protocols enabled for VPN clients"
-  type        = list(string)
-  default     = ["OpenVPN"]
-}
+// No VPN gateway variables; design is Bastion-only.
 
 ########################################
 # PRIVATE DNS ZONE NAMES (PARAMETERIZED)
@@ -222,15 +149,15 @@ variable "vpn_client_protocols" {
 variable "private_dns_zone_names" {
   description = "Object of private DNS zone names used for AML and dependent services"
   type = object({
-    aml_api      = string
+    aml_api       = string
     aml_notebooks = string
     aml_instances = string
-    blob         = string
-    file         = string
-    queue        = string
-    table        = string
-    vault        = string
-    acr          = string
+    blob          = string
+    file          = string
+    queue         = string
+    table         = string
+    vault         = string
+    acr           = string
   })
   default = {
     aml_api       = "privatelink.api.azureml.ms"
@@ -258,4 +185,34 @@ variable "key_vault_purge_protection_enabled" {
   description = "Enable Key Vault purge protection (should be true in production to prevent immediate purge). For sandbox/dev keep false so soft-deleted vaults can be purged automatically."
   type        = bool
   default     = false
+}
+
+########################################
+# BASTION + JUMPBOX VM SETTINGS
+########################################
+variable "bastion_subnet_prefix" {
+  description = "CIDR for AzureBastionSubnet (must be /26 or larger)."
+  type        = string
+  default     = "10.2.2.0/26"
+}
+
+variable "vm_subnet_prefix" {
+  description = "CIDR for the jumpbox VM subnet"
+  type        = string
+  default     = "10.2.3.0/24"
+}
+
+variable "vm_admin_username" {
+  description = "Admin username for the jumpbox VM"
+  type        = string
+}
+
+variable "vm_admin_password" {
+  description = "Admin password for the jumpbox VM (12-72 chars; include upper, lower, number, special)."
+  type        = string
+  sensitive   = true
+  validation {
+    condition     = length(var.vm_admin_password) >= 12 && length(var.vm_admin_password) <= 72
+    error_message = "vm_admin_password must be between 12 and 72 characters."
+  }
 }

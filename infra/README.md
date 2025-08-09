@@ -4,63 +4,25 @@
 
 This Azure ML platform follows the deployment strategy with **complete environment isolation** and uses a **single service principal** approach for infrastructure automation across all environments.
 
-### Optional Point-to-Site (P2S) VPN via Entra ID (OpenVPN)
+### Access via Azure Bastion + Windows DSVM Jumpbox
 
-The platform can (optionally) deploy a RouteBased Virtual Network Gateway in the production VNet to provide administrator or data‑scientist access to private resources (workspace private endpoints, registry, storage, etc.). This is disabled by default and enabled only when the variable `azure_ad_p2s_audience` is set.
+Ingress is provided exclusively through Azure Bastion into a Windows Data Science VM (microsoft-dsvm/dsvm-win-2022). No VPN or public ingress is used, and SSH is not required.
 
 Key characteristics:
-- Auth Method: Entra ID (Azure AD) OpenVPN (no certificates maintained).
-- Conditional Creation: Gateway + public IP only when `azure_ad_p2s_audience` is non-empty.
-- Address Pool: Configurable via `vpn_client_address_pool` (default `["10.255.0.0/24"]`). Must not overlap VNet ranges `10.1.0.0/16` (dev) or `10.2.0.0/16` (prod).
-- DNS: Inherits VNet DNS (Azure wire server 168.63.129.16) so Private DNS zones resolve inside the tunnel.
-
-#### Entra ID Application Registrations
-You need TWO app registrations (Server + Client) as per Microsoft guidance:
-1. Server Application (used as audience)
-  - Expose an API (set Application ID URI – can be api://<server_app_client_id> or custom URI).
-  - Add delegated permission: (auto when exposing by default) `user_impersonation`.
-  - Record the Application (client) ID => supply as `azure_ad_p2s_audience`.
-2. Client Application (VPN client)
-  - Add API permission to the Server App: Delegated `user_impersonation`.
-  - Enable Mobile & Desktop Authentication (redirect URI `https://login.microsoftonline.com/common/oauth2/nativeclient`).
-
-No secret/cert is needed for user interactive auth with the Azure VPN client when using OpenVPN + AAD.
-
-#### Terraform Variables
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| `azure_ad_p2s_audience` | Enables gateway when set; value is Server App (Application) ID | "" (disabled) |
-| `azure_ad_p2s_tenant_id` | Override tenant (GUID); null uses current | null |
-| `vpn_client_address_pool` | Client IP pool list (non-overlapping CIDRs) | ["10.255.0.0/24"] |
-
-#### Minimal Enable Example (`terraform.tfvars`)
-```hcl
-azure_ad_p2s_audience      = "00000000-0000-0000-0000-000000000000"
-vpn_client_address_pool    = ["10.255.0.0/24"]
-# azure_ad_p2s_tenant_id   = "<tenant-guid-if-different>"
-```
-
-#### Connecting
-1. Install Azure VPN Client (Windows Store) or OpenVPN compatible client supporting AAD.
-2. Download the user profile from the Azure Portal (Virtual Network Gateway > Point-to-site configuration > Download VPN client) after first apply.
-3. Import into client; sign in with Entra ID.
-4. Verify you can resolve private FQDNs (e.g. `privatelink.api.azureml.ms`).
-
-To remove the gateway later, clear `azure_ad_p2s_audience` and apply; Terraform will destroy the gateway resources safely (ensure no active sessions).
-
-> Future Improvement: Enhanced CIDR overlap validation will be added to ensure `vpn_client_address_pool` does not overlap any present or future VNet/subnet ranges (currently only simple equality checks). Manually verify before expanding address spaces.
-
-> VPN Disable Switch: Leaving `azure_ad_p2s_audience` blank (default) fully skips gateway + public IP creation (no cost impact).
+- Access Method: Browser-based RDP via Azure Bastion to the jumpbox.
+- Network: Flat two‑VNet model (dev, prod) with private endpoints and shared Private DNS; no hub/spoke.
+- Public Access: Disabled on all PaaS resources (storage, Key Vault, ACR, AML).
+- Operations: Use the jumpbox for portal access, tooling, and private resource reachability.
 
 ## Deployment Architecture
 
 ### Service Principal Strategy (Updated)
 
-The service principal is created by the root `main.tf` during deployment and is granted permissions across **all 7 resource groups** (3 dev + 3 prod + 1 hub) as per the deployment strategy:
+The service principal is created by the root `main.tf` during deployment and is granted permissions across **7 resource groups** (3 dev + 3 prod + 1 shared DNS; no hub network):
 
 ```
 Service Principal: sp-aml-deployment-platform
-├── Scope: 7 resource groups across dev, prod, and hub
+├── Scope: 7 resource groups across dev, prod, and shared DNS
 ├── Permissions per resource group:
 │   ├── Contributor: Deploy ML infrastructure
 │   ├── User Access Administrator: Configure RBAC  
@@ -70,9 +32,9 @@ Service Principal: sp-aml-deployment-platform
 
 ## Deployment Order
 
-### Single Apply (Dev + Prod + Hub)
+### Single Apply (Dev + Prod + Shared DNS)
 
-1. Run from `infra/` to deploy both environments and hub in one go:
+1. Run from `infra/` to deploy both environments and the shared DNS RG in one go:
   ```bash
   cd infra
   terraform init
@@ -80,7 +42,7 @@ Service Principal: sp-aml-deployment-platform
   terraform apply
   ```
 
-  Root `main.tf` creates the service principal, all 7 resource groups, VNets, workspaces, registries, hub network, peering, RBAC, and outbound rules in a single run.
+  Root `main.tf` creates the service principal, all 7 resource groups, VNets, Bastion + jumpbox, workspaces, registries, RBAC, outbound rules, private endpoints, and shared Private DNS in a single run.
 
 ## Key Benefits
 
@@ -91,7 +53,7 @@ Service Principal: sp-aml-deployment-platform
 **Environment Agnostic**: Same SP works for both dev and prod deployments  
 **Per-Environment Observability**: Separate Log Analytics workspaces for dev and prod support data segregation and compliance.
 
-This approach aligns with the deployment strategy requirement for a single service principal managing all resource groups across both environments and the hub.
+This approach aligns with the deployment strategy requirement for a single service principal managing all resource groups across both environments (dev/prod) and the shared DNS RG.
 
 ### Tagging Strategy
 All resources inherit the base `var.tags` map merged with contextual tags (environment, purpose, component). Update `terraform.tfvars` to propagate organization-wide metadata consistently.
@@ -216,7 +178,7 @@ naming_suffix = "01"                     # Deterministic suffix replacing random
 sub_id = "your-subscription-id-here"     # Replace with actual subscription ID
 
 # User Management (REQUIRED)
-user_object_id = "your-user-object-id"   # Replace with your user object ID
+
 
 # Networking Configuration (Optional)
 vnet_address_space    = "10.1.0.0/16"
@@ -316,7 +278,7 @@ Root Orchestration (main.tf)
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `sub_id` | Azure subscription ID | `"12345678-1234-1234-1234-123456789012"` |
-| `user_object_id` | User's Azure AD object ID | `"87654321-4321-4321-4321-210987654321"` |
+
 
 ### Optional Variables
 
@@ -1017,39 +979,17 @@ terraform apply
 
 ## 🔒 Private Access
 
-The platform now uses a flat two-VNet model (dev, prod) with private endpoints and shared private DNS. Remote operator access can be enabled later via a lightweight jump host or Azure Bastion if required. Legacy hub-and-spoke VPN guidance removed.
-# Test access
-az ml workspace show
-az ml compute list
+The platform uses a flat two‑VNet model (dev, prod) with private endpoints and shared Private DNS. Remote operator access is provided via Azure Bastion to a Windows DSVM jumpbox. No VPN is deployed.
 
-# Submit pipeline
-az ml job create --file pipelines/taxi-fare-train-pipeline.yaml
-```
-
-### **Connection Benefits**
-- ✅ **No VM costs** (~$140-290/month savings vs jumpbox)
-- ✅ **Better performance** (direct connection vs RDP)
-- ✅ **Use local tools** (VS Code, PyCharm, etc.)
-- ✅ **Automatic reconnection** after sleep/restart
-- ✅ **Multiple users** can connect simultaneously
-
-### **Troubleshooting VPN**
 ```powershell
-# Check VPN status
-Get-VpnConnection
+# Test access from the jumpbox (examples)
+az ml workspace show -g <rg-aml-ws-...> -w <mlw...>
+az ml compute list -g <rg-aml-ws-...> -w <mlw...>
 
-# Reconnect if needed
-rasdial "Azure ML Hub VPN"
-
-# Test connectivity to private resources
-Test-NetConnection 10.1.0.4 -Port 443  # Azure ML workspace
+# Submit pipeline from jumpbox
+az ml job create --file ..\pipelines\taxi-fare-train-pipeline.yaml \
+  --resource-group <rg-dev-ws> --workspace-name <dev-workspace>
 ```
-
-### **Cost Comparison**
-| **Solution** | **Monthly Cost** | **User Experience** |
-|--------------|------------------|-------------------|
-| **Hub VPN** (Current) | ~$50-85/month | ✅ Native local tools |
-| Jumpbox + Bastion | ~$290/month | ❌ RDP browser sessions |
 
 ## 🔗 Related Documentation
 

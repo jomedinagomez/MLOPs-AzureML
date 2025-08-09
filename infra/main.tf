@@ -395,18 +395,18 @@ resource "azurerm_user_assigned_identity" "prod_cc" {
 module "dev_managed_umi" {
   source = "./modules/aml-managed-umi"
 
-  prefix                     = var.prefix
-  purpose                    = "dev"
-  location                   = var.location
-  location_code              = var.location_code
-  naming_suffix              = var.naming_suffix
-  resource_prefixes          = local.resource_prefixes
-  resource_group_name        = azurerm_resource_group.dev_workspace_rg.name
-  subnet_id                  = azurerm_subnet.dev_pe.id
-  log_analytics_workspace_id = azurerm_log_analytics_workspace.dev_logs.id
-  enable_auto_purge          = var.enable_auto_purge
+  prefix                             = var.prefix
+  purpose                            = "dev"
+  location                           = var.location
+  location_code                      = var.location_code
+  naming_suffix                      = var.naming_suffix
+  resource_prefixes                  = local.resource_prefixes
+  resource_group_name                = azurerm_resource_group.dev_workspace_rg.name
+  subnet_id                          = azurerm_subnet.dev_pe.id
+  log_analytics_workspace_id         = azurerm_log_analytics_workspace.dev_logs.id
+  enable_auto_purge                  = var.enable_auto_purge
   key_vault_purge_protection_enabled = var.key_vault_purge_protection_enabled
-  sub_id                     = var.subscription_id
+  sub_id                             = var.subscription_id
 
   # Network configuration
   vnet_address_space          = "10.1.0.0/16"
@@ -415,7 +415,7 @@ module "dev_managed_umi" {
   workload_vnet_location_code = var.location_code
   # Use shared DNS resource group for AML private DNS zones
   resource_group_name_dns = azurerm_resource_group.shared_dns_rg.name
-  user_object_id          = data.azurerm_client_config.current.object_id
+
 
   # Use shared AML DNS zones (per-env AML zones disabled in dev_vnet)
   dns_zone_aml_api_id       = azurerm_private_dns_zone.shared_aml_api.id
@@ -435,8 +435,8 @@ module "dev_managed_umi" {
     azurerm_role_assignment.sp_dev_workspace_contributor,
     azurerm_role_assignment.sp_dev_workspace_user_access_admin,
     azurerm_role_assignment.sp_dev_workspace_network_contributor,
-  azurerm_virtual_network.dev_vnet,
-  azurerm_log_analytics_workspace.dev_logs
+    azurerm_virtual_network.dev_vnet,
+    azurerm_log_analytics_workspace.dev_logs
   ]
 }
 
@@ -494,62 +494,142 @@ resource "azurerm_virtual_network" "prod_vnet" {
   ]
 }
 
-resource "azurerm_subnet" "prod_gw" {
-  name                 = "GatewaySubnet"
+resource "azurerm_subnet" "prod_bastion" {
+  name                 = "AzureBastionSubnet"
   resource_group_name  = azurerm_resource_group.prod_vnet_rg.name
   virtual_network_name = azurerm_virtual_network.prod_vnet.name
-  address_prefixes     = [var.prod_gateway_subnet_prefix]
+  address_prefixes     = [var.bastion_subnet_prefix]
 }
 
 # ===============================
-# OPTIONAL REMOTE ACCESS (P2S VPN VIA ENTRA ID OPENVPN)
-# Provision a route-based VPN gateway only when azure_ad_p2s_audience is supplied.
-# Client address pool configurable via vpn_client_address_pool variable (default 10.255.0.0/24) and must not overlap VNets.
+# Remote access is provided exclusively via Azure Bastion to a Windows DSVM jumpbox.
+# No VPN gateway is deployed.
 # ===============================
-resource "azurerm_public_ip" "prod_vpn_gw" {
-  count               = var.azure_ad_p2s_audience != "" ? 1 : 0
-  name                = "pip-${var.prefix}-vpn-${var.location_code}-${var.naming_suffix}"
-  location            = var.location
-  resource_group_name = azurerm_resource_group.prod_vnet_rg.name
-  allocation_method   = var.vpn_public_ip_allocation_method
-  sku                 = var.vpn_public_ip_sku
-  tags                = merge(var.tags, { environment = "production", purpose = "prod", component = "vpn-gateway" })
+resource "azurerm_subnet" "prod_vm" {
+  name                 = "snet-${var.prefix}-vm-prod-${var.location_code}${var.naming_suffix}"
+  resource_group_name  = azurerm_resource_group.prod_vnet_rg.name
+  virtual_network_name = azurerm_virtual_network.prod_vnet.name
+  address_prefixes     = [var.vm_subnet_prefix]
 }
 
-resource "azurerm_virtual_network_gateway" "prod_vpn_gw" {
-  count               = var.azure_ad_p2s_audience != "" ? 1 : 0
-  name                = "vng-${var.prefix}-prod-${var.location_code}-${var.naming_suffix}"
+resource "azurerm_network_security_group" "prod_vm_nsg" {
+  name                = "nsg-${var.prefix}-vm-prod-${var.location_code}${var.naming_suffix}"
   location            = var.location
   resource_group_name = azurerm_resource_group.prod_vnet_rg.name
-  type                = "Vpn"
-  vpn_type            = "RouteBased"
-  sku                 = var.vpn_gateway_sku
-  active_active       = false
-  enable_bgp          = false
-  generation          = var.vpn_gateway_generation
+  tags                = merge(var.tags, { environment = "production", purpose = "prod", component = "vm" })
+
+  # Allow Bastion host to RDP into VMs in this subnet
+  security_rule {
+    name                       = "allow-bastion-rdp"
+    priority                   = 200
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "3389"
+    source_address_prefix      = azurerm_subnet.prod_bastion.address_prefixes[0]
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "deny-inbound-all"
+    priority                   = 4096
+    direction                  = "Inbound"
+    access                     = "Deny"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "allow-outbound-internet"
+    priority                   = 100
+    direction                  = "Outbound"
+    access                     = "Allow"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "*"
+    destination_address_prefix = "Internet"
+  }
+}
+
+resource "azurerm_subnet_network_security_group_association" "prod_vm_nsg_assoc" {
+  subnet_id                 = azurerm_subnet.prod_vm.id
+  network_security_group_id = azurerm_network_security_group.prod_vm_nsg.id
+}
+
+resource "azurerm_public_ip" "bastion_pip" {
+  name                = "pip-${var.prefix}-bastion-prod-${var.location_code}${var.naming_suffix}"
+  location            = var.location
+  resource_group_name = azurerm_resource_group.prod_vnet_rg.name
+  allocation_method   = "Static"
+  sku                 = "Standard"
+  tags                = merge(var.tags, { environment = "production", purpose = "prod", component = "bastion" })
+}
+
+resource "azurerm_bastion_host" "prod" {
+  name                = "bas-${var.prefix}-prod-${var.location_code}${var.naming_suffix}"
+  location            = var.location
+  resource_group_name = azurerm_resource_group.prod_vnet_rg.name
 
   ip_configuration {
-    name                          = "vnetGatewayConfig"
-  public_ip_address_id          = azurerm_public_ip.prod_vpn_gw[0].id
-  private_ip_address_allocation = var.vpn_gateway_private_ip_allocation_method
-    subnet_id                     = azurerm_subnet.prod_gw.id
+    name                 = "configuration"
+    subnet_id            = azurerm_subnet.prod_bastion.id
+    public_ip_address_id = azurerm_public_ip.bastion_pip.id
   }
 
-  vpn_client_configuration {
-    address_space        = var.vpn_client_address_pool
-    vpn_client_protocols = var.vpn_client_protocols
-  # Azure AD tenant must be full URL form, not bare GUID
-  aad_tenant           = "https://login.microsoftonline.com/${coalesce(var.azure_ad_p2s_tenant_id, data.azurerm_client_config.current.tenant_id)}/"
-    aad_audience         = var.azure_ad_p2s_audience
-    aad_issuer           = "https://sts.windows.net/${coalesce(var.azure_ad_p2s_tenant_id, data.azurerm_client_config.current.tenant_id)}/"
+  sku = "Standard"
+
+  tags = merge(var.tags, { environment = "production", purpose = "prod", component = "bastion" })
+}
+
+resource "azurerm_network_interface" "prod_vm_nic" {
+  name                = "nic-${var.prefix}-vm-prod-${var.location_code}${var.naming_suffix}"
+  location            = var.location
+  resource_group_name = azurerm_resource_group.prod_vnet_rg.name
+
+  ip_configuration {
+    name                          = "ipconfig1"
+    subnet_id                     = azurerm_subnet.prod_vm.id
+    private_ip_address_allocation = "Dynamic"
   }
 
-  tags = merge(var.tags, { environment = "production", purpose = "prod", component = "vpn-gateway" })
+  tags = merge(var.tags, { environment = "production", purpose = "prod", component = "vm" })
+}
 
-  depends_on = [
-    azurerm_subnet.prod_gw,
-    azurerm_virtual_network.prod_vnet
+resource "azurerm_windows_virtual_machine" "jumpbox" {
+  name                = "vm-${var.prefix}-jumpbox-prod-${var.location_code}${var.naming_suffix}"
+  location            = var.location
+  resource_group_name = azurerm_resource_group.prod_vnet_rg.name
+  size                = "Standard_DS4_v2"
+  admin_username      = var.vm_admin_username
+  admin_password      = var.vm_admin_password
+  # Set a short NetBIOS computer name (<= 15 chars) to satisfy Windows naming limits
+  computer_name = "jumpbox"
+  network_interface_ids = [
+    azurerm_network_interface.prod_vm_nic.id
   ]
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Premium_LRS"
+  }
+
+  source_image_reference {
+    publisher = "microsoft-dsvm"
+    offer     = "dsvm-win-2022"
+    sku       = "winserver-2022"
+    version   = "latest"
+  }
+
+  boot_diagnostics {
+    storage_account_uri = null
+  }
+
+  tags = merge(var.tags, { environment = "production", purpose = "prod", component = "vm" })
 }
 
 resource "azurerm_subnet" "prod_pe" {
@@ -559,40 +639,24 @@ resource "azurerm_subnet" "prod_pe" {
   address_prefixes     = [var.prod_pe_subnet_prefix]
 }
 
-resource "azurerm_virtual_network_peering" "dev_to_prod" {
-  name                         = "dev-to-prod"
-  resource_group_name          = azurerm_resource_group.dev_vnet_rg.name
-  virtual_network_name         = azurerm_virtual_network.dev_vnet.name
-  remote_virtual_network_id    = azurerm_virtual_network.prod_vnet.id
-  allow_virtual_network_access = true
-  allow_forwarded_traffic      = true
-}
-
-resource "azurerm_virtual_network_peering" "prod_to_dev" {
-  name                         = "prod-to-dev"
-  resource_group_name          = azurerm_resource_group.prod_vnet_rg.name
-  virtual_network_name         = azurerm_virtual_network.prod_vnet.name
-  remote_virtual_network_id    = azurerm_virtual_network.dev_vnet.id
-  allow_virtual_network_access = true
-  allow_forwarded_traffic      = true
-}
+// No VNet peering between environments (strict isolation)
 
 # Prod Managed Identity Module
 module "prod_managed_umi" {
   source = "./modules/aml-managed-umi"
 
-  prefix                     = var.prefix
-  purpose                    = "prod"
-  location                   = var.location
-  location_code              = var.location_code
-  naming_suffix              = var.naming_suffix
-  resource_prefixes          = local.resource_prefixes
-  resource_group_name        = azurerm_resource_group.prod_workspace_rg.name
-  subnet_id                  = azurerm_subnet.prod_pe.id
-  log_analytics_workspace_id = azurerm_log_analytics_workspace.prod_logs.id
-  enable_auto_purge          = var.enable_auto_purge
+  prefix                             = var.prefix
+  purpose                            = "prod"
+  location                           = var.location
+  location_code                      = var.location_code
+  naming_suffix                      = var.naming_suffix
+  resource_prefixes                  = local.resource_prefixes
+  resource_group_name                = azurerm_resource_group.prod_workspace_rg.name
+  subnet_id                          = azurerm_subnet.prod_pe.id
+  log_analytics_workspace_id         = azurerm_log_analytics_workspace.prod_logs.id
+  enable_auto_purge                  = var.enable_auto_purge
   key_vault_purge_protection_enabled = var.key_vault_purge_protection_enabled
-  sub_id                     = var.subscription_id
+  sub_id                             = var.subscription_id
 
   # Network configuration
   vnet_address_space          = "10.2.0.0/16"
@@ -601,7 +665,7 @@ module "prod_managed_umi" {
   workload_vnet_location_code = var.location_code
   # Use shared DNS RG for consolidated AML private DNS zones
   resource_group_name_dns = azurerm_resource_group.shared_dns_rg.name
-  user_object_id          = data.azurerm_client_config.current.object_id
+
 
   # Use shared AML DNS zones (per-env AML zones disabled in prod_vnet)
   dns_zone_aml_api_id       = azurerm_private_dns_zone.shared_aml_api.id
@@ -625,7 +689,7 @@ module "prod_managed_umi" {
     azurerm_role_assignment.sp_prod_workspace_user_access_admin,
     azurerm_role_assignment.sp_prod_workspace_network_contributor,
     module.dev_registry,
-  azurerm_log_analytics_workspace.prod_logs
+    azurerm_log_analytics_workspace.prod_logs
   ]
 }
 
@@ -1088,11 +1152,48 @@ output "shared_aml_dns_zone_ids" {
 /* Hub and spoke peering modules removed in flat architecture */
 
 # ===============================
-# STEP 12: USER ROLE ASSIGNMENTS (Deferred to End)
+# STEP 12: HUMAN USER ROLE ASSIGNMENTS (Applied Last, centralized)
 # ===============================
 
 locals {
   _user_role_enable = var.assign_user_roles && !var.defer_user_role_assignments
+  # All human user (data scientist) workspace + storage roles are centralized here in Step 12.
+  # Enable direct workspace/storage role assignments at root to have a single source of truth.
+  create_direct_user_ws_sa_roles = true
+}
+
+# Barrier to ensure user role assignments run after the rest of the deployment completes
+resource "null_resource" "deployment_complete" {
+  depends_on = [
+    # Core modules that provision AML workspaces, storage and registries
+    module.dev_managed_umi,
+    module.dev_registry,
+    module.prod_managed_umi,
+    module.prod_registry,
+
+    # Networking and access components
+    azurerm_virtual_network.dev_vnet,
+    azurerm_subnet.dev_pe,
+    azurerm_virtual_network.prod_vnet,
+    azurerm_subnet.prod_bastion,
+    azurerm_subnet.prod_vm,
+    azurerm_public_ip.bastion_pip,
+    azurerm_bastion_host.prod,
+    azurerm_network_interface.prod_vm_nic,
+    azurerm_windows_virtual_machine.jumpbox,
+    azurerm_subnet.prod_pe,
+
+    # Shared AML private DNS zones and links
+    azurerm_private_dns_zone.shared_aml_api,
+    azurerm_private_dns_zone.shared_aml_notebooks,
+    azurerm_private_dns_zone.shared_aml_instances,
+    azurerm_private_dns_zone_virtual_network_link.shared_dev_api,
+    azurerm_private_dns_zone_virtual_network_link.shared_dev_notebooks,
+    azurerm_private_dns_zone_virtual_network_link.shared_dev_instances,
+    azurerm_private_dns_zone_virtual_network_link.shared_prod_api,
+    azurerm_private_dns_zone_virtual_network_link.shared_prod_notebooks,
+    azurerm_private_dns_zone_virtual_network_link.shared_prod_instances
+  ]
 }
 
 # Development Environment - Human User Role Assignments
@@ -1101,41 +1202,56 @@ resource "azurerm_role_assignment" "user_dev_rg_reader" {
   scope                = azurerm_resource_group.dev_workspace_rg.id
   role_definition_name = "Reader"
   principal_id         = data.azurerm_client_config.current.object_id
+  depends_on           = [null_resource.deployment_complete]
+}
+
+# Human user: Key Vault Administrator on workspace Key Vaults (so the user can manage secrets/certs/keys)
+resource "azurerm_role_assignment" "user_dev_kv_admin" {
+  count                = local._user_role_enable ? 1 : 0
+  scope                = module.dev_managed_umi.keyvault_id
+  role_definition_name = "Key Vault Administrator"
+  principal_id         = data.azurerm_client_config.current.object_id
+  depends_on           = [null_resource.deployment_complete]
 }
 
 resource "azurerm_role_assignment" "user_dev_workspace_data_scientist" {
-  count                = local._user_role_enable ? 1 : 0
+  count                = local._user_role_enable && local.create_direct_user_ws_sa_roles ? 1 : 0
   scope                = module.dev_managed_umi.workspace_id
   role_definition_name = "AzureML Data Scientist"
   principal_id         = data.azurerm_client_config.current.object_id
+  depends_on           = [null_resource.deployment_complete]
 }
 
 resource "azurerm_role_assignment" "user_dev_workspace_ai_developer" {
-  count                = local._user_role_enable ? 1 : 0
+  count                = local._user_role_enable && local.create_direct_user_ws_sa_roles ? 1 : 0
   scope                = module.dev_managed_umi.workspace_id
   role_definition_name = "Azure AI Developer"
   principal_id         = data.azurerm_client_config.current.object_id
+  depends_on           = [null_resource.deployment_complete]
 }
 
 resource "azurerm_role_assignment" "user_dev_workspace_compute_operator" {
-  count                = local._user_role_enable ? 1 : 0
+  count                = local._user_role_enable && local.create_direct_user_ws_sa_roles ? 1 : 0
   scope                = module.dev_managed_umi.workspace_id
   role_definition_name = "AzureML Compute Operator"
   principal_id         = data.azurerm_client_config.current.object_id
+  depends_on           = [null_resource.deployment_complete]
 }
 
 resource "azurerm_role_assignment" "user_dev_storage_blob_contributor" {
-  count                = local._user_role_enable ? 1 : 0
+  count                = local._user_role_enable && local.create_direct_user_ws_sa_roles ? 1 : 0
   scope                = module.dev_managed_umi.storage_account_id
   role_definition_name = "Storage Blob Data Contributor"
   principal_id         = data.azurerm_client_config.current.object_id
+  depends_on           = [null_resource.deployment_complete]
 }
 
 resource "azurerm_role_assignment" "user_dev_storage_file_privileged_contributor" {
-  count                = local._user_role_enable ? 1 : 0
+  count                = local._user_role_enable && local.create_direct_user_ws_sa_roles ? 1 : 0
   scope                = module.dev_managed_umi.storage_account_id
   role_definition_name = "Storage File Data Privileged Contributor"
   principal_id         = data.azurerm_client_config.current.object_id
+  depends_on           = [null_resource.deployment_complete]
 }
 
 resource "azurerm_role_assignment" "user_dev_registry_user" {
@@ -1143,6 +1259,7 @@ resource "azurerm_role_assignment" "user_dev_registry_user" {
   scope                = module.dev_registry.registry_id
   role_definition_name = "AzureML Registry User"
   principal_id         = data.azurerm_client_config.current.object_id
+  depends_on           = [null_resource.deployment_complete]
 }
 
 # Production Environment - Human User Role Assignments
@@ -1151,41 +1268,55 @@ resource "azurerm_role_assignment" "user_prod_rg_reader" {
   scope                = azurerm_resource_group.prod_workspace_rg.id
   role_definition_name = "Reader"
   principal_id         = data.azurerm_client_config.current.object_id
+  depends_on           = [null_resource.deployment_complete]
+}
+
+resource "azurerm_role_assignment" "user_prod_kv_admin" {
+  count                = local._user_role_enable ? 1 : 0
+  scope                = module.prod_managed_umi.keyvault_id
+  role_definition_name = "Key Vault Administrator"
+  principal_id         = data.azurerm_client_config.current.object_id
+  depends_on           = [null_resource.deployment_complete]
 }
 
 resource "azurerm_role_assignment" "user_prod_workspace_data_scientist" {
-  count                = local._user_role_enable ? 1 : 0
+  count                = local._user_role_enable && local.create_direct_user_ws_sa_roles ? 1 : 0
   scope                = module.prod_managed_umi.workspace_id
   role_definition_name = "AzureML Data Scientist"
   principal_id         = data.azurerm_client_config.current.object_id
+  depends_on           = [null_resource.deployment_complete]
 }
 
 resource "azurerm_role_assignment" "user_prod_workspace_ai_developer" {
-  count                = local._user_role_enable ? 1 : 0
+  count                = local._user_role_enable && local.create_direct_user_ws_sa_roles ? 1 : 0
   scope                = module.prod_managed_umi.workspace_id
   role_definition_name = "Azure AI Developer"
   principal_id         = data.azurerm_client_config.current.object_id
+  depends_on           = [null_resource.deployment_complete]
 }
 
 resource "azurerm_role_assignment" "user_prod_workspace_compute_operator" {
-  count                = local._user_role_enable ? 1 : 0
+  count                = local._user_role_enable && local.create_direct_user_ws_sa_roles ? 1 : 0
   scope                = module.prod_managed_umi.workspace_id
   role_definition_name = "AzureML Compute Operator"
   principal_id         = data.azurerm_client_config.current.object_id
+  depends_on           = [null_resource.deployment_complete]
 }
 
 resource "azurerm_role_assignment" "user_prod_storage_blob_contributor" {
-  count                = local._user_role_enable ? 1 : 0
+  count                = local._user_role_enable && local.create_direct_user_ws_sa_roles ? 1 : 0
   scope                = module.prod_managed_umi.storage_account_id
   role_definition_name = "Storage Blob Data Contributor"
   principal_id         = data.azurerm_client_config.current.object_id
+  depends_on           = [null_resource.deployment_complete]
 }
 
 resource "azurerm_role_assignment" "user_prod_storage_file_privileged_contributor" {
-  count                = local._user_role_enable ? 1 : 0
+  count                = local._user_role_enable && local.create_direct_user_ws_sa_roles ? 1 : 0
   scope                = module.prod_managed_umi.storage_account_id
   role_definition_name = "Storage File Data Privileged Contributor"
   principal_id         = data.azurerm_client_config.current.object_id
+  depends_on           = [null_resource.deployment_complete]
 }
 
 resource "azurerm_role_assignment" "user_prod_registry_user" {
@@ -1193,4 +1324,5 @@ resource "azurerm_role_assignment" "user_prod_registry_user" {
   scope                = module.prod_registry.registry_id
   role_definition_name = "AzureML Registry User"
   principal_id         = data.azurerm_client_config.current.object_id
+  depends_on           = [null_resource.deployment_complete]
 }

@@ -35,7 +35,7 @@ module "keyvault_aml" {
   law_resource_id = var.log_analytics_workspace_id
   
   # Access Management
-  kv_admin_object_id = var.user_object_id
+  
   
   # Network Security
   firewall_default_action = "Deny"
@@ -174,7 +174,7 @@ For development/testing environments:
 | `resource_group_name` | string | - | Resource group for Key Vault |
 | `purpose` | string | - | Environment/purpose identifier |
 | `law_resource_id` | string | - | Log Analytics workspace ID for diagnostics |
-| `kv_admin_object_id` | string | - | Object ID for Key Vault Administrator role |
+ 
 | `firewall_default_action` | string | `"Allow"` | Default firewall action |
 | `firewall_bypass` | string | `"None"` | Services that can bypass firewall |
 | `firewall_ip_rules` | list(string) | `[]` | Allowed IP ranges |

@@ -80,7 +80,7 @@ This module depends on outputs from the `aml-vnet` module. When using the root o
 #### 1. **User Identity Configuration** 👤
 ```hcl
 # Your Azure AD user object ID for registry access
-user_object_id = "12345678-1234-1234-1234-123456789012"
+ 
 ```
 
 **Get your user object ID:**

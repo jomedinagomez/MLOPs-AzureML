@@ -34,18 +34,7 @@ resource "azurerm_key_vault" "kv" {
   }
 }
 
-resource "azurerm_role_assignment" "assign-admin" {
 
-  count = var.rbac_enabled == true ? 1 : 0
-
-  depends_on = [
-    azurerm_key_vault.kv
-  ]
-  name                 = uuidv5("dns", "${azurerm_key_vault.kv.name}${var.kv_admin_object_id}")
-  scope                = "/subscriptions/${data.azurerm_subscription.current.subscription_id}/resourceGroups/${var.resource_group_name}/providers/Microsoft.KeyVault/vaults/${azurerm_key_vault.kv.name}"
-  role_definition_name = "Key Vault Administrator"
-  principal_id         = var.kv_admin_object_id
-}
 
 resource "azurerm_key_vault_access_policy" "access-policy" {
   for_each = {
@@ -64,8 +53,7 @@ resource "azurerm_key_vault_access_policy" "access-policy" {
 # Key Vault diagnostic settings with all supported log categories
 resource "azurerm_monitor_diagnostic_setting" "diag-base" {
   depends_on = [
-    azurerm_key_vault.kv,
-    azurerm_role_assignment.assign-admin
+    azurerm_key_vault.kv
   ]
 
   name                       = "${azurerm_key_vault.kv.name}-diagnostics-${var.purpose}-${local.resolved_suffix}"

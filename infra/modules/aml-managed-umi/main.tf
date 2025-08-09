@@ -80,7 +80,7 @@ module "storage_account_default" {
   enable_auto_purge = var.enable_auto_purge
 }
 
-## Create Key Vault which will hold secrets for the AML workspace and assign user the Key Vault Administrator role over it
+## Create Key Vault which will hold secrets for the AML workspace
 ##
 module "keyvault_aml" {
 
@@ -94,8 +94,6 @@ module "keyvault_aml" {
   purpose             = var.purpose
   law_resource_id     = var.log_analytics_workspace_id
   tags                = var.tags
-
-  kv_admin_object_id = var.user_object_id
 
   firewall_default_action = "Deny"
   firewall_bypass         = "AzureServices"
@@ -607,65 +605,6 @@ resource "azurerm_role_assignment" "ai_administrator" {
   scope                = local.rg_id
   role_definition_name = "Azure AI Administrator"
   principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
-}
-
-##### Create human role assignments
-#####
-
-## Create Azure RBAC Role Assignment granting the Azure AI Developer Role to the user.
-## This allows the user to deploy models from the catalog to serverless compute resources
-##
-resource "azurerm_role_assignment" "wk_perm_ai_developer" {
-  depends_on = [
-    azapi_resource.aml_workspace
-  ]
-  name                 = uuidv5("dns", "${local.rg_name}${var.user_object_id}${azapi_resource.aml_workspace.name}aidev")
-  scope                = azapi_resource.aml_workspace.id
-  role_definition_name = "Azure AI Developer"
-  principal_id         = var.user_object_id
-}
-
-## Create Azure RBAC Role Assignment granting the Azure Machine Learning Compute Operator role to the user.
-## This allows the user to perform all actions on compute resources within the workspace.
-##
-resource "azurerm_role_assignment" "wk_perm_compute_operator" {
-  depends_on = [
-    azapi_resource.aml_workspace
-  ]
-  name                 = uuidv5("dns", "${local.rg_name}${var.user_object_id}${azapi_resource.aml_workspace.name}computeoperator")
-  scope                = azapi_resource.aml_workspace.id
-  role_definition_name = "AzureML Compute Operator"
-  principal_id         = var.user_object_id
-}
-
-## Create Azure RBAC Role Assignment granting the Azure Machine Learning Data Scientist role to the user.
-## This allows the user to perform all actions except for creating compute resources.
-##
-resource "azurerm_role_assignment" "wk_perm_data_scientist" {
-  depends_on = [
-    azapi_resource.aml_workspace
-  ]
-  name                 = uuidv5("dns", "${local.rg_name}${var.user_object_id}${azapi_resource.aml_workspace.name}datascientist")
-  scope                = azapi_resource.aml_workspace.id
-  role_definition_name = "AzureML Data Scientist"
-  principal_id         = var.user_object_id
-}
-
-## Create role assignments for the data scientist granting them the Storage Blob Data Contributor and Storage File Data Privileged Contributor roles
-## over the default storage account
-##
-resource "azurerm_role_assignment" "blob_perm_default_sa" {
-  name                 = uuidv5("dns", "${local.rg_name}${var.user_object_id}${module.storage_account_default.name}blob")
-  scope                = module.storage_account_default.id
-  role_definition_name = "Storage Blob Data Contributor"
-  principal_id         = var.user_object_id
-}
-
-resource "azurerm_role_assignment" "file_perm_default_sa" {
-  name                 = uuidv5("dns", "${local.rg_name}${var.user_object_id}${module.storage_account_default.name}file")
-  scope                = module.storage_account_default.id
-  role_definition_name = "Storage File Data Privileged Contributor"
-  principal_id         = var.user_object_id
 }
 
 ##### Cross-environment RBAC for asset promotion (centralized in parent module)
