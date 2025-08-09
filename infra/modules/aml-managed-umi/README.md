@@ -2,20 +2,20 @@
 
 This Terraform module deploys a complete, production-ready Azure Machine Learning workspace with managed virtual network, supporting services, comprehensive security, and RBAC configuration. This module assumes the resource group already exists and is passed in by the root module. It creates the core ML platform for development and production workloads.
 
-## 🎯 **Module Overview**
+## Module Overview
 
 This module creates a secure, enterprise-ready Azure ML workspace featuring:
 
-- **🏢 ML Workspace**: Core Azure ML workspace with managed VNet and private endpoints
-- **💾 Storage Services**: Azure Storage with blob, file, table, and queue endpoints
-- **🔐 Security Services**: Azure Key Vault for secrets and certificate management
-- **📦 Container Registry**: Azure Container Registry for custom ML container images
-- **📊 Monitoring**: Application Insights for workspace telemetry and monitoring
-- **⚙️ Compute Infrastructure**: Auto-scaling compute cluster with managed identity
-- **🔒 Network Security**: Private endpoints for all services with DNS integration
-- **👥 RBAC Configuration**: Managed identity role assignments only; human-user roles are centralized in the root module
+- ML Workspace: Core Azure ML workspace with managed VNet and private endpoints
+- Storage Services: Azure Storage with blob, file, table, and queue endpoints
+- Security Services: Azure Key Vault for secrets and certificate management
+- Container Registry: Azure Container Registry for custom ML container images
+- Monitoring: Application Insights for workspace telemetry and monitoring
+- Compute Infrastructure: Auto-scaling compute cluster with managed identity
+- Network Security: Private endpoints for all services with DNS integration
+- RBAC Configuration: Managed identity role assignments only; human-user roles are centralized in the root module
 
-## 🏗️ **Architecture**
+## Architecture
 
 ```mermaid
 graph TB
@@ -73,16 +73,16 @@ graph TB
     CC -.-> MI
 ```
 
-## 📋 **Required Configuration**
+## Required Configuration
 
 ### **Critical Settings to Update**
 
 This module depends on outputs from the `aml-vnet` module and an existing resource group name. When using the root orchestration, these dependencies are automatically resolved. For standalone deployment, you must provide:
 
-#### 1. **Identity & Access** 👤
+#### 1. Identity & Access
 Human-user (data scientist) RBAC is assigned in the root module (Step 12 barrier). This module does not accept user IDs and does not create human role assignments.
 
-#### 2. **Network Dependencies** 🌐
+#### 2. Network Dependencies
 ```hcl
 # From aml-vnet module outputs (automatically provided in orchestrated deployment)
 subnet_id = "/subscriptions/{sub}/resourceGroups/{resource-group-name}/providers/Microsoft.Network/virtualNetworks/{vnet-name}/subnets/{subnet-name}"
@@ -91,14 +91,14 @@ subnet_id = "/subscriptions/{sub}/resourceGroups/{resource-group-name}/providers
 resource_group_name_dns = "{resource-group-name}"
 ```
 
-#### 3. **Managed Identity References** 🆔
+#### 3. Managed Identity References
 ```hcl
 # Compute cluster managed identity (from aml-vnet module)
 compute_cluster_identity_id = "/subscriptions/{sub}/resourceGroups/{resource-group-name}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{managed-identity-name}"
 compute_cluster_identity_principal_id = "87654321-4321-4321-4321-210987654321"
 ```
 
-#### 4. **Environment Configuration** ⚙️
+#### 4. Environment Configuration
 ```hcl
 # Environment and location settings
 purpose = "dev"                    # Environment identifier

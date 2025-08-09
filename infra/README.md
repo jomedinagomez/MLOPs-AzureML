@@ -145,7 +145,7 @@ flowchart TD
     └── private-endpoint/          # Private endpoint module
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -219,7 +219,7 @@ terraform output
 az ml workspace list --subscription <subscription-id>
 ```
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 
 ### Module Dependencies
 
@@ -291,7 +291,7 @@ Root Orchestration (main.tf)
 | `vnet_address_space` | `"10.1.0.0/16"` | VNet CIDR block |
 | `subnet_address_prefix` | `"10.1.1.0/24"` | Subnet CIDR block |
 
-## 📤 Outputs
+## Outputs
 
 The infrastructure provides comprehensive outputs for integration:
 
@@ -317,7 +317,7 @@ The infrastructure provides comprehensive outputs for integration:
 - `deployment_summary`: High-level deployment overview
 - `dev_private_endpoint_fqdns` / `prod_private_endpoint_fqdns`: DNS smoke-test list of key private endpoints (workspace API, KV, storage blob/file, ACR)
 
-## 🔐 Security Features
+## Security Features
 
 ### Network Security
 - **Private Networking**: All resources use private endpoints
@@ -467,7 +467,7 @@ try:
     workspace_client.models.create_or_update(test_model)
     print("✓ Successfully created model in workspace")
     
-    print("🎉 Asset sharing configuration verified successfully!")
+  print("Asset sharing configuration verified successfully!")
     
 except Exception as e:
     print(f"Asset sharing test failed: {str(e)}")
@@ -511,7 +511,7 @@ az ml registry show \
 - **Private Endpoints**: No public internet exposure
 - **Access Controls**: IP restrictions and firewall rules
 
-## 🧪 Testing & Validation
+## Testing & Validation
 
 ### Pre-deployment Checks
 ```bash
@@ -537,7 +537,7 @@ az network private-endpoint list --resource-group <rg-name>
 az role assignment list --scope <resource-scope>
 ```
 
-## 🔄 Module Outputs as Inputs
+## Module Outputs as Inputs
 
 The orchestration leverages module outputs for dependencies:
 
@@ -560,7 +560,7 @@ module "aml_workspace" {
 }
 ```
 
-## 🛠️ Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
@@ -601,7 +601,7 @@ terraform import <resource-type>.<resource-name> <azure-resource-id>
 terraform force-unlock <lock-id>
 ```
 
-## 🛠️ **Troubleshooting**
+## Troubleshooting
 
 ### **Common Issues & Solutions**
 
@@ -764,7 +764,7 @@ az consumption usage list --start-date 2025-01-01 --end-date 2025-01-31
 az ml compute list --workspace-name {workspace-name} --resource-group {resource-group-name} --query '[].{Name:name,State:state,VmSize:vmSize}'
 ```
 
-## 🧹 **Infrastructure Cleanup**
+## Infrastructure Cleanup
 
 ### **Complete Destruction**
 ```bash
@@ -809,7 +809,7 @@ az keyvault purge --name {key-vault-name} --location {location}
 az network private-dns record-set a list --resource-group {resource-group-name} --zone-name privatelink.blob.core.windows.net
 ```
 
-## 📈 **Monitoring & Maintenance**
+## Monitoring & Maintenance
 
 ### **Regular Health Checks**
 ```bash
@@ -977,7 +977,7 @@ terraform apply
 - **Documentation**: Keep README updated
 - **Testing**: Validate before applying
 
-## 🔒 Private Access
+## Private Access
 
 The platform uses a flat two‑VNet model (dev, prod) with private endpoints and shared Private DNS. Remote operator access is provided via Azure Bastion to a Windows DSVM jumpbox. No VPN is deployed.
 
@@ -991,7 +991,7 @@ az ml job create --file ..\pipelines\taxi-fare-train-pipeline.yaml \
   --resource-group <rg-dev-ws> --workspace-name <dev-workspace>
 ```
 
-## 🔗 Related Documentation
+## Related Documentation
 
 - [Main Project README](../README.md)
 - [Azure ML Documentation](https://docs.microsoft.com/azure/machine-learning/)

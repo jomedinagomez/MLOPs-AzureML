@@ -2,18 +2,18 @@
 
 This Terraform module deploys an Azure Machine Learning Registry with private network connectivity, monitoring, and RBAC configuration. The registry enables centralized model and component sharing across multiple Azure ML workspaces.
 
-## 🎯 **Module Overview**
+## Module Overview
 
 This module creates a secure, centralized Azure ML Registry featuring:
 
-- **📚 ML Registry**: Central repository for models, components, and environments
-- **🔒 Private Connectivity**: Private endpoint for secure access from workspaces
-- **📊 Monitoring**: Log Analytics workspace for registry operations monitoring  
-- **🆔 System Identity**: System-assigned managed identity for registry operations
-- **👥 RBAC Integration**: Role assignments for users and compute identities
-- **🌐 DNS Integration**: Proper DNS resolution for private endpoints
+- ML Registry: Central repository for models, components, and environments
+- Private Connectivity: Private endpoint for secure access from workspaces
+- Monitoring: Log Analytics workspace for registry operations monitoring  
+- System Identity: System-assigned managed identity for registry operations
+- RBAC Integration: Role assignments for users and compute identities
+- DNS Integration: Proper DNS resolution for private endpoints
 
-## 🏗️ **Architecture**
+## Architecture
 
 ```mermaid
 graph TB
@@ -39,7 +39,7 @@ graph TB
     end
     
     subgraph "Microsoft-Managed Resource Group: rg-{registry-name}"
-        MGT[Internal Registry Components<br/>⚠️ Do Not Modify]
+    MGT[Internal Registry Components<br/>Do Not Modify]
         STOR[System Storage Account<br/>Auto-managed by Azure]
         ACR[System Container Registry<br/>Auto-managed by Azure]
         
@@ -59,7 +59,7 @@ graph TB
     REG -.-> WS
 ```
 
-### **⚠️ Important: Microsoft Managed Resource Groups**
+### Important: Microsoft Managed Resource Groups
 
 When you deploy an Azure ML Registry, Azure automatically creates a **Microsoft managed resource group** containing internal infrastructure components:
 
@@ -69,15 +69,15 @@ When you deploy an Azure ML Registry, Azure automatically creates a **Microsoft 
 - **Lifecycle**: Created automatically when registry deploys, removed when registry is deleted
 - **Permissions**: You'll see this resource group in your subscription but should not interact with it
 
-> 🛑 **Critical Warning**: Modifying or deleting resources in the Microsoft managed resource group (`rg-{registry-name}`) will break your ML Registry and may require Microsoft support to resolve. Always work only with the user-managed resource group (`rg-aml-reg-{environment}-{location-code}`).
+> Critical Warning: Modifying or deleting resources in the Microsoft managed resource group (`rg-{registry-name}`) will break your ML Registry and may require Microsoft support to resolve. Always work only with the user-managed resource group (`rg-aml-reg-{environment}-{location-code}`).
 
-## 📋 **Required Configuration**
+## Required Configuration
 
 ### **Critical Settings to Update**
 
 This module depends on outputs from the `aml-vnet` module. When using the root orchestration, these dependencies are automatically resolved.
 
-#### 1. **User Identity Configuration** 👤
+#### 1. User Identity Configuration
 ```hcl
 # Your Azure AD user object ID for registry access
  
@@ -88,7 +88,7 @@ This module depends on outputs from the `aml-vnet` module. When using the root o
 az ad signed-in-user show --query id -o tsv
 ```
 
-#### 2. **Network Dependencies** 🌐
+#### 2. Network Dependencies
 ```hcl
 # From aml-vnet module outputs (automatically provided in orchestrated deployment)
 subnet_id = "/subscriptions/{sub}/resourceGroups/{resource-group-name}/providers/Microsoft.Network/virtualNetworks/{vnet-name}/subnets/{subnet-name}"
@@ -101,13 +101,13 @@ workload_vnet_location = "canadacentral"
 workload_vnet_location_code = "cc"
 ```
 
-#### 3. **Managed Identity Access** 🆔
+#### 3. Managed Identity Access
 ```hcl
 # Compute cluster identity for registry access (from aml-vnet module)
 compute_cluster_identity_principal_id = "87654321-4321-4321-4321-210987654321"
 ```
 
-#### 4. **Environment Configuration** ⚙️
+#### 4. Environment Configuration
 ```hcl
 # Environment and location settings
 purpose = "dev"                    # Environment identifier
@@ -119,7 +119,7 @@ naming_suffix = "01"              # Deterministic suffix for naming
 sub_id = "your-subscription-id"   # Target subscription
 ```
 
-## 🔑 **RBAC Configuration**
+## RBAC Configuration
 
 ### **User Registry Access**
 | Role | Scope | Purpose |
@@ -131,7 +131,7 @@ sub_id = "your-subscription-id"   # Target subscription
 |------|-------|---------|
 | `AzureML Registry User` | Registry | Allow compute clusters to access shared assets |
 
-## 📦 **Registry Features**
+## Registry Features
 
 ### **Asset Types Supported**
 - **Models**: Trained ML models with metadata and versioning
@@ -149,7 +149,7 @@ sub_id = "your-subscription-id"   # Target subscription
 - **Activity Logging**: Track registry access and modifications
 - **Diagnostics**: Enable detailed logging for troubleshooting
 
-## 🔧 **Usage Examples**
+## Usage Examples
 
 ### **Accessing Registry from Workspace**
 ```python
@@ -180,7 +180,7 @@ ml_client.models.create_or_update(
 )
 ```
 
-## 🚀 **Deployment Considerations**
+## Deployment Considerations
 
 ### **Performance**
 - **Region Placement**: Deploy registry in same region as primary workspaces
@@ -368,7 +368,7 @@ az role assignment list --scope <registry-resource-id>
 az ml registry show --name <registry-name>
 ```
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 ### **Common Deployment Issues**
 
@@ -423,7 +423,7 @@ nslookup {registry-name}.api.azureml.ms
 
 ### **Cleanup Considerations**
 
-⚠️ **Important**: This registry may contain valuable ML assets (models, components, environments).
+Important: This registry may contain valuable ML assets (models, components, environments).
 
 **Before cleanup**:
 1. Export/backup important models and components

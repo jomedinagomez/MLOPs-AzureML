@@ -100,11 +100,11 @@ access_policies = [
 - **Soft Delete**: Enabled with configurable retention period (default 90 days)
 - **Purge Protection**: Configurable (recommended for production)
 
-### ⚠️ Important: Soft Delete Behavior
+### Important: Soft Delete Behavior
 
 When a Key Vault is deleted, it enters a "soft-deleted" state and **retains its name** for the retention period. This can cause deployment conflicts.
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 ### Key Vault Name Conflicts
 

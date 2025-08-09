@@ -2,7 +2,7 @@
 
 This Terraform module deploys the foundational networking infrastructure for secure Azure Machine Learning deployments. It creates the complete networking foundation including virtual network, private DNS zones, and managed identities required for a private ML environment.
 
-## 🎯 **Module Overview**
+## Module Overview
 
 ## 🚦 Deployment Flow & Dependencies
 
@@ -39,7 +39,7 @@ This module provides the secure networking foundation for Azure ML services:
 - **🆔 Managed Identities**: User-assigned identities for compute clusters and online endpoints
 - **🛡️ Security**: Complete network isolation for private ML deployments
 
-## 🏗️ **Architecture**
+## Architecture
 
 ```mermaid
 graph TB
@@ -98,20 +98,20 @@ graph TB
     VNet -.-> REG
 ```
 
-## 📋 **Required Configuration**
+## Required Configuration
 
 ### **Critical Settings to Update**
 
 Before deploying this module, you **MUST** customize these values in `terraform.tfvars`:
 
-#### 1. **Network Configuration** 🌐
+#### 1. Network Configuration
 ```hcl
 # Network ranges - MUST NOT conflict with existing networks
 vnet_address_space     = "10.1.0.0/16"        # VNet CIDR block (65,534 IPs)
 subnet_address_prefix  = "10.1.1.0/24"        # ML subnet (254 IPs)
 ```
 
-**⚠️ Critical**: Verify these ranges don't overlap with:
+Critical: Verify these ranges don't overlap with:
 - Existing Azure VNets in your subscription
 - On-premises network ranges
 - Other connected networks

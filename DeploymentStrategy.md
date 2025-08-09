@@ -108,7 +108,7 @@ Previously each environment module created its own Azure ML private DNS zones:
 |----------|---------|-------|
 | AML Private DNS Zones (api, notebooks, instances) | Yes | Central shared DNS RG; record prefixes prevent collisions |
 | Core Service Private DNS Zones (blob, file, queue, table, vaultcore, acr) | Yes | Consolidated (Rev 4) to eliminate duplication |
-| VNets / Subnets | No | Independent dev / prod VNets; no peering |
+| VNets / Subnets | No | Independent dev/prod VNets; peering present (dev↔prod) for admin VM access only |
 | Workspaces / Registries | No | Provisioned per environment |
 | Storage Accounts / Key Vaults / ACR Registries | No | Per environment; only DNS zones centralized |
 | User-Assigned Managed Identities | No | Distinct per environment (workspace + compute) |
@@ -1743,7 +1743,7 @@ try:
     )
     print(f"✓ Endpoint test successful: {response}")
 except Exception as e:
-    print(f"⚠️  Endpoint test failed: {e}")
+    print(f"Endpoint test failed: {e}")
 
 print("Step 4B: Monitoring deployment health...")
 # Check deployment status
@@ -1769,10 +1769,6 @@ print(f"  Environment: {env_prod_ref} (dev registry - private registry limitatio
 print(f"  Endpoint: prod-taxi-endpoint")
 print(f"  Deployment: prod-deployment")
 ```
-       description="Development endpoint for taxi fare model"
-   )
-   ml_client_dev_workspace.online_endpoints.begin_create_or_update(dev_endpoint)
-   ```
 
 2. **Model Promotion to Registry**
    ```python
@@ -2061,7 +2057,7 @@ The current infrastructure implementation in `main.tf` fully implements this dep
 5. **Role Assignment Before Resource Creation**: All permissions configured before compute provisioning
 6. **Optimized RBAC Strategy**: Workspace UAMIs handle connectivity, compute UAMIs handle data access
 
-### Verify VNet Peering (if enabled)
+### Verify VNet Peering
 
 Check peering is present and safe:
 
@@ -2147,6 +2143,6 @@ az ml workspace show --name mlwprodcc* --resource-group rg-aml-ws-prod-cc*
 
 ---
 
-**Document Version**: 1.1  
-**Last Updated**: August 7, 2025  
+**Document Version**: 1.2  
+**Last Updated**: August 9, 2025  
 **Next Review**: Post-deployment validation
