@@ -397,13 +397,13 @@ Role assignment summary (human users):
 - Workspace Level
     - AzureML Data Scientist (on workspace): Core ML development and model management
     - Azure AI Developer (on workspace): Develop generative AI solutions and prompt engineering
-    - AzureML Compute (on workspace): Manage personal compute instances and clusters
+    - AzureML Compute Operator (on workspace): Manage personal compute instances and clusters
 - Storage Level
     - Storage Blob Data Contributor (on default storage account): Manage training data and experimental outputs
     - Storage File Data Privileged Contributor (on default storage account): Share code and collaborate on ML projects
 - Registry Level
     - Azure ML Registry User (on registry): Access org-wide ML assets and promote models
-```
+
 
 ### Cross-Environment Permissions
 
@@ -501,7 +501,7 @@ The production compute UAMI requires AzureML Registry User access to the develop
 
 Managed VNet with `isolationMode = "AllowOnlyApprovedOutbound"` creates private endpoints automatically when outbound rules specify `type = "PrivateEndpoint"`.
 
-```terraform
+```hcl
 # Cross-environment connectivity (from main.tf)
 resource "azapi_resource" "prod_workspace_to_dev_registry_outbound_rule" {
     type      = "Microsoft.MachineLearningServices/workspaces/outboundRules@2024-10-01-preview"
@@ -527,65 +527,17 @@ resource "azapi_resource" "prod_workspace_to_dev_registry_outbound_rule" {
 }
 ```
 
-**Critical Permission**: The production workspace UAMI requires `Azure AI Enterprise Network Connection Approver` on the dev registry to automatically create private endpoints when outbound rules are configured. This permission enables the managed VNet to establish secure connectivity without manual intervention.
+What happens automatically:
+- Private endpoint creation in the managed VNet
+- DNS configuration for `{dev-registry}.api.azureml.ms`
+- Secure connectivity without VNet peering for service-to-service traffic
+- Access to the registry's Microsoft-managed ACR via the same private endpoint
 
-**Important Note**: Workspace UAMIs do NOT have `AzureML Registry User` roles. They only create network connectivity through private endpoints. Actual registry data access is provided through compute UAMIs and human user accounts.
-
-#### Cross-Environment Access Justification
-
-The production **compute** UAMI requires `AzureML Registry User` access to the development registry (`{dev-registry}`) to support the documented asset promotion patterns:
-
-1. Environment references: access environments promoted from dev using URIs like `azureml://registries/{dev-registry}/environments/inference-env/versions/1.0`.
-2. Docker image access: `AzureML Registry User` grants metadata access and enables pulls of associated images from the registry’s Microsoft-managed ACR.
-3. Model lineage: maintain complete lineage for models promoted via the dev registry.
-
-Important distinction: Only compute UAMIs and human users have `AzureML Registry User` roles for data access. Workspace UAMIs only have `Azure AI Enterprise Network Connection Approver` roles to create private endpoint connections.
-
-#### Network Connectivity for Cross-Environment Access
-
-**Managed VNet Automatic Private Endpoint Creation**
-
-This infrastructure uses Azure ML managed virtual networks with `isolationMode = "AllowOnlyApprovedOutbound"`. **Private endpoints are automatically created** when outbound rules specify `type = "PrivateEndpoint"`.
-
-```terraform
-# Cross-environment connectivity (from main.tf)
-resource "azapi_resource" "prod_workspace_to_dev_registry_outbound_rule" {
-  type      = "Microsoft.MachineLearningServices/workspaces/outboundRules@2024-10-01-preview"
-  name      = "AllowDevRegistryAccess"
-  parent_id = module.prod_managed_umi.workspace_id
-
-  body = {
-    properties = {
-      type = "PrivateEndpoint"
-      destination = {
-    serviceResourceId = module.dev_registry.registry_id
-    subresourceTarget = "amlregistry" # required for registry targets
-      }
-      category = "UserDefined"
-    }
-  }
-
-  depends_on = [
-    module.prod_managed_umi,
-    module.dev_registry,
-    azurerm_role_assignment.prod_workspace_network_connection_approver
-  ]
-}
-```
-
-**What Happens Automatically:**
-- **Private Endpoint Creation**: Azure ML service creates the private endpoint within the managed VNet
-- **DNS Resolution**: Automatic DNS configuration for `{dev-registry}.api.azureml.ms`
-- **Network Path**: Secure connectivity from prod workspace to dev registry without VNet peering
-- **Microsoft-Managed ACR Access**: Automatic access to dev registry's internal ACR through the same private endpoint
-
-**No Manual Network Configuration Required:**
-- VNet peering enabled between environments for admin VM access
-- No manual private endpoint creation
-- No manual DNS configuration
+No manual network configuration required:
+- Peering is only for admin VM access
+- No manual PE or DNS setup
 - No cross-VNet private endpoint setup
-- Complete network isolation maintained
-- Automatic secure connectivity through managed VNet outbound rules
+- Isolation maintained via managed VNet outbound rules
 
 #### Registry Access Notes
 
@@ -1623,15 +1575,6 @@ Our managed VNet configuration introduces specific constraints for asset sharing
 
 #### **Step-by-Step Promotion Process**
 
-### Manual Promotion Workflow
-
-#### **Prerequisites**
-- Azure CLI with ML extension installed
-- Appropriate RBAC permissions (AzureML Registry User, Data Engineer roles)
-- Access to both development and production environments
-
-#### **Step-by-Step Promotion Process**
-
 ```python
 # Complete manual promotion workflow
 from azure.ai.ml.entities import ManagedOnlineEndpoint, ManagedOnlineDeployment
@@ -2053,7 +1996,7 @@ The current infrastructure implementation in `main.tf` fully implements this dep
 1. **Single Shared Compute UAMI**: One UAMI per environment for both compute cluster and compute instance
 2. **No MOE UAMIs**: Online endpoints use system-assigned managed identities as designed
 3. **Cross-Environment Connectivity**: Production can access dev registry via compute UAMIs and automatic private endpoints
-4. **Complete Environment Isolation**: Zero shared components between dev and prod
+4. **Environment Isolation**: Runtime resources are isolated per environment; centralized Private DNS zones are the only shared resource
 5. **Role Assignment Before Resource Creation**: All permissions configured before compute provisioning
 6. **Optimized RBAC Strategy**: Workspace UAMIs handle connectivity, compute UAMIs handle data access
 
