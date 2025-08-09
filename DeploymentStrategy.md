@@ -36,9 +36,9 @@ This document outlines the deployment strategy for our Azure Machine Learning pl
 
 **Two registries remain intentionally for demonstration of cross‑environment asset promotion; a single registry suffices for most production deployments.**
 
-**Last Updated**: August 9, 2025 – Enforced Bastion-only access (no VPN, no peering), centralized Private DNS for AML/storage/KV/ACR, deterministic naming via `naming_suffix`, refined outbound rule schema & Key Vault RBAC documentation.
+**Last Updated**: August 9, 2025 – Enforced Bastion-only access (no VPN, VNet peering required for admin VM access), centralized Private DNS for AML/storage/KV/ACR, deterministic naming via `naming_suffix`, refined outbound rule schema & Key Vault RBAC documentation.
 
-> NOTE: VNet peering is optional. If enabled, it’s solely to allow the prod jumpbox to reach dev resources for admin tasks. DNS remains centralized via shared Private DNS; no gateway transit or forwarded traffic is allowed.
+> NOTE: VNet peering is required to allow the prod jumpbox to reach dev resources for admin tasks. DNS remains centralized via shared Private DNS; no gateway transit or forwarded traffic is allowed.
 
 > Summary of Recent Fixes:
 > - Outbound Rule ValidationError (400) resolved by adding `destination.subresourceTarget = "amlregistry"` when the destination is an Azure ML Registry.
@@ -389,17 +389,20 @@ Key points:
     - If outputs referenced counted RG IDs, compute the RG ID as `"/subscriptions/${subscription_id}/resourceGroups/${resource_group_name}"` using `data.azurerm_client_config` for the subscription ID.
 
 <!-- Removed duplicate Key Vault Configuration block (now consolidated under IAM) -->
-├── Resource Group Level:
-│   └── Reader (on resource group): Discover ML resources and monitor workspace infrastructure
-├── Workspace Level:
-│   ├── AzureML Data Scientist (on workspace): Core ML development and model management
-│   ├── Azure AI Developer (on workspace): Develop generative AI solutions and prompt engineering
-│   └── AzureML Compute (on workspace): Manage personal compute instances and clusters
-├── Storage Level:
-│   ├── Storage Blob Data Contributor (on default storage account): Manage training data and experimental outputs
-│   └── Storage File Data Privileged Contributor (on default storage account): Share code and collaborate on ML projects
-└── Registry Level:
-        └── Azure ML Registry User (on registry): Access org-wide ML assets and promote models
+
+Role assignment summary (human users):
+
+- Resource Group Level
+    - Reader (on resource group): Discover ML resources and monitor workspace infrastructure
+- Workspace Level
+    - AzureML Data Scientist (on workspace): Core ML development and model management
+    - Azure AI Developer (on workspace): Develop generative AI solutions and prompt engineering
+    - AzureML Compute (on workspace): Manage personal compute instances and clusters
+- Storage Level
+    - Storage Blob Data Contributor (on default storage account): Manage training data and experimental outputs
+    - Storage File Data Privileged Contributor (on default storage account): Share code and collaborate on ML projects
+- Registry Level
+    - Azure ML Registry User (on registry): Access org-wide ML assets and promote models
 ```
 
 ### Cross-Environment Permissions
@@ -577,12 +580,12 @@ resource "azapi_resource" "prod_workspace_to_dev_registry_outbound_rule" {
 - **Microsoft-Managed ACR Access**: Automatic access to dev registry's internal ACR through the same private endpoint
 
 **No Manual Network Configuration Required:**
-- ✅ VNet peering enabled between environments for admin VM access
-- ❌ No manual private endpoint creation
-- ❌ No manual DNS configuration
-- ❌ No cross-VNet private endpoint setup
-- ✅ Complete network isolation maintained
-- ✅ Automatic secure connectivity through managed VNet outbound rules
+- VNet peering enabled between environments for admin VM access
+- No manual private endpoint creation
+- No manual DNS configuration
+- No cross-VNet private endpoint setup
+- Complete network isolation maintained
+- Automatic secure connectivity through managed VNet outbound rules
 
 #### Registry Access Notes
 
@@ -2029,7 +2032,7 @@ Your parameterized modules are ready for production deployment:
 
 ## Implementation Status
 
-### ✅ **RBAC Implementation Complete**
+### RBAC Implementation Complete
 
 The current infrastructure implementation in `main.tf` fully implements this deployment strategy with the following role assignments:
 
@@ -2040,7 +2043,7 @@ The current infrastructure implementation in `main.tf` fully implements this dep
 - **Cross-Environment Access**: Optimized to 2 role assignments (removed unnecessary prod workspace to dev registry access)
 - **Managed VNet Outbound Rules**: 1 automatic private endpoint rule
 
-### ✅ **Terraform Dependency Issues Resolved**
+### Terraform Dependency Issues Resolved
 
 **Recent Updates (August 7–8, 2025):**
 1. **Flat Network Implementation**: Flat dual VNets with VNet peering (admin VM access); shared Private DNS only.
@@ -2049,14 +2052,14 @@ The current infrastructure implementation in `main.tf` fully implements this dep
 4. **Key Vault Provisioning Reliability**: Added dual roles (Reader + Secrets User) to workspace UAMIs pre-create to avoid 403 `vaults/read` errors.
  
 
-### ✅ **Architecture Decisions Implemented**
+### Architecture Decisions Implemented
 
-1. **Single Shared Compute UAMI**: ✅ One UAMI per environment for both compute cluster and compute instance
-2. **No MOE UAMIs**: ✅ Online endpoints use system-assigned managed identities as designed
-3. **Cross-Environment Connectivity**: ✅ Production can access dev registry via compute UAMIs and automatic private endpoints
-4. **Complete Environment Isolation**: ✅ Zero shared components between dev and prod
-5. **Role Assignment Before Resource Creation**: ✅ All permissions configured before compute provisioning
-6. **Optimized RBAC Strategy**: ✅ Workspace UAMIs handle connectivity, compute UAMIs handle data access
+1. **Single Shared Compute UAMI**: One UAMI per environment for both compute cluster and compute instance
+2. **No MOE UAMIs**: Online endpoints use system-assigned managed identities as designed
+3. **Cross-Environment Connectivity**: Production can access dev registry via compute UAMIs and automatic private endpoints
+4. **Complete Environment Isolation**: Zero shared components between dev and prod
+5. **Role Assignment Before Resource Creation**: All permissions configured before compute provisioning
+6. **Optimized RBAC Strategy**: Workspace UAMIs handle connectivity, compute UAMIs handle data access
 
 ### Verify VNet Peering (if enabled)
 
@@ -2066,7 +2069,7 @@ Check peering is present and safe:
 - Ensure: `allow_forwarded_traffic=false`, `allow_gateway_transit=false`, `use_remote_gateways=false`.
 - Confirm Private DNS remains via shared zones; no DNS changes are required for peering.
 
-### ✅ **Infrastructure Ready for Deployment**
+### Infrastructure Ready for Deployment
 
 The Terraform configuration in `/infra/main.tf` implements the flat architecture, centralized DNS, deterministic naming, and Bastion-only access. (Resource count varies with user role assignment flags.)
 
