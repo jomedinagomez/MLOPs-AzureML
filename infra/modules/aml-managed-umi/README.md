@@ -201,6 +201,8 @@ The module automatically creates the following role assignments for non-human id
 - Key Vault Secrets User, Key Vault Reader (on workspace Key Vault)
 - Reader, Azure AI Enterprise Network Connection Approver, Azure AI Administrator (on workspace RG)
 
+Note: Key Vault Reader is required for management‑plane `vaults/read` during workspace provisioning to avoid 403 errors; Secrets User covers data‑plane access later in lifecycle.
+
 ## Prerequisites
 
 - Azure CLI installed and authenticated

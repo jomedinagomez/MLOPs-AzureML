@@ -71,6 +71,10 @@ When you deploy an Azure ML Registry, Azure automatically creates a **Microsoft 
 
 > Critical Warning: Modifying or deleting resources in the Microsoft managed resource group (`rg-{registry-name}`) will break your ML Registry and may require Microsoft support to resolve. Always work only with the user-managed resource group (`rg-aml-reg-{environment}-{location-code}`).
 
+Outbound rules & connectivity: Workspaces connect to registries over managed private endpoints created by user‑defined outbound rules in the workspace (destination.subresourceTarget = "amlregistry"). This module exposes the registry resource ID for those rules.
+
+Role assignment workaround (pre‑authorization): In private‑only deployments, creating the managed private endpoint requires the platform to read the registry’s Microsoft‑managed resources (for example, the managed ACR). To avoid permission errors, this module sets the registry property `properties.managedResourceGroupSettings.assignedIdentities` with your deployment principal’s objectId. This pre‑authorizes the identity over the registry’s managed resource group so the endpoint can be created successfully. Effectively, this grants the identity Azure AI Administrator permissions scoped to the registry’s Microsoft‑managed resource group, enabling the required metadata reads during endpoint creation.
+
 ## Required Configuration
 
 ### **Critical Settings to Update**

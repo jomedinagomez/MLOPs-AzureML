@@ -1,18 +1,20 @@
 # Azure ML Platform & MLOps Workflow
 
-End‑to‑end Azure Machine Learning platform (dev + prod) plus opinionated MLOps workflow: reproducible componentized pipelines, model governance & promotion, private networking, and centralized AML DNS. Infrastructure rationale & deep architectural decisions are in `DeploymentStrategy.md`; this README focuses on how practitioners build, run, promote, and operate ML assets on top of the platform.
+End‑to‑end Azure Machine Learning platform (dev + prod) with an opinionated MLOps workflow: reproducible pipelines, model governance & promotion, private‑only networking, and centralized AML/Core Private DNS. This README now includes all architectural decisions and implementation details; no separate strategy doc is required.
 
 ## Platform Snapshot
 | Aspect | Implementation | Notes |
 |--------|----------------|-------|
-| Network | Flat dev/prod VNets + Bastion jumpbox | Bastion-only; private‑only access
-| DNS | Central shared AML zones (api/notebooks/instances) | Revision 3 migration complete (validation pending)
-| Workspaces | Dev & Prod (managed VNet, approved outbound) | Private endpoints only
-| Registries | Dev & Prod (showcase pattern) | System‑assigned MI; promotion demo
-| Identities | UAMI per workspace + UAMI per compute | Separation of network vs data roles
-| Security | RBAC + private endpoints (no public ingress) | Principle of least privilege
+| Network | Flat dev/prod VNets + Bastion jumpbox | Bastion‑only access; no VPN/SSH; peering only for admin VM reachability
+| DNS | Central shared Private DNS zones for AML and core services | api.azureml.ms, notebooks.azure.net, instances.azureml.ms, blob/file/queue/table/vaultcore/azurecr
+| Workspaces | Dev & Prod (managed VNet, allowOnlyApprovedOutbound) | Private endpoints only; publicNetworkAccess disabled
+| Registries | Dev & Prod (for promotion demo; single registry viable) | System‑assigned MI; private‑only
+| Identities | UAMI per workspace + UAMI per compute | Workspace UAMI for connectivity; compute UAMI for data/registry
+| Security | RBAC + private endpoints (no public ingress) | Least privilege; management‑ vs data‑plane separation
 | IaC | Terraform modules (`infra/`) | Single service principal orchestrates
 | Data | Sample taxi dataset (`data/`) | Expandable pattern
+
+Deterministic naming: names derive from `prefix`, `purpose`, `location_code`, `naming_suffix`; no random postfixes. Last Updated: 2025‑08‑09.
 
 ## Quick Infrastructure Deploy
 ```bash
@@ -21,7 +23,7 @@ terraform init
 terraform plan
 terraform apply
 ```
-Configure `infra/terraform.tfvars` (purpose, location, address spaces, tags). Full infra detail: `DeploymentStrategy.md`.
+Configure `infra/terraform.tfvars` (purpose, location, address spaces, tags). See “Architecture & Security” below for full details.
 
 ---
 ## Repository Layout (High-Level)
@@ -40,7 +42,7 @@ pipelines/            Pipeline job YAML definitions
 environment/          Conda / requirements for train + score
 notebooks/            Exploration & asset sharing demos
 data/                 Sample taxi CSV + metadata YAML
-DeploymentStrategy.md Architecture + security + DNS
+infra/                Architecture, security, DNS, RBAC (consolidated here)
 ```
 
 ---
@@ -108,11 +110,24 @@ Recommendation: Promote curated environments into registry for reproducibility (
 Workflow: Prototype → Hardening (src/*) → Component YAML → Pipeline → Registry asset.
 
 ---
-## Asset Promotion Pattern
-1. Dev pipeline registers model version in DEV registry.
-2. Governance (automated compare + manual approval) decides promotion.
-3. Copy/reference model into PROD registry (current design uses two registries for illustration; single shared registry is viable).
-4. Prod pipeline / deployment consumes explicit version (strong pin) or approved tag.
+## Asset Promotion Strategy & Cross‑Environment Access
+This repo intentionally uses two registries (dev, prod) to demonstrate promotion; most prod deployments can use a single org registry.
+
+RBAC essentials:
+- Dev compute UAMI: full access in dev (Workspace Data Scientist, Storage Blob/File Contributor, KV Secrets User, AcrPull/AcrPush, Registry User on dev registry); no prod access.
+- Prod compute UAMI: prod access (same roles at prod scopes) plus read‑only AzureML Registry User on the dev registry for consuming promoted assets.
+- Workspace UAMIs: do not get AzureML Registry User. They are connectivity actors only and require Azure AI Enterprise Network Connection Approver at the registry scope to enable managed private endpoints via outbound rules.
+
+Network essentials:
+- Workspaces run in managed VNets with isolationMode “AllowOnlyApprovedOutbound”.
+- Outbound rules to registries must set destination.subresourceTarget = "amlregistry".
+- Azure ML auto‑creates managed private endpoints in the managed VNet; no manual PE or DNS steps.
+
+Promotion outline:
+1. Dev pipeline registers model version in the Dev registry.
+2. Governance (compare.py + manual gate) approves.
+3. Promote to Prod registry (copy/reference) for consumption.
+4. Prod consumes explicit version or approved tag.
 
 Enhancements (future): tagging (`staging`, `prod`), automated rollback, multi-metric policy, bias/fairness checks.
 
@@ -165,23 +180,46 @@ az ml job show --name <job-id>
 | Workspace UAMI | Workspace RG + Registries | [Azure AI Administrator](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/ai-machine-learning#azure-ai-administrator), [Azure AI Enterprise Network Connection Approver](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/ai-machine-learning#azure-ai-enterprise-network-connection-approver), [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/storage#storage-blob-data-owner), [Key Vault Reader](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/security#key-vault-reader)/[Secrets User](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/security#key-vault-secrets-user) |
 | Compute UAMI | Workspace + Data + Registries | [AzureML Data Scientist](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/ai-machine-learning#azureml-data-scientist), [Storage Blob Data Contributor](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/storage#storage-blob-data-contributor)/[Storage File Data Privileged Contributor](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/storage#storage-file-data-privileged-contributor), [Key Vault Secrets User](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/security#key-vault-secrets-user), [AzureML Registry User](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/ai-machine-learning#azureml-registry-user) |
 
-Full matrices & nuances (e.g., why workspace UAMI has no Registry User) are in `DeploymentStrategy.md`.
+Notes:
+- Workspace UAMI also needs Key Vault Reader (management plane) and Key Vault Secrets User (data plane) on the workspace Key Vault to avoid 403 vaults/read during provisioning.
+- Compute UAMI handles data and registry access; Workspace UAMI handles connectivity and approvals only.
 
 ---
-## Central AML DNS Migration (Status)
-| Step | Description | State |
-|------|-------------|-------|
-| 1 | Shared zones created & spoke linked, per-env disabled | COMPLETE |
-| 2 | Workspace PE zone groups repointed (api/notebooks/instances) | COMPLETE |
-| 3 | DNS validation (checklist in DeploymentStrategy) | PENDING |
-| 4 | Remove `prevent_destroy` & decide on toggle retention | PENDING |
+## Central AML & Core Service Private DNS
+Centralize these zones in a shared DNS RG and link both dev and prod VNets:
+- AML: privatelink.api.azureml.ms, privatelink.notebooks.azure.net, instances.azureml.ms
+- Core: privatelink.blob.core.windows.net, privatelink.file.core.windows.net, privatelink.queue.core.windows.net, privatelink.table.core.windows.net, privatelink.vaultcore.azure.net, privatelink.azurecr.io
 
-Validation examples (from Bastion-connected jumpbox):
+Record coexistence: Dev and Prod records are prefixed by resource names and do not collide. Keep prevent_destroy on shared zones if you want protection.
+
+Validation examples (from Bastion‑connected jumpbox):
 ```bash
 nslookup <dev-workspace>.<region>.api.azureml.ms
 nslookup <prod-workspace>.<region>.api.azureml.ms
 nslookup <dev-workspace>.<region>.notebooks.azure.net
 ```
+
+## Network Security & Outbound Rules
+- Public network access is disabled for workspaces, registries, storage, key vaults, and ACR.
+- Workspaces use managed VNet (approved outbound only) with user‑defined outbound rules for registries.
+- Required shape (azapi): destination.serviceResourceId = registry ID and destination.subresourceTarget = "amlregistry".
+- Create rules after assigning the Workspace UAMI the Azure AI Enterprise Network Connection Approver at the target registry scope; wait ~90–150s for RBAC propagation.
+
+Note on registry pre‑authorization workaround: To prevent permission errors when Azure ML creates the managed private endpoint to a registry in private‑only setups, the registry is configured with `properties.managedResourceGroupSettings.assignedIdentities` to include the deployment principal’s objectId. This effectively grants Azure AI Administrator permissions over the registry’s Microsoft‑managed resource group so the platform can read needed metadata. See `infra/README.md` for verification commands.
+
+Troubleshooting summary:
+- 403 vaults/read during workspace create → add Key Vault Reader to Workspace UAMI.
+- 409 FailedIdentityOperation after delete → add 150s slot wait before re‑create.
+- 400 ValidationError on outbound rule → ensure subresourceTarget = "amlregistry".
+
+## Verify After Apply (CLI)
+PowerShell examples (Windows Bastion jumpbox). Expect:
+1) Registry managed RG pre‑authorization shows your deployment SP in managedResourceGroupSettings.assignedIdentities[].
+2) Outbound rules exist on dev and prod workspaces (including prod→dev).
+3) Managed private endpoints exist in workspace managed RGs targeting registries with subresource "amlregistry".
+4) Private‑only posture for Storage, Key Vault, ACR.
+5) RBAC at registry scopes: Workspace UAMI (Approver) and Compute UAMI (Registry User).
+See `infra/README.md` for exact commands.
 
 ---
 ## Roadmap (Suggested Next Enhancements)
@@ -194,7 +232,21 @@ nslookup <dev-workspace>.<region>.notebooks.azure.net
 
 ---
 ## Changelog Pointer
-See `DeploymentStrategy.md` revision history (Key Vault RBAC fix, outbound rule shape, centralized AML DNS, etc.).
+Key recent changes: Key Vault RBAC fix (add Reader + Secrets User), outbound rule shape requires subresourceTarget, centralized AML/Core DNS.
+
+## Platform limitations and constraints
+- Managed virtual network limitations impact asset operations:
+	- Components cannot be shared from workspace to registry; recreate from version control in target workspace.
+	- Private registries cannot build environments directly when ACR public access is disabled. Use one of:
+		- Reference environments from the dev registry in production via azureml://registries/<dev-reg>/environments/...
+		- Recreate environments in the prod workspace using the same image URI from the dev environment metadata.
+	- Azure ML Studio shows only MODEL assets under network isolation; use CLI/SDK for other asset types.
+	- For secure workspace→registry sharing, the workspace storage must allow Selected networks and include the registry under Resource instances (this repo configures it automatically).
+
+## Environment promotion behavior (images and components)
+- Docker environments shared to a registry build an image that lives in the source registry’s ACR; promoting to another workspace reuses the same image URI. The image is not copied to the prod registry ACR.
+- Components are not shareable across workspaces/registries; store their YAML in version control and recreate in the target workspace.
+- Practical guidance and code examples are available in `notebooks/asset_sharing/sharing_assets_registries_workspaces.ipynb`.
 
 ## License
 MIT

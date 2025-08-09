@@ -38,6 +38,7 @@ This module provides the secure networking foundation for Azure ML services:
 - **🔗 DNS Integration**: VNet links for proper private endpoint DNS resolution
 - **🆔 Managed Identities**: User-assigned identities for compute clusters and online endpoints
 - **🛡️ Security**: Complete network isolation for private ML deployments
+ - **🌐 Centralization**: Supports centralized AML and core service DNS zones shared across environments
 
 ## Architecture
 
@@ -441,6 +442,8 @@ All 9 private DNS zones are required for complete Azure ML functionality:
 - Key Vault zone secures secrets and certificates
 - Container Registry zone protects ML container images
 - ML-specific zones enable private workspace and compute access
+
+Centralized design: In multi‑env setups, create these zones once in a shared DNS RG and link both dev and prod VNets. Records from both envs safely coexist by unique prefixes (workspace/registry names).
 
 ---
 

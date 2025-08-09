@@ -14,6 +14,10 @@ Key characteristics:
 - Public Access: Disabled on all PaaS resources (storage, Key Vault, ACR, AML).
 - Operations: Use the jumpbox for portal access, tooling, and private resource reachability.
 
+Centralized Private DNS:
+- AML: privatelink.api.azureml.ms, privatelink.notebooks.azure.net, instances.azureml.ms
+- Core services: privatelink.blob.core.windows.net, privatelink.file.core.windows.net, privatelink.queue.core.windows.net, privatelink.table.core.windows.net, privatelink.vaultcore.azure.net, privatelink.azurecr.io
+
 ## Deployment Architecture
 
 ### Service Principal Strategy (Updated)
@@ -55,6 +59,12 @@ Service Principal: sp-aml-deployment-platform
 
 This approach aligns with the deployment strategy requirement for a single service principal managing all resource groups across both environments (dev/prod) and the shared DNS RG.
 
+### Subscription Strategy
+Single subscription with strict resource group isolation (dev/prod vnet/ws/reg + shared DNS). Mitigations: strong RG‑scoped RBAC, consistent tagging for cost allocation, deterministic naming, distinct VNet CIDRs, separate Log Analytics per environment.
+
+### Geographic Strategy
+Both environments are deployed in the same Azure region to reduce complexity and avoid cross‑region egress/latency. Current examples use Canada Central (location code "cc"). If you add a second region, plan Private DNS, peering, and cross‑region data flows explicitly and account for cost.
+
 ### Tagging Strategy
 All resources inherit the base `var.tags` map merged with contextual tags (environment, purpose, component). Update `terraform.tfvars` to propagate organization-wide metadata consistently.
 
@@ -75,6 +85,26 @@ This ensures soft-deleted vault items are retained and not purged automatically.
 3. **aml-registry-smi**: Deploys ML registry, Log Analytics, and private endpoint. Consumes outputs from `aml-vnet` and workspace identity from `aml-managed-smi`.
 4. **workspace-to-registry-outbound-rule**: Creates user-defined outbound rule allowing workspace to create managed private endpoints to the registry.
 5. **workspace-storage-network-rules**: Configures storage account network access rules to enable asset sharing between workspace and registry.
+
+### Network Security & Outbound Rules
+Managed VNet workspaces use isolationMode `AllowOnlyApprovedOutbound`. For registry connectivity, create user‑defined outbound rules with:
+- Resource type: `Microsoft.MachineLearningServices/workspaces/outboundRules@2024-10-01-preview`
+- destination.serviceResourceId = registry resource ID
+- destination.subresourceTarget = "amlregistry" (mandatory)
+- Pre‑req RBAC: Workspace UAMI has Azure AI Enterprise Network Connection Approver at the target registry scope (assign before rule creation). Allow ~90–150s for RBAC propagation.
+
+Troubleshooting:
+- 400 ValidationError on rule create → missing `subresourceTarget = "amlregistry"`
+- 403 during workspace create against Key Vault → add Key Vault Reader (management plane) + Key Vault Secrets User (data plane) to Workspace UAMI
+- 409 FailedIdentityOperation after delete → wait ~150s before re‑provision
+
+### Deterministic Naming Examples
+- VNet: `vnet-{prefix}-{env}-{location_code}-{naming_suffix}`
+- Workspace: `mlw{env}{location_code}{naming_suffix}`
+- Storage: `st{env}{location_code}{naming_suffix}`
+- Container Registry: `cr{env}{location_code}{naming_suffix}`
+- Key Vault: `kv{env}{location_code}{naming_suffix}`
+- Registry: `mlr{env}{location_code}{naming_suffix}`
 
 ### Orchestration & Dependency Diagram
 ```mermaid
@@ -122,6 +152,13 @@ flowchart TD
 
 ### Microsoft-Managed Resource Groups
 > **Important:** When deploying the ML Registry, Azure automatically creates a Microsoft-managed resource group (`rg-{registry-name}`) containing internal infrastructure (storage, ACR, etc.). **Never modify or delete resources in this group.**
+
+#### Registry managed RG pre-authorization
+ML registries must create managed private endpoints within workspace managed VNets. Pre‑authorize the deployment identity by setting `properties.managedResourceGroupSettings.assignedIdentities` on the registry. A verification command is provided in the "Verify After Apply" section.
+
+##### Role assignment workaround (why it’s needed)
+When a workspace creates a managed private endpoint to a registry, the platform must read metadata from the registry’s Microsoft‑managed ACR and other internal resources. In locked‑down environments this can fail with permission errors. The practical workaround is to pre‑authorize your deployment identity on the registry via the registry property `properties.managedResourceGroupSettings.assignedIdentities` (this is not a standard RBAC assignment). This repo configures that property so the managed private endpoint can be created without ACR read errors. Use the verify command below to confirm your SP/objectId appears in the list.
+Effectively, this pre‑authorization grants the specified identity Azure AI Administrator permissions scoped to the registry’s Microsoft‑managed resource group so the platform can read required image/asset metadata during managed private endpoint creation.
 
 ### Key Dependency Callouts
 - **aml-managed-smi** and **aml-registry-smi** both require outputs from **aml-vnet** (subnet, DNS, managed identities)
@@ -218,6 +255,57 @@ terraform output
 # Verify in Azure portal or CLI
 az ml workspace list --subscription <subscription-id>
 ```
+
+## Verify After Apply (CLI quick checks)
+From the Bastion jumpbox:
+- Outbound rules: list on dev/prod workspaces and confirm prod→dev exists
+- Managed private endpoints: list in each workspace managed RG; look for subresource "amlregistry"
+- Public access posture: check Storage, Key Vault, ACR all set to private/deny
+- RBAC: at registry scopes, Workspace UAMI has Approver; Compute UAMI has Registry User
+
+Examples (PowerShell):
+```powershell
+$SUBSCRIPTION_ID = (az account show --query id -o tsv)
+
+# Discover RG and resource names
+$DEV_RG_WS   = (az group list --query "[?starts_with(name, 'rg-aml-ws-dev-')].name | [0]" -o tsv)
+$PROD_RG_WS  = (az group list --query "[?starts_with(name, 'rg-aml-ws-prod-')].name | [0]" -o tsv)
+$DEV_RG_REG  = (az group list --query "[?starts_with(name, 'rg-aml-reg-dev-')].name | [0]" -o tsv)
+$PROD_RG_REG = (az group list --query "[?starts_with(name, 'rg-aml-reg-prod-')].name | [0]" -o tsv)
+
+$DEV_WS_NAME   = (az resource list -g $DEV_RG_WS  --resource-type Microsoft.MachineLearningServices/workspaces --query "[0].name" -o tsv)
+$PROD_WS_NAME  = (az resource list -g $PROD_RG_WS --resource-type Microsoft.MachineLearningServices/workspaces --query "[0].name" -o tsv)
+$DEV_REG_NAME  = (az resource list -g $DEV_RG_REG  --resource-type Microsoft.MachineLearningServices/registries --query "[0].name" -o tsv)
+$PROD_REG_NAME = (az resource list -g $PROD_RG_REG --resource-type Microsoft.MachineLearningServices/registries --query "[0].name" -o tsv)
+
+# 1) Registry managed RG pre-authorization
+az rest `
+  --method get `
+  --uri "https://management.azure.com/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$DEV_RG_REG/providers/Microsoft.MachineLearningServices/registries/$DEV_REG_NAME?api-version=2025-01-01-preview" `
+  --query "properties.managedResourceGroupSettings.assignedIdentities"
+
+# 2) Outbound rules
+az rest `
+  --method get `
+  --uri "https://management.azure.com/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$PROD_RG_WS/providers/Microsoft.MachineLearningServices/workspaces/$PROD_WS_NAME/outboundRules?api-version=2024-10-01-preview"
+
+# 3) Managed PEs (workspace managed RGs start with mrg-)
+$PROD_MRG = (az group list --query "[?starts_with(name, 'mrg-') && contains(name, '$PROD_WS_NAME')].name | [0]" -o tsv)
+az network private-endpoint list -g $PROD_MRG -o table
+
+# 4) Private-only posture checks
+az storage account show -g $DEV_RG_WS  --name (az resource list -g $DEV_RG_WS  --resource-type Microsoft.Storage/storageAccounts --query "[0].name" -o tsv)  --query "{publicNetworkAccess:publicNetworkAccess, defaultAction:networkRuleSet.defaultAction}" -o table
+az keyvault show -g $DEV_RG_WS -n (az resource list -g $DEV_RG_WS  --resource-type Microsoft.KeyVault/vaults --query "[0].name" -o tsv)  --query "{publicNetworkAccess:properties.publicNetworkAccess, defaultAction:properties.networkAcls.defaultAction}" -o table
+```
+
+## Cost considerations (summary)
+- Dev: enable compute auto‑shutdown; apply storage lifecycle policies; right‑size Bastion/jumpbox and stop when idle.
+- Prod: enable Key Vault purge protection; avoid auto‑purge; consider reservations for steady compute; monitor private endpoint/DNS costs.
+
+## Disaster recovery & business continuity (summary)
+- State: use remote Terraform state with backups; keep infra as code under version control.
+- Backups: back up model/artifact stores and critical data per policy; enforce retention.
+- Recovery: rebuild infra via Terraform; restore data and secrets; keep tested runbooks.
 
 ## Architecture Overview
 
@@ -332,8 +420,8 @@ The infrastructure provides comprehensive outputs for integration:
 
 ### Network Connectivity
 - **User-Defined Outbound Rules**: Workspace can create managed private endpoints to external registry
-- **Managed Virtual Network**: AllowOnlyApprovedOutbound isolation mode with Azure Firewall Standard SKU
-- **Cross-Registry Connectivity**: Automated outbound rule creation for workspace→registry communication
+- **Managed Virtual Network**: AllowOnlyApprovedOutbound isolation mode
+- **Cross-Registry Connectivity**: Automated managed private endpoint creation for workspace→registry communication
 
 ### Asset Sharing Configuration
 This infrastructure automatically configures asset sharing between the secure workspace and the ML registry created in the same deployment, implementing the [Microsoft documentation requirements](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-registry-network-isolation?view=azureml-api-2&tabs=existing#share-assets-from-workspace-to-registry).
@@ -640,7 +728,15 @@ az role assignment list --assignee $(az ad signed-in-user show --query id -o tsv
 
 # Verify managed identity permissions
 az role assignment list --assignee "{managed-identity-name}" --all --output table
+
 ```
+
+#### 5. RoleAssignmentExists (drift)
+If you see 409 RoleAssignmentExists when assigning human user roles that were granted out‑of‑band:
+- Import the existing role assignment into state, or
+- Enable `skip_service_principal_aad_check` where applicable, or
+- Use lifecycle ignore on `principal_id`, or
+- Add conditional creation for user RBAC
 
 #### 5. **Module Dependency Errors**
 If you encounter dependency issues:
@@ -1001,6 +1097,4 @@ az ml job create --file ..\pipelines\taxi-fare-train-pipeline.yaml \
 
 ---
 
-**Authors**: Jose Medina Gomez & Matt Felton  
-**Last Updated**: July 29, 2025  
-**Version**: 1.4.0 - Production-Ready Diagnostic Settings Deployment
+Last Updated: 2025‑08‑09

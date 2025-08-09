@@ -4,10 +4,6 @@ This Terraform module creates an Azure Key Vault with enterprise-grade security 
 
 ## Features
 
-- **Security**: RBAC-based authorization, network ACLs, soft delete protection
-- **Networking**: Private endpoint support with firewall rules
-- **Monitoring**: Complete diagnostic settings for audit events and metrics
-- **Access Management**: Flexible access policies and administrator role assignment
 
 ## Resources Created
 
@@ -54,33 +50,20 @@ module "keyvault_aml" {
 The module automatically configures comprehensive diagnostic settings that capture:
 
 ### Log Categories
-- **AuditEvent**: All access to secrets, keys, and certificates
-- **AzurePolicyEvaluationDetails**: Policy compliance monitoring
 
 ### Metrics
-- **AllMetrics**: Performance and usage monitoring
 
 These settings ensure full observability and compliance with security monitoring requirements.
 
 ## Network Security
 
 ### Firewall Configuration
-- **Default Action**: Configurable (Allow/Deny)
-- **Bypass**: Azure services can bypass firewall
-- **IP Rules**: Support for allowed IP ranges
-- **Private Endpoints**: Full support for private connectivity
 
 ### Best Practices
-- Use `firewall_default_action = "Deny"` for production
-- Configure private endpoints for secure access
-- Whitelist only necessary IP ranges
 
 ## Access Management
 
 ### RBAC Authorization
-- **Enabled by default**: Uses Azure RBAC instead of access policies
-- **Key Vault Administrator**: Automatically assigned to specified admin ([role reference](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/security#key-vault-administrator))
-- **Flexible Policies**: Support for additional access policies if needed
 
 ### Access Policy Structure
 ```hcl
@@ -97,8 +80,6 @@ access_policies = [
 ## Soft Delete & Purge Protection
 
 ### Configuration
-- **Soft Delete**: Enabled with configurable retention period (default 90 days)
-- **Purge Protection**: Configurable (recommended for production)
 
 ### Important: Soft Delete Behavior
 
@@ -144,10 +125,6 @@ module "keyvault_aml" {
 ```
 
 **How Auto-Purge Works**:
-- When `enable_auto_purge = true`, a `null_resource` is created alongside the Key Vault
-- During `terraform destroy`, it automatically runs `az keyvault purge` 
-- This prevents soft-delete conflicts on subsequent deployments
-- Uses `|| echo` fallback so destroy succeeds even if purge fails
 
 ### Clean Deployment Practices
 
@@ -158,11 +135,6 @@ For development/testing environments:
 4. Consider **shorter retention periods** for development
 
 ### Production Considerations
-- **NEVER enable auto-purge** for production environments
-- Use **purge protection** for critical environments
-- Implement **backup and recovery** procedures
-- Monitor **access patterns** through diagnostic logs
-- **Manual purge only** with proper approval process
 
 ## Variables
 
@@ -198,7 +170,6 @@ For development/testing environments:
 4. **Soft Delete**: Provides protection against accidental deletion
 5. **Key Rotation**: Implement regular key rotation policies
 
----
 
 **Version**: 1.0.0  
 **Last Updated**: July 30, 2025  
