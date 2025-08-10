@@ -42,7 +42,7 @@ ml_client = MLClient(credential=credential,subscription_id=ws._subscription_id,r
 
 from azure.ai.ml.entities import AmlCompute
 from azure.core.exceptions import ResourceNotFoundError
-compute_name = "cpu-cluster-uami"
+compute_name = "amlcc-dev-cc01"
 _ = ml_client.compute.get(compute_name)
 print("Found existing compute target..")
 ####
