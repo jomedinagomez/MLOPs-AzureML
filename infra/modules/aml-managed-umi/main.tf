@@ -395,6 +395,54 @@ resource "azapi_resource" "aml_workspace" {
       tags["created_by"]
     ]
   }
+
+  # Destroy-time purge to avoid soft-deleted AML workspace blocking future deployments
+  # This executes before the provider delete; it requests a permanent delete so
+  # the subsequent provider delete will be a no-op (resource already gone).
+  provisioner "local-exec" {
+    when        = destroy
+    interpreter = ["pwsh", "-Command"]
+    on_failure  = continue
+    command     = <<-EOT
+      $ErrorActionPreference = 'Continue'
+      $id = '${self.id}'
+      $parent = '${self.parent_id}'
+      $wsName = '${self.name}'
+
+      # Prefer parsing subscription and RG from parent_id, fall back to id
+      $parsed = $false
+      if ($parent -and ($parent -match "/subscriptions/(?<sub>[^/]+)/resourceGroups/(?<rg>[^/]+)/")) {
+        $subscription = $Matches.sub
+        $rgName = $Matches.rg
+        $parsed = $true
+      }
+      if (-not $parsed) {
+        if ($id -match "/subscriptions/(?<sub>[^/]+)/resourceGroups/(?<rg>[^/]+)/") {
+          $subscription = $Matches.sub
+          $rgName = $Matches.rg
+          $parsed = $true
+        }
+      }
+      if (-not $parsed -or -not $wsName) {
+        Write-Host "[AML Purge] Could not determine RG/subscription/name from self. Skipping purge. ID: $id Parent: $parent Name: $wsName"
+        exit 0
+      }
+
+      Write-Host "[AML Purge] Ensuring Azure ML CLI extension and subscription context..."
+      try { az account set --subscription $subscription 2>$null } catch {}
+      # Ensure the 'ml' extension is available
+      $mlExt = az extension show -n ml 2>$null
+      if (-not $mlExt) { az extension add -n ml -y 2>$null }
+
+  Write-Host "[AML Purge] Attempting permanent delete of workspace '$wsName' in RG '$rgName'..."
+      az ml workspace delete --name $wsName --resource-group $rgName --permanently-delete --yes 2>$null
+      if ($LASTEXITCODE -ne 0) {
+        Write-Host "[AML Purge] Workspace not found or already purged. Continuing..."
+        exit 0
+      }
+      Write-Host "[AML Purge] Workspace permanently deleted."
+    EOT
+  }
 }
 
 ##### Create a Private Endpoints workspace required resources including default storage account
