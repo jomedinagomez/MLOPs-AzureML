@@ -1,6 +1,5 @@
 $schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
 type: pipeline
-# display_name: nyc_taxi_data_regression #usually better to leave this out tbh so you get unique names. 
 experiment_name: nyc-taxi-pipeline-class-dev
 description: Train Classification model based on nyc taxi dataset for the dev environment
 
@@ -24,7 +23,7 @@ outputs:
   pipeline_job_trained_model:
     mode: rw_mount
   pipeline_job_predictions:
-    mode: rw_mount 
+    mode: rw_mount
   pipeline_job_score_report:
     mode: rw_mount
   pipeline_job_comparison:
@@ -34,7 +33,7 @@ outputs:
 
 settings:
   default_datastore: azureml:workspaceblobstore
-  default_compute: azureml:cpu-cluster-uami
+  default_compute: azureml:amlcc-dev-cc01
   continue_on_step_failure: false
 
 jobs:
