@@ -1,15 +1,25 @@
 $schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
 type: pipeline
 # display_name: nyc_taxi_data_regression #usually better to leave this out tbh so you get unique names. 
-experiment_name: nyc-taxi-pipeline-class
-description: Train Classification model based on nyc taxi dataset
+experiment_name: nyc-taxi-pipeline-class-dev
+description: Train Classification model based on nyc taxi dataset for the dev environment
+
+# Notes:
+# - These jobs currently use MLflow models. Later you can switch to a custom artifact flow.
+# - To keep inputs minimal, we derive names in jobs and add a short artifact identifier:
+#   artifact_id: 'm' for MLflow (now), 'c' for custom (later).
+# - We apply artifact_id only to register/deploy names so training/comparison remain unchanged.
 
 # <inputs_and_outputs>
 inputs:
-  model_name: 'taxi-classification'
-  endpoint_name: 'demo-classification'
+  # environment identifier for this pipeline config
+  environment: 'dev'
+  # model name
+  model_base: 'taxi-class'
+  # artifact identifier for naming: 'm' (MLflow now), 'c' (custom later)
+  artifact_id: 'm'
   deployment_name: 'green'
-  registry: 'amlrdevcc004'
+  registry: 'mlrdevcc01'
 outputs: 
   pipeline_job_trained_model:
     mode: rw_mount
@@ -64,7 +74,7 @@ jobs:
     inputs:
       training_data: ${{parent.jobs.transform_job.outputs.train_data}}
       testing_data: ${{parent.jobs.transform_job.outputs.test_data}}
-      model_name: ${{parent.inputs.model_name}}
+      model_name: '${{parent.inputs.model_base}}-${{parent.inputs.environment}}'
     outputs:
       model_output: ${{parent.outputs.pipeline_job_trained_model}}
 
@@ -84,7 +94,7 @@ jobs:
       model_input: ${{parent.jobs.train_job.outputs.model_output}}
       test_data: ${{parent.jobs.transform_job.outputs.test_data}}
       predictions: ${{parent.jobs.predict_job.outputs.predictions}}
-      model_name: ${{parent.inputs.model_name}}
+      model_name: '${{parent.inputs.model_base}}-${{parent.inputs.environment}}'
     outputs:
       compare_output: ${{parent.outputs.pipeline_job_comparison}}
     
@@ -102,7 +112,8 @@ jobs:
     component: ../src/components/register.yaml
     inputs:
       model_input: ${{parent.jobs.train_job.outputs.model_output}}
-      model_name: ${{parent.inputs.model_name}}
+      # model name with artifact identifier (MLflow='m', custom='c')
+      model_name: '${{parent.inputs.model_base}}-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
       compare_output: ${{parent.jobs.compare_job.outputs.compare_output}}
     outputs:
       register_output:
@@ -112,7 +123,8 @@ jobs:
     component: ../src/components/register.yaml
     inputs:
       model_input: ${{parent.jobs.train_job.outputs.model_output}}
-      model_name: ${{parent.inputs.model_name}}
+      # model name with artifact identifier (MLflow='m', custom='c')
+      model_name: '${{parent.inputs.model_base}}-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
       registry: ${{parent.inputs.registry}}
       compare_output: ${{parent.jobs.compare_job.outputs.compare_output}}
     outputs:
@@ -122,8 +134,19 @@ jobs:
     type: command
     component: ../src/components/deploy.yaml
     inputs:
-      model_name: ${{parent.inputs.model_name}}
-      endpoint_name: ${{parent.inputs.endpoint_name}}
+      # names include artifact_id (MLflow='m', custom='c') to distinguish implementations
+      model_name: '${{parent.inputs.model_base}}-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
+      endpoint_name: '${{parent.inputs.model_base}}-ex-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
       deployment_name: ${{parent.inputs.deployment_name}}
       registry: ${{parent.inputs.registry}}
       register_job_status: ${{parent.jobs.registerex_job.outputs.register_output}}
+
+  deployws_job:
+    type: command
+    component: ../src/components/deploy.yaml
+    inputs:
+      # names include artifact_id (MLflow='m', custom='c') to distinguish implementations
+      model_name: '${{parent.inputs.model_base}}-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
+      endpoint_name: '${{parent.inputs.model_base}}-ws-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
+      deployment_name: ${{parent.inputs.deployment_name}}
+      register_job_status: ${{parent.jobs.registerws_job.outputs.register_output}}
