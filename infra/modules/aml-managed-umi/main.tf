@@ -116,11 +116,13 @@ resource "azurerm_user_assigned_identity" "workspace_identity" {
   tags                = var.tags
 }
 
-## Grant Key Vault access (secrets user) to the workspace user-assigned identity BEFORE workspace creation
+## Grant Key Vault access (secrets Officer) to the workspace user-assigned identity BEFORE workspace creation
 ## AML control plane needs to read/write secrets in the KV during workspace provisioning.
-resource "azurerm_role_assignment" "workspace_key_vault_secrets_user" {
+resource "azurerm_role_assignment" "workspace_key_vault_secrets_officer" {
   scope                = module.keyvault_aml.id
-  role_definition_name = "Key Vault Secrets User"
+  # Key Vault Secrets Officer is required for AML workspace UAMI to set secrets during image builds and job runs.
+  # Secrets User is read-only; Officer includes setSecret permission (Microsoft.KeyVault/vaults/secrets/setSecret/action).
+  role_definition_name = "Key Vault Secrets Officer"
   principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
 
   depends_on = [

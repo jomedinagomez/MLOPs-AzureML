@@ -125,7 +125,7 @@ Managed in root only. See `infra/main.tf` Step 12 for the centralized assignment
 | `AzureML Data Scientist` | Workspace | Execute ML training jobs |
 | `Storage Blob Data Contributor` | Storage Account | Read/write training data and artifacts |
 | `Storage File Data Privileged Contributor` | Storage Account | **NEW**: Support for compute instances and file access |
-| `Key Vault Secrets User` | Key Vault | Access secrets during training |
+| `Key Vault Secrets Officer` | Key Vault | Required for AML workspace UAMI to set secrets during image builds and job runs. |
 | `AzureML Registry User` | Registry | Access shared models and components |
 
 ### **Workspace User-Assigned Identity Roles** (applied pre/provisioning)
@@ -194,11 +194,11 @@ The module automatically creates the following role assignments for non-human id
 - AzureML Data Scientist (Workspace scope)
 - Storage Blob Data Contributor (Storage Account scope)
 - Storage File Data Privileged Contributor (Storage Account scope)
-- Key Vault Secrets User (Key Vault scope)
+- Key Vault Secrets Officer (Key Vault scope, required for AML workspace UAMI to set secrets)
 - AcrPull/AcrPush (Registry scope)
 
 **Workspace UAMI (Pre-provisioning to avoid 403s):**
-- Key Vault Secrets User, Key Vault Reader (on workspace Key Vault)
+- Key Vault Secrets Officer, Key Vault Reader (on workspace Key Vault)
 - Reader, Azure AI Enterprise Network Connection Approver, Azure AI Administrator (on workspace RG)
 
 Note: Key Vault Reader is required for management‑plane `vaults/read` during workspace provisioning to avoid 403 errors; Secrets User covers data‑plane access later in lifecycle.
