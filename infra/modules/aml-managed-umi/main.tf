@@ -148,7 +148,7 @@ resource "azurerm_role_assignment" "workspace_key_vault_reader" {
 resource "time_sleep" "wait_rbac_role_propagation" {
   create_duration = "90s"
   depends_on = [
-    azurerm_role_assignment.workspace_key_vault_secrets_user,
+    azurerm_role_assignment.workspace_key_vault_secrets_officer,
     azurerm_role_assignment.workspace_key_vault_reader,
     azurerm_role_assignment.rg_reader,
     azurerm_role_assignment.ai_network_connection_approver,
@@ -173,7 +173,7 @@ resource "azapi_resource" "aml_workspace" {
     module.keyvault_aml,
     module.container_registry,
     azurerm_user_assigned_identity.workspace_identity,
-    azurerm_role_assignment.workspace_key_vault_secrets_user,
+    azurerm_role_assignment.workspace_key_vault_secrets_officer,
     azurerm_role_assignment.workspace_key_vault_reader,
     azurerm_role_assignment.rg_reader,
     azurerm_role_assignment.ai_network_connection_approver,
