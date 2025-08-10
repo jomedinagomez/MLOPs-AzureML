@@ -347,6 +347,21 @@ az identity show --name "${purpose}-mi-cluster" --resource-group <dns-resource-g
 az monitor activity-log list --resource-group <resource-group>
 ```
 
+## Destroy behavior and verification
+
+This module permanently deletes the ML workspace during `terraform destroy` using the ML CLI, matching the code in `main.tf` (local-exec on the workspace resource).
+
+- Exact command invoked:
+  ```powershell
+  az ml workspace delete --name <workspace-name> --resource-group <resource-group> --permanently-delete --yes
+  ```
+- The script ensures the `ml` CLI extension is installed and sets the subscription from the resource ID before deletion.
+- Expect a several-minute delay; logs include: `[AML Purge] Workspace permanently deleted.`
+- Verify name availability after destroy:
+  ```powershell
+  az ml workspace list --query "[?name=='<workspace-name>'].[name,resourceGroup]" -o table
+  ```
+
 ## 🔧 Troubleshooting
 
 ### **Common Deployment Issues**

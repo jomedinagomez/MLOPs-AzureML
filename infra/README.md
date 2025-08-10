@@ -298,6 +298,52 @@ az storage account show -g $DEV_RG_WS  --name (az resource list -g $DEV_RG_WS  -
 az keyvault show -g $DEV_RG_WS -n (az resource list -g $DEV_RG_WS  --resource-type Microsoft.KeyVault/vaults --query "[0].name" -o tsv)  --query "{publicNetworkAccess:properties.publicNetworkAccess, defaultAction:properties.networkAcls.defaultAction}" -o table
 ```
 
+## Destroy and verify (safe cleanup)
+
+This repo includes destroy-time cleanup hooks to avoid soft-delete collisions in future runs.
+
+- AML workspace: permanently deleted during destroy using Azure ML CLI (prevents name reuse conflicts)
+- Key Vault: optional purge helper (sandbox default) to remove soft-deleted vaults
+- Storage/ACR: best-effort cleanup of soft-deleted containers/blobs and ACR repos
+
+Quick destroy for a test cycle (example uses naming_suffix=ts01):
+
+```powershell
+cd infra
+terraform destroy -auto-approve -var naming_suffix=ts01
+```
+
+What to expect
+- AML purge step can take several minutes; logs show: "[AML Purge] Workspace permanently deleted."
+- After destroy, there should be no `rg-aml-*` resource groups for the chosen suffix.
+
+Optional verification
+```powershell
+# List any remaining ts01 resource groups (should return nothing)
+az group list --query "[?contains(name, '-ts01') && starts_with(name, 'rg-aml-')].name" -o table
+
+# Check that the workspace name is available again (should return empty for exact match)
+$WS='workspacename'
+az ml workspace list --query "[?name=='$WS'].[name,resourceGroup]" -o table
+```
+
+Notes
+- In production, consider disabling auto-purge for Key Vault by setting `enable_auto_purge = false` and enabling `key_vault_purge_protection_enabled = true`.
+- If you used targeted apply previously, prefer a full destroy to ensure shared Private DNS zones and links are removed in the correct order.
+
+Under the hood (exact commands used by destroy hooks)
+- AML purge (invoked automatically by Terraform):
+  ```powershell
+  az ml workspace delete --name <workspace-name> --resource-group <rg-name> --permanently-delete --yes
+  ```
+  The script ensures the ML CLI extension is installed and sets the subscription context, deriving subscription/RG from the workspace resource IDs.
+- Key Vault purge helper (when enabled for sandbox):
+  ```powershell
+  az keyvault purge --name <kv-name> --location <azure-region>
+  ```
+- Storage cleanup (best-effort): undelete deleted blobs and re-delete soft-deleted containers to clear remnants.
+- ACR cleanup (best-effort): delete any remaining repositories.
+
 ## Cost considerations (summary)
 - Dev: enable compute auto‑shutdown; apply storage lifecycle policies; right‑size Bastion/jumpbox and stop when idle.
 - Prod: enable Key Vault purge protection; avoid auto‑purge; consider reservations for steady compute; monitor private endpoint/DNS costs.
