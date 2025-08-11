@@ -1002,7 +1002,7 @@ resource "azapi_resource" "compute_cluster_uami" {
     azurerm_role_assignment.compute_rg_reader
   ]
 
-  type = "Microsoft.MachineLearningServices/workspaces/computes@2025-07-01-preview"
+  type = "Microsoft.MachineLearningServices/workspaces/computes@2025-01-01-preview"
   # Allow override; default pattern aml-cluster-<purpose>-<location_code><resolved_suffix>
   name      = coalesce(var.compute_cluster_name, "aml-cluster-${var.purpose}-${var.location_code}${local.resolved_suffix}")
   parent_id = azapi_resource.aml_workspace.id
@@ -1064,7 +1064,7 @@ resource "azapi_resource" "compute_instance_uami" {
     azurerm_role_assignment.compute_rg_reader
   ]
 
-  type = "Microsoft.MachineLearningServices/workspaces/computes@2025-07-01-preview"
+  type = "Microsoft.MachineLearningServices/workspaces/computes@2025-01-01-preview"
   # Allow override via variable; default pattern aml-instance-<purpose>-<location_code><resolved_suffix>
   name      = coalesce(var.compute_instance_name, "aml-instance-${var.purpose}-${var.location_code}${local.resolved_suffix}")
   parent_id = azapi_resource.aml_workspace.id
@@ -1084,7 +1084,7 @@ resource "azapi_resource" "compute_instance_uami" {
         enableNodePublicIp = false
         personalComputeInstanceSettings = {
           assignedUser = {
-            objectId = var.assigned_user_object_id
+            objectId = data.azurerm_client_config.current.object_id
             tenantId = data.azurerm_client_config.current.tenant_id
           }
         }
