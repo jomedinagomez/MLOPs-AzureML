@@ -306,6 +306,16 @@ Managed identities use different types based on component requirements:
     - [Reader](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#reader) (on private endpoints for storage accounts)
 - Note: Workspace UAMIs do NOT have AzureML Registry User roles. They create network connections only; registry data access is handled by compute UAMIs and human users.
 
+#### UAMI Read Requirement for Default/Image Build Compute and Job Runtime
+
+- When assigning a compute that uses a User‑Assigned Managed Identity (UAMI) as the workspace’s default or image‑build compute, the workspace UAMI must be able to read that compute UAMI resource.
+- Best practice: place the compute UAMI in the same workspace resource group so the existing RG‑scoped Reader on the workspace UAMI covers it.
+- If the compute UAMI resides in a different resource group or subscription, grant the workspace UAMI at least Reader on that identity or its RG prior to assignment.
+
+Job runtime identity selection:
+- When job code initializes Azure SDK clients (e.g., MLClient, Registry client) with `DefaultAzureCredential` and uses `DEFAULT_IDENTITY_CLIENT_ID`, the token acquisition targets that client ID. Set it to the compute UAMI client ID to ensure jobs run under the compute identity’s RBAC.
+- If `DEFAULT_IDENTITY_CLIENT_ID` is absent or points elsewhere, authentication can default to the workspace UAMI; RBAC will then be enforced against the workspace identity. Ensure whichever identity is used has required roles (e.g., AzureML Registry User, Storage Blob Data Contributor, Key Vault Secrets User, AzureML Data Scientist).
+
 #### Registry SMI (System-Assigned)
 - Identity Type: System-assigned (registries don’t support UAMI)
 - Created automatically with the registry
@@ -345,7 +355,7 @@ Key points:
 
 #### Compute Cluster & Compute Instance UAMI (Shared)
 - Name: "${purpose}-mi-compute"
-- Location: rg-aml-vnet-${purpose}-${location_code}${naming_suffix}
+- Location: rg-aml-ws-${purpose}-${location_code}${naming_suffix}
 - Used by: Both compute cluster and compute instance
 - Roles:
     - [AcrPull](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/containers#acrpull) (container registry)

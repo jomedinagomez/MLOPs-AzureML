@@ -18,15 +18,8 @@ resource "azurerm_subnet" "aml_subnet" {
   address_prefixes     = [var.subnet_address_prefix]
 }
 
-# Shared Managed Identity for Compute Cluster and Compute Instance
-# According to deployment strategy: "Compute Cluster & Compute Instance UAMI (Shared)"
-
-resource "azurerm_user_assigned_identity" "cc" {
-  name                = "${var.purpose}-mi-compute"
-  location            = var.location
-  resource_group_name = local.rg_name
-  tags                = var.tags
-}
+# NOTE: Compute UAMI is now created in the workspace resource group by root orchestration
+# and passed into the workspace module. This module no longer creates a compute UAMI.
 
 ##### Private DNS Zones for Azure ML and supporting services
 #####

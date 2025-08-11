@@ -6,20 +6,7 @@ output "subnet_id" {
   value       = azurerm_subnet.aml_subnet.id
 }
 
-output "cc_identity_id" {
-  description = "ID of the shared compute cluster and compute instance managed identity"
-  value       = azurerm_user_assigned_identity.cc.id
-}
-
-output "cc_identity_name" {
-  description = "Name of the shared compute cluster and compute instance managed identity"
-  value       = azurerm_user_assigned_identity.cc.name
-}
-
-output "cc_identity_principal_id" {
-  description = "Principal ID of the shared compute cluster and compute instance managed identity"
-  value       = azurerm_user_assigned_identity.cc.principal_id
-}
+# Removed compute UAMI outputs: compute identity is now created in workspace RG by root
 
 output "resource_group_name" {
   description = "Name of the resource group containing VNet and DNS zones"

@@ -77,24 +77,24 @@ graph TB
 
 ### **Critical Settings to Update**
 
-This module depends on outputs from the `aml-vnet` module and an existing resource group name. When using the root orchestration, these dependencies are automatically resolved. For standalone deployment, you must provide:
+This module depends on an existing resource group name and network inputs. When using the root orchestration, these dependencies are automatically resolved. For standalone deployment, you must provide:
 
 #### 1. Identity & Access
 Human-user (data scientist) RBAC is assigned in the root module (Step 12 barrier). This module does not accept user IDs and does not create human role assignments.
 
 #### 2. Network Dependencies
 ```hcl
-# From aml-vnet module outputs (automatically provided in orchestrated deployment)
+# Required network inputs (typically provided by root orchestration)
 subnet_id = "/subscriptions/{sub}/resourceGroups/{resource-group-name}/providers/Microsoft.Network/virtualNetworks/{vnet-name}/subnets/{subnet-name}"
 
-# DNS zone resource group (from aml-vnet module)
+# DNS zone resource group (shared DNS RG recommended)
 resource_group_name_dns = "{resource-group-name}"
 ```
 
 #### 3. Managed Identity References
 ```hcl
-# Compute cluster managed identity (from aml-vnet module)
-compute_cluster_identity_id = "/subscriptions/{sub}/resourceGroups/{resource-group-name}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{managed-identity-name}"
+# Compute cluster managed identity (passed from root orchestration)
+compute_cluster_identity_id = "/subscriptions/{sub}/resourceGroups/{workspace-rg}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{managed-identity-name}"
 compute_cluster_identity_principal_id = "87654321-4321-4321-4321-210987654321"
 ```
 
@@ -137,6 +137,17 @@ Managed in root only. See `infra/main.tf` Step 12 for the centralized assignment
 ```bash
 az account show --query id -o tsv
 ```
+
+#### Note on User-Assigned Managed Identities (UAMI)
+
+- If you configure compute to use a User-Assigned Managed Identity (UAMI) or set a default compute for image creation, the **workspace UAMI must be able to read the compute UAMI resource** to reference/assign it.
+- When the compute UAMI is created in the same workspace resource group, this requirement is satisfied by the existing **Reader** role assigned to the workspace UAMI at the workspace RG scope.
+- If the compute UAMI lives in a different resource group or subscription, you must grant the workspace UAMI at least **Reader** on that scope (either directly on the UAMI resource or on its resource group) before assigning it as default/image build compute.
+
+Additional runtime note (jobs and clients):
+- If your job code initializes Azure SDK clients (e.g., MLClient, Registry client) using `DefaultAzureCredential` and relies on `DEFAULT_IDENTITY_CLIENT_ID`, set that variable to the compute UAMI client ID so the job authenticates as the compute identity. Otherwise, it may default to the workspace UAMI and RBAC will be enforced against the workspace identity instead.
+- Ensure the chosen identity (compute UAMI or workspace UAMI) has the required roles for the operations your job performs (e.g., AzureML Registry User, Storage Blob Data Contributor, Key Vault Secrets User, AzureML Data Scientist, etc.).
+
 
 ## Optional Customizations
 
@@ -280,7 +291,7 @@ This module creates the following Azure resources:
 
 ### ML Workspace Components  
 - **Azure ML Workspace**: Main ML workspace with managed VNet
-- **User-Assigned Managed Identity**: Created by `aml-vnet` module for compute resources
+- **User-Assigned Managed Identity**: Provided by root orchestration for compute resources
 
 ### Supporting Services
 - **Azure Container Registry**: Container image storage
@@ -299,7 +310,7 @@ This module creates the following Azure resources:
   - User roles: Workspace-scoped permissions
   - Compute identity roles: Individual resource-scoped permissions (follows principle of least privilege)
 - **Network Security**: Private endpoint connectivity only
-- **Managed Identity Integration**: References user-assigned identity from `aml-vnet` module
+- **Managed Identity Integration**: References user-assigned identity passed from root orchestration
 
 ## Outputs
 
@@ -434,22 +445,23 @@ terraform destroy
 ## Dependencies
 
 This module depends on:
-- `aml-vnet` module for networking infrastructure and managed identities
-- Private DNS zones for name resolution (created by `aml-vnet`)
-- User-assigned managed identity for compute cluster (created by `aml-vnet`)
+- Networking infrastructure (VNet/subnet) provisioned by root or a separate network module
+- Private DNS zones for name resolution (shared DNS RG is recommended and provided by root in this repo)
+- User-assigned managed identity for compute cluster (created in root and passed in)
 - Existing Azure subscription with proper quotas
 
 ## Module Integration
 
-This module works in conjunction with the `aml-vnet` module:
+This module works in conjunction with the root orchestration:
 
-1. **Deploy `aml-vnet` first**: Creates VNet, subnet, DNS zones, and managed identities
-2. **Deploy `aml-managed-smi` second**: Creates ML workspace and references resources from step 1
+1. **Deploy networking + shared DNS**: Creates VNet, subnet, and DNS zones
+2. **Create compute UAMI in workspace RG**: Root creates and passes identity ID/principal ID
+3. **Deploy `aml-managed-smi`**: Creates ML workspace and references resources from prior steps
 
 The modules are designed to use consistent variable naming:
 - Both use `purpose`, `location_code`, `naming_suffix` for naming consistency
-- `resource_group_name_dns` references the resource group containing DNS zones and managed identities
-- Managed identity naming follows `${purpose}-mi-cluster` pattern
+- `resource_group_name_dns` references the resource group containing shared DNS zones
+- Managed identity naming follows `${purpose}-mi-compute` pattern
 
 ## Module Structure
 

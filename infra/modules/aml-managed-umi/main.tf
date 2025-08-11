@@ -1048,6 +1048,7 @@ resource "azapi_resource" "compute_cluster_uami" {
 
 ## Create compute instance with user-assigned managed identity for interactive development
 ##
+
 resource "azapi_resource" "compute_instance_uami" {
   depends_on = [
     azapi_resource.aml_workspace,
@@ -1124,6 +1125,7 @@ resource "time_sleep" "wait_for_compute_resources" {
 resource "azapi_update_resource" "workspace_image_build_config" {
   depends_on = [
     azapi_resource.aml_workspace,
+    azapi_resource.compute_cluster_uami,
     time_sleep.wait_for_compute_resources,
     module.private_endpoint_aml_workspace
   ]

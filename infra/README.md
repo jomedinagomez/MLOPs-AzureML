@@ -80,9 +80,9 @@ key_vault_purge_protection_enabled = true
 enable_auto_purge                  = false
 ```
 This ensures soft-deleted vault items are retained and not purged automatically.
-1. **aml-vnet**: Deploys networking, DNS, and managed identities (foundation for all other modules)
-2. **aml-managed-smi**: Deploys ML workspace, storage, Key Vault, ACR, compute, and private endpoints. Consumes outputs from `aml-vnet`.
-3. **aml-registry-smi**: Deploys ML registry, Log Analytics, and private endpoint. Consumes outputs from `aml-vnet` and workspace identity from `aml-managed-smi`.
+1. **Networking + Shared DNS (root)**: Deploys VNets/subnets and shared Private DNS zones (foundation for all modules)
+2. **aml-managed-smi**: Deploys ML workspace, storage, Key Vault, ACR, compute, and private endpoints. Consumes network/DNS inputs from root.
+3. **aml-registry-smi**: Deploys ML registry, Log Analytics, and private endpoint. Consumes network/DNS inputs from root and workspace identity from `aml-managed-smi`.
 4. **workspace-to-registry-outbound-rule**: Creates user-defined outbound rule allowing workspace to create managed private endpoints to the registry.
 5. **workspace-storage-network-rules**: Configures storage account network access rules to enable asset sharing between workspace and registry.
 
@@ -112,7 +112,6 @@ flowchart TD
     subgraph RG1["rg-aml-vnet-{env}-{loc}"]
         VNET[VNet & Subnets]
         DNS[DNS Zones]
-        MI[Managed Identities]
     end
     subgraph RG2["rg-aml-ws-{env}-{loc}"]
         WS[ML Workspace]
@@ -161,18 +160,18 @@ When a workspace creates a managed private endpoint to a registry, the platform 
 Effectively, this pre‑authorization grants the specified identity Azure AI Administrator permissions scoped to the registry’s Microsoft‑managed resource group so the platform can read required image/asset metadata during managed private endpoint creation.
 
 ### Key Dependency Callouts
-- **aml-managed-smi** and **aml-registry-smi** both require outputs from **aml-vnet** (subnet, DNS, managed identities)
+- **aml-managed-smi** and **aml-registry-smi** both require network inputs from root (subnet ID, shared DNS RG/zone IDs)
 - **aml-registry-smi** requires the workspace principal ID from **aml-managed-smi** for network connection approver permissions
 - **workspace-to-registry-outbound-rule** requires both workspace ID and registry ID, enabling managed private endpoint creation from workspace to external registry
 - All modules are orchestrated from the root `main.tf` for dependency management
 - Microsoft-managed resource groups are created automatically for the registry and are not managed by Terraform
 
-**Note:** Always deploy modules in the order above. Confirm outputs from `aml-vnet` before proceeding with dependent modules. All dependencies are managed via module outputs and remote state.
+**Note:** Always deploy modules in the order above. Confirm root networking/DNS resources before proceeding with dependent modules. All dependencies are managed via module outputs and remote state.
 
 **Key Dependencies:**
-1. **aml-vnet** creates networking foundation and managed identities
-2. **aml-managed-smi** consumes VNet outputs and managed identity references  
-3. **aml-registry-smi** consumes VNet outputs for private connectivity AND workspace identity for network connection approver role
+1. **Root networking** creates VNets/subnets and shared Private DNS zones
+2. **aml-managed-smi** consumes network/DNS inputs and provides the workspace UAMI principal ID  
+3. **aml-registry-smi** consumes network/DNS inputs and the workspace UAMI principal ID for network connection approver role
 4. All modules coordinate through root orchestration
 │   └── terraform.tfvars          # Registry configuration
 └── modules/                       # Reusable Terraform modules
@@ -359,13 +358,12 @@ Under the hood (exact commands used by destroy hooks)
 
 ```
 Root Orchestration (main.tf)
-├── 1. aml-vnet (networking foundation)
+├── 1. Networking (root) – foundation
 │   ├── Virtual Network (10.1.0.0/16)
 │   ├── Private Subnet (10.1.1.0/24)
-│   ├── 9 Private DNS Zones
-│   └── 2 Managed Identities
+│   └── Shared Private DNS Zones (AML + core services)
 │
-├── 2. aml-workspace (depends on aml-vnet)
+├── 2. aml-workspace (consumes root networking)
 │   ├── Azure ML Workspace
 │   ├── Storage Account + Private Endpoint
 │   ├── Key Vault + Private Endpoint
@@ -374,7 +372,7 @@ Root Orchestration (main.tf)
 │   ├── Compute Cluster
 │   └── Role Assignments
 │
-└── 3. aml-registry (depends on aml-vnet + aml-workspace)
+└── 3. aml-registry (consumes root networking + workspace outputs)
     ├── Azure ML Registry
     ├── Log Analytics Workspace
     ├── Private Endpoint
@@ -388,7 +386,7 @@ Root Orchestration (main.tf)
 
 | Module | Resource Types | Approximate Count | Resource Group |
 |--------|---------------|-------------------|----------------|
-| **aml-vnet** | VNet, Subnet, DNS Zones, Identities | ~12 resources | `rg-aml-vnet-{environment}-{location-code}` |
+| **Networking (root)** | VNet, Subnet, Shared DNS Zones | ~12 resources | `rg-aml-vnet-{environment}-{location-code}` |
 | **aml-workspace** | Workspace, Storage, KV, ACR, AI, Compute, PE | ~25 resources | `rg-aml-ws-{environment}-{location-code}` |
 | **aml-registry** | Registry, Log Analytics, PE | ~5 resources | `rg-aml-reg-{environment}-{location-code}` |
 | **outbound-rule** | Workspace network outbound rule | ~1 resource | Managed by workspace |
@@ -463,6 +461,15 @@ The infrastructure provides comprehensive outputs for integration:
 - **RBAC**: Least privilege role assignments
 - **Cross-Service Permissions**: Workspace has network connection approver role on registry
 - **Key Management**: Azure Key Vault for secrets
+
+#### UAMI assignment prerequisite when using default/image build compute
+- If your workspace uses a compute with a **User-Assigned Managed Identity (UAMI)** for image builds or as default compute, the **workspace UAMI must have read access over that compute UAMI** to reference and assign it.
+- Best practice: Create the compute UAMI in the same workspace resource group. The workspace UAMI already has **Reader** on the workspace RG, which covers read access to the compute UAMI.
+- If the compute UAMI is in a different RG/subscription, grant the workspace UAMI **Reader** on that identity or its resource group prior to assignment.
+
+Runtime identity selection for jobs (DEFAULT_IDENTITY_CLIENT_ID):
+- When jobs use `DefaultAzureCredential` and set `DEFAULT_IDENTITY_CLIENT_ID`, they authenticate as that specific managed identity (typically the compute UAMI). Make sure that identity has the right RBAC (e.g., AzureML Registry User, Storage roles, Key Vault roles).
+- If `DEFAULT_IDENTITY_CLIENT_ID` is not set or mismatched, authentication can fall back to the workspace UAMI, and RBAC will be evaluated against the workspace identity instead.
 
 ### Network Connectivity
 - **User-Defined Outbound Rules**: Workspace can create managed private endpoints to external registry

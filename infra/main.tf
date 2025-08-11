@@ -380,14 +380,14 @@ resource "azurerm_log_analytics_workspace" "prod_logs" {
 resource "azurerm_user_assigned_identity" "dev_cc" {
   name                = "dev-mi-compute"
   location            = var.location
-  resource_group_name = azurerm_resource_group.dev_vnet_rg.name
+  resource_group_name = azurerm_resource_group.dev_workspace_rg.name
   tags                = merge(var.tags, { environment = "development", purpose = "dev", component = "compute-mi" })
 }
 
 resource "azurerm_user_assigned_identity" "prod_cc" {
   name                = "prod-mi-compute"
   location            = var.location
-  resource_group_name = azurerm_resource_group.prod_vnet_rg.name
+  resource_group_name = azurerm_resource_group.prod_workspace_rg.name
   tags                = merge(var.tags, { environment = "production", purpose = "prod", component = "compute-mi" })
 }
 
@@ -436,9 +436,11 @@ module "dev_managed_umi" {
     azurerm_role_assignment.sp_dev_workspace_user_access_admin,
     azurerm_role_assignment.sp_dev_workspace_network_contributor,
     azurerm_virtual_network.dev_vnet,
-    azurerm_log_analytics_workspace.dev_logs
+    azurerm_log_analytics_workspace.dev_logs,
+    azurerm_user_assigned_identity.dev_cc
   ]
 }
+
 
 # Dev Registry Module
 module "dev_registry" {
@@ -723,9 +725,11 @@ module "prod_managed_umi" {
     azurerm_role_assignment.sp_prod_workspace_user_access_admin,
     azurerm_role_assignment.sp_prod_workspace_network_contributor,
     module.dev_registry,
-    azurerm_log_analytics_workspace.prod_logs
+    azurerm_log_analytics_workspace.prod_logs,
+    azurerm_user_assigned_identity.prod_cc
   ]
 }
+
 
 # Prod Registry Module
 module "prod_registry" {

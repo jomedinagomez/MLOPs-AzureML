@@ -1,3 +1,4 @@
+
 variable "prefix" {
   description = "Base prefix for all resource names to ensure uniqueness and consistency"
   type        = string
@@ -141,12 +142,12 @@ variable "dns_zone_aml_instances_id" {
 }
 
 variable "compute_cluster_identity_id" {
-  description = "ID of the compute cluster managed identity from VNet module"
+  description = "ID of the compute cluster user-assigned managed identity (passed from root orchestration)"
   type        = string
 }
 
 variable "compute_cluster_principal_id" {
-  description = "Principal ID of the compute cluster managed identity from VNet module"
+  description = "Principal ID of the compute cluster user-assigned managed identity (passed from root orchestration)"
   type        = string
 }
 

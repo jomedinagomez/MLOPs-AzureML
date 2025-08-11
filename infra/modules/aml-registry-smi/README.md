@@ -49,8 +49,8 @@ graph TB
     end
     
     subgraph "External Dependencies"
-        VNet[VNet from aml-vnet module]
-        DNSZone[Private DNS Zone<br/>privatelink.api.azureml.ms]
+        VNet[Workspace VNet/Subnet]
+        DNSZone[Shared Private DNS Zone<br/>privatelink.api.azureml.ms]
         WS[ML Workspaces<br/>Registry Consumers]
     end
     
@@ -79,7 +79,7 @@ Role assignment workaround (pre‑authorization): In private‑only deployments,
 
 ### **Critical Settings to Update**
 
-This module depends on outputs from the `aml-vnet` module. When using the root orchestration, these dependencies are automatically resolved.
+This module depends on network inputs (subnet ID, DNS RG) provided by the root orchestration. When using the root, these dependencies are automatically resolved.
 
 #### 1. User Identity Configuration
 ```hcl
@@ -94,10 +94,10 @@ az ad signed-in-user show --query id -o tsv
 
 #### 2. Network Dependencies
 ```hcl
-# From aml-vnet module outputs (automatically provided in orchestrated deployment)
+# From root networking (automatically provided in orchestrated deployment)
 subnet_id = "/subscriptions/{sub}/resourceGroups/{resource-group-name}/providers/Microsoft.Network/virtualNetworks/{vnet-name}/subnets/{subnet-name}"
 
-# DNS zone resource group (from aml-vnet module)  
+# DNS zone resource group (shared DNS RG)  
 resource_group_name_dns = "{resource-group-name}"
 
 # VNet location for private endpoint
@@ -107,7 +107,7 @@ workload_vnet_location_code = "cc"
 
 #### 3. Managed Identity Access
 ```hcl
-# Compute cluster identity for registry access (from aml-vnet module)
+# Compute cluster identity for registry access (passed from workspace/root)
 compute_cluster_identity_principal_id = "87654321-4321-4321-4321-210987654321"
 ```
 
@@ -257,7 +257,7 @@ The module automatically creates the following role assignments:
 - Azure CLI installed and authenticated
 - Terraform >= 1.0 installed
 - Existing VNet and subnet for private endpoints
-- Private DNS zones configured and linked to your VNet (deployed via `aml-vnet` module)
+- Private DNS zones configured and linked to your VNet (shared DNS RG)
 - Appropriate Azure RBAC permissions to create resources
 - Azure subscription with sufficient quota for ML resources
 
@@ -447,7 +447,7 @@ terraform destroy
 ## Dependencies
 
 This module depends on:
-- `aml-vnet` module for networking infrastructure and private DNS zones
+- Networking infrastructure and shared Private DNS zones (provided by root)
 - Existing Azure subscription with proper quotas
 - VNet and subnet for private endpoint connectivity
 
@@ -468,7 +468,6 @@ aml-registry-smi/
 
 ## Related Modules
 
-- **aml-vnet**: Creates VNet, subnets, and private DNS zones
 - **aml-managed-smi**: Creates Azure ML workspace with managed VNet
 - **modules/private-endpoint**: Shared module for private endpoint creation
 
