@@ -153,3 +153,21 @@ jobs:
       endpoint_name: '${{parent.inputs.model_base}}-ws-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
       deployment_name: ${{parent.inputs.deployment_name}}
       register_job_status: ${{parent.jobs.registerws_job.outputs.register_output}}
+
+  test_endpoint_ex_job:
+    type: command
+    component: ../src/components/test_endpoint.yaml
+    inputs:
+      endpoint_name: '${{parent.inputs.model_base}}-ex-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
+      deployment_name: ${{parent.inputs.deployment_name}}
+      test_data: ${{parent.jobs.transform_job.outputs.test_data}}
+      output_report: test_endpoint_ex_report.txt
+
+  test_endpoint_ws_job:
+    type: command
+    component: ../src/components/test_endpoint.yaml
+    inputs:
+      endpoint_name: '${{parent.inputs.model_base}}-ws-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
+      deployment_name: ${{parent.inputs.deployment_name}}
+      test_data: ${{parent.jobs.transform_job.outputs.test_data}}
+      output_report: test_endpoint_ws_report.txt
