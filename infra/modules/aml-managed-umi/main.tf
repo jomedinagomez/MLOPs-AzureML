@@ -1002,7 +1002,7 @@ resource "azapi_resource" "compute_cluster_uami" {
     azurerm_role_assignment.compute_rg_reader
   ]
 
-  type = "Microsoft.MachineLearningServices/workspaces/computes@2024-10-01"
+  type = "Microsoft.MachineLearningServices/workspaces/computes@2025-07-01-preview"
   # Allow override; default pattern amlcc-<env>-<region><suffix>
   name      = coalesce(var.compute_cluster_name, "amlcc-${var.purpose}-${var.location_code}${local.resolved_suffix}")
   parent_id = azapi_resource.aml_workspace.id
@@ -1064,7 +1064,7 @@ resource "azapi_resource" "compute_instance_uami" {
     azurerm_role_assignment.compute_rg_reader
   ]
 
-  type = "Microsoft.MachineLearningServices/workspaces/computes@2024-10-01"
+  type = "Microsoft.MachineLearningServices/workspaces/computes@2025-07-01-preview"
   # Allow override via variable; default pattern amli-<env>-<region><suffix>
   name      = coalesce(var.compute_instance_name, "amli-${var.purpose}-${var.location_code}${local.resolved_suffix}")
   parent_id = azapi_resource.aml_workspace.id
