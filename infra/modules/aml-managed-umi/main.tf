@@ -1084,13 +1084,14 @@ resource "azapi_resource" "compute_instance_uami" {
         enableNodePublicIp = false
         personalComputeInstanceSettings = {
           assignedUser = {
-            objectId = data.azurerm_client_config.current.object_id
+            objectId = var.assigned_user_object_id
             tenantId = data.azurerm_client_config.current.tenant_id
           }
         }
         sshSettings = {
           sshPublicAccess = "Disabled"
         }
+        enableSSO                        = false
         applicationSharingPolicy         = "Personal"
         computeInstanceAuthorizationType = "personal"
       }

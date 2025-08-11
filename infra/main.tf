@@ -572,6 +572,16 @@ resource "azurerm_public_ip" "bastion_pip" {
   tags                = merge(var.tags, { environment = "production", purpose = "prod", component = "bastion" })
 }
 
+# Optional: Assign a public IP to the jumpbox NIC (prod)
+resource "azurerm_public_ip" "prod_vm" {
+  name                = "pip-${var.prefix}-vm-prod-${var.location_code}${var.naming_suffix}"
+  location            = var.location
+  resource_group_name = azurerm_resource_group.prod_vnet_rg.name
+  allocation_method   = "Static"
+  sku                 = "Standard"
+  tags                = merge(var.tags, { environment = "production", purpose = "prod", component = "vm" })
+}
+
 resource "azurerm_bastion_host" "prod" {
   name                = "bas-${var.prefix}-prod-${var.location_code}${var.naming_suffix}"
   location            = var.location
@@ -597,6 +607,7 @@ resource "azurerm_network_interface" "prod_vm_nic" {
     name                          = "ipconfig1"
     subnet_id                     = azurerm_subnet.prod_vm.id
     private_ip_address_allocation = "Dynamic"
+    public_ip_address_id          = azurerm_public_ip.prod_vm.id
   }
 
   tags = merge(var.tags, { environment = "production", purpose = "prod", component = "vm" })

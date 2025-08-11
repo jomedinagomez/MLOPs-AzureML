@@ -181,3 +181,9 @@ variable "compute_instance_name" {
   type        = string
   default     = null
 }
+
+variable "assigned_user_object_id" {
+  description = "Object ID of the user to assign the compute instance to (POBO to disable SSO by default). If null, falls back to current caller."
+  type        = string
+  default     = null
+}
