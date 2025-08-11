@@ -42,21 +42,20 @@ ml_client = MLClient(credential=credential,subscription_id=ws._subscription_id,r
 
 from azure.ai.ml.entities import AmlCompute
 from azure.core.exceptions import ResourceNotFoundError
-compute_name = "amlcc-dev-cc01"
-_ = ml_client.compute.get(compute_name)
-print("Found existing compute target..")
-####
-
-mlflow.sklearn.autolog()
-
 parser = argparse.ArgumentParser("train")
 parser.add_argument("--training_data", type=str, help="Path to training data")
 parser.add_argument("--test_data", type=str, help="Path to test data")
 parser.add_argument("--model_output", type=str, help="Path of output model")
 parser.add_argument("--model_name", type=str, help="Model name")
-
-
+parser.add_argument("--automl_compute", type=str, default="aml-cluster-dev-cc01", help="Compute cluster for AutoML job")
 args = parser.parse_args()
+compute_name = args.automl_compute
+_ = ml_client.compute.get(compute_name)
+print(f"Found existing compute target: {compute_name}")
+####
+
+
+mlflow.sklearn.autolog()
 
 print("hello training world...")
 

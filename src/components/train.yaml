@@ -9,6 +9,9 @@ inputs:
   model_name:
     type: string
     default: test
+  automl_compute:
+    type: string
+    default: aml-cluster-dev-cc01
 outputs:
   model_output:
     type: mlflow_model
@@ -25,5 +28,6 @@ command: >-
   --training_data ${{inputs.training_data}} 
   --model_name ${{inputs.model_name}} 
   --model_output ${{outputs.model_output}}
+  --automl_compute ${{inputs.automl_compute}}
 
 # </component>

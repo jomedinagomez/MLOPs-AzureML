@@ -19,6 +19,8 @@ inputs:
   artifact_id: 'm'
   deployment_name: 'green'
   registry: 'mlrdevcc01'
+  # compute cluster for automl job
+  automl_compute: 'aml-cluster-dev-cc01'
 outputs: 
   pipeline_job_trained_model:
     mode: rw_mount
@@ -33,7 +35,8 @@ outputs:
 
 settings:
   default_datastore: azureml:workspaceblobstore
-  default_compute: azureml:amlcc-dev-cc01
+  # All jobs use this compute unless overridden at the job level. To change, edit this value.
+  default_compute: azureml:aml-cluster-dev-cc01
   continue_on_step_failure: false
 
 jobs:
@@ -74,6 +77,7 @@ jobs:
       training_data: ${{parent.jobs.transform_job.outputs.train_data}}
       testing_data: ${{parent.jobs.transform_job.outputs.test_data}}
       model_name: '${{parent.inputs.model_base}}-${{parent.inputs.environment}}'
+      automl_compute: ${{parent.inputs.automl_compute}}
     outputs:
       model_output: ${{parent.outputs.pipeline_job_trained_model}}
 
