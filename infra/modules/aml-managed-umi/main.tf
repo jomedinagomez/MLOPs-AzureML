@@ -1003,8 +1003,8 @@ resource "azapi_resource" "compute_cluster_uami" {
   ]
 
   type = "Microsoft.MachineLearningServices/workspaces/computes@2025-07-01-preview"
-  # Allow override; default pattern amlcc-<env>-<region><suffix>
-  name      = coalesce(var.compute_cluster_name, "amlcc-${var.purpose}-${var.location_code}${local.resolved_suffix}")
+  # Allow override; default pattern aml-cluster-<purpose>-<location_code><resolved_suffix>
+  name      = coalesce(var.compute_cluster_name, "aml-cluster-${var.purpose}-${var.location_code}${local.resolved_suffix}")
   parent_id = azapi_resource.aml_workspace.id
   location  = var.location
 
@@ -1065,8 +1065,8 @@ resource "azapi_resource" "compute_instance_uami" {
   ]
 
   type = "Microsoft.MachineLearningServices/workspaces/computes@2025-07-01-preview"
-  # Allow override via variable; default pattern amli-<env>-<region><suffix>
-  name      = coalesce(var.compute_instance_name, "amli-${var.purpose}-${var.location_code}${local.resolved_suffix}")
+  # Allow override via variable; default pattern aml-instance-<purpose>-<location_code><resolved_suffix>
+  name      = coalesce(var.compute_instance_name, "aml-instance-${var.purpose}-${var.location_code}${local.resolved_suffix}")
   parent_id = azapi_resource.aml_workspace.id
   location  = var.location
 
