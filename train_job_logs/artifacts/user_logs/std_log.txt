@@ -1,4 +1,0 @@
-  File "/mnt/azureml/cr/j/8a60481cb7084dda8fa80f398a2e969e/exe/wd/train.py", line 86
-    training_data=    git commit -m "Parameterize AutoML compute cluster and refactor training pipeline,
-                          ^
-SyntaxError: invalid syntax
