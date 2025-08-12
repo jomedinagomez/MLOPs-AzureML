@@ -37,10 +37,11 @@ if not os.path.exists(conda_file_path):
     exit(1)
 env = Environment(
     name=args.env_name,
-    image="mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04:20231023.v1",
+    image="mcr.microsoft.com/azureml/openmpi5.0-ubuntu24.04:latest",
     conda_file=conda_file_path,
     description="Taxi classification production environment"
 )
+
 
 ml_client.environments.create_or_update(env)
 print(f"Environment '{args.env_name}' created or updated.")

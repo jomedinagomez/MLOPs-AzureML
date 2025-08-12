@@ -48,7 +48,7 @@ inputs:
   # compute cluster for automl job
   automl_compute: 'aml-cluster-prod-cc01'  # <-- set to your production compute
   # conda file for the environment to be created
-  conda_file: ../../environment/custom_prod/conda.yaml
+  conda_file: custom_prod.yaml
 outputs: 
   pipeline_job_trained_model:
     mode: rw_mount
@@ -212,6 +212,7 @@ jobs:
     outputs:
       report_folder:
 
+
   create_env_job:
     type: command
     component: ../src/components/create_env.yaml
@@ -221,3 +222,13 @@ jobs:
     outputs:
       env_status:
     # This job creates the environment and can be used as a dependency for other jobs if needed
+
+  test_env_ready_job:
+    type: command
+    command: echo "Env created successfully"
+    code: .
+    environment: azureml:taxi-class-env-prod@latest
+    compute: azureml:aml-cluster-prod-cc01
+    inputs:
+      env_status: ${{parent.jobs.create_env_job.outputs.env_status}}
+    # This job simply checks that the environment is available and can be used in a job
