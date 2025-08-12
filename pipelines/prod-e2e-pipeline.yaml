@@ -47,6 +47,8 @@ inputs:
   registry: 'mlrprodcc01'  # <-- set to your production registry
   # compute cluster for automl job
   automl_compute: 'aml-cluster-prod-cc01'  # <-- set to your production compute
+  # conda file for the environment to be created
+  conda_file: ../../environment/custom_prod/conda.yaml
 outputs: 
   pipeline_job_trained_model:
     mode: rw_mount
@@ -215,6 +217,7 @@ jobs:
     component: ../src/components/create_env.yaml
     inputs:
       env_name: taxi-class-env-prod
+      conda_file: ${{parent.inputs.conda_file}}
     outputs:
       env_status:
     # This job creates the environment and can be used as a dependency for other jobs if needed
