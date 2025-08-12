@@ -10,16 +10,18 @@ inputs:
     optional: true
   test_data:
     type: uri_folder
-  output_report:
-    type: uri_file
-outputs: {}
+  deploy_status:
+    type: uri_folder
+    optional: true
+outputs:
+  report_folder:
+    type: uri_folder
 environment:
   conda_file: ../../environment/score/conda.yaml
   image: mcr.microsoft.com/azureml/openmpi5.0-ubuntu24.04:latest
 code: ../test_endpoint
 command: >-
   python test_endpoint.py \
-    --endpoint_name ${{inputs.endpoint_name}} \
-    --deployment_name ${{inputs.deployment_name}} \
-    --test_data ${{inputs.test_data}} \
-    --output_report ${{inputs.output_report}}
+    --endpoint_name ${{inputs.endpoint_name}}\
+    --test_data ${{inputs.test_data}}\
+    --report_folder ${{outputs.report_folder}}

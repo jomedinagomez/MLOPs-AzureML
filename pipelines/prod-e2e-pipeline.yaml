@@ -1,26 +1,52 @@
+
 $schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
 type: pipeline
-experiment_name: nyc-taxi-pipeline-class-dev
-description: Train Classification model based on nyc taxi dataset for the dev environment
+experiment_name: nyc-taxi-pipeline-class-prod
+description: Train Classification model based on nyc taxi dataset for the production environment
 
 # Notes:
 # - These jobs currently use MLflow models. Later you can switch to a custom artifact flow.
 # - To keep inputs minimal, we derive names in jobs and add a short artifact identifier:
 #   artifact_id: 'm' for MLflow (now), 'c' for custom (later).
 # - We apply artifact_id only to register/deploy names so training/comparison remain unchanged.
+# - To enforce that test jobs run after deploy jobs, we use a dummy output (deploy_status) in deploy jobs
+#   and a corresponding dummy input in test jobs. This does not transfer data, but ensures correct job order.
+#   No code changes are needed for these dummy outputs/inputs.
+#
+# Patterns for environment-dependent inputs:
+# - environment: 'dev' or 'prod' (controls the environment context for the pipeline)
+# - automl_compute: 'aml-cluster-dev-cc01' for dev, 'aml-cluster-prod-cc01' for prod (set to your actual compute names)
+# - registry: 'mlrdevcc01' for dev, 'mlrprodcc01' for prod (set to your actual registry names)
+# - deployment_name: can be 'green', 'blue', or any deployment slot name; may differ between dev and prod
+# - default_compute: should match automl_compute for the environment
+#
+# To switch between dev and prod, update these values accordingly in the inputs and settings sections.
+#
+# Workspace separation and naming pattern:
+# - Dev and prod pipelines run in completely separate Azure ML workspaces, each in its own resource group.
+# - Workspace resource group names follow the pattern: 'rg-<prefix>-ws-<env>-<location_code>-<naming_suffix>'
+#   - Example (dev):   rg-aml-ws-dev-cc-01
+#   - Example (prod):  rg-aml-ws-prod-cc-01
+# - Workspace names follow the pattern: '<workspace_prefix>-<env>-<location_code>-<naming_suffix>'
+#   - Example (dev):   mlw-dev-cc-01
+#   - Example (prod):  mlw-prod-cc-01
+# - The <prefix>, <workspace_prefix>, <location_code>, and <naming_suffix> are set in Terraform variables (see infra/variables.tf).
+# - This ensures strict separation of dev and prod environments, with no resource overlap.
+# - When running the pipeline, always use the correct workspace for the target environment.
+
 
 # <inputs_and_outputs>
 inputs:
   # environment identifier for this pipeline config
-  environment: 'dev'
+  environment: 'prod'
   # model name
   model_base: 'taxi-class'
   # artifact identifier for naming: 'm' (MLflow now), 'c' (custom later)
   artifact_id: 'm'
   deployment_name: 'green'
-  registry: 'mlrdevcc01'
+  registry: 'mlrprodcc01'  # <-- set to your production registry
   # compute cluster for automl job
-  automl_compute: 'aml-cluster-dev-cc01'
+  automl_compute: 'aml-cluster-prod-cc01'  # <-- set to your production compute
 outputs: 
   pipeline_job_trained_model:
     mode: rw_mount
@@ -36,7 +62,7 @@ outputs:
 settings:
   default_datastore: azureml:workspaceblobstore
   # All jobs use this compute unless overridden at the job level. To change, edit this value.
-  default_compute: azureml:aml-cluster-dev-cc01
+  default_compute: azureml:aml-cluster-prod-cc01  # <-- set to your production compute
   continue_on_step_failure: false
 
 jobs:
@@ -143,6 +169,9 @@ jobs:
       deployment_name: ${{parent.inputs.deployment_name}}
       registry: ${{parent.inputs.registry}}
       register_job_status: ${{parent.jobs.registerex_job.outputs.register_output}}
+    # Dummy output to enforce dependency for test job. Not used for data transfer.
+    outputs:
+      deploy_status:  # This output is only used to enforce that test_endpoint_ex_job runs after deployex_job
 
   deployws_job:
     type: command
@@ -153,6 +182,9 @@ jobs:
       endpoint_name: '${{parent.inputs.model_base}}-ws-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
       deployment_name: ${{parent.inputs.deployment_name}}
       register_job_status: ${{parent.jobs.registerws_job.outputs.register_output}}
+    # Dummy output to enforce dependency for test job. Not used for data transfer.
+    outputs:
+      deploy_status:  # This output is only used to enforce that test_endpoint_ws_job runs after deployws_job
 
   test_endpoint_ex_job:
     type: command
@@ -161,7 +193,11 @@ jobs:
       endpoint_name: '${{parent.inputs.model_base}}-ex-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
       deployment_name: ${{parent.inputs.deployment_name}}
       test_data: ${{parent.jobs.transform_job.outputs.test_data}}
-      output_report: test_endpoint_ex_report.txt
+      # This input is a dummy dependency to ensure this job runs after deployex_job
+      deploy_status: ${{parent.jobs.deployex_job.outputs.deploy_status}}
+    outputs:
+      report_folder:
+
 
   test_endpoint_ws_job:
     type: command
@@ -170,4 +206,7 @@ jobs:
       endpoint_name: '${{parent.inputs.model_base}}-ws-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
       deployment_name: ${{parent.inputs.deployment_name}}
       test_data: ${{parent.jobs.transform_job.outputs.test_data}}
-      output_report: test_endpoint_ws_report.txt
+      # This input is a dummy dependency to ensure this job runs after deployws_job
+      deploy_status: ${{parent.jobs.deployws_job.outputs.deploy_status}}
+    outputs:
+      report_folder:

@@ -5,12 +5,21 @@ import pandas as pd
 from azure.identity import ManagedIdentityCredential
 from azure.ai.ml import MLClient
 
+
 parser = argparse.ArgumentParser("test_endpoint")
 parser.add_argument("--endpoint_name", type=str, required=True, help="Name of the endpoint to test")
 parser.add_argument("--deployment_name", type=str, required=False, help="Deployment name (optional)")
 parser.add_argument("--test_data", type=str, required=True, help="Path to test data (CSV or MLTable)")
-parser.add_argument("--output_report", type=str, required=True, help="Path to save the test results report")
+parser.add_argument("--report_folder", type=str, required=True, help="Folder to save the test results report")
+parser.add_argument("--deploy_status", type=str, required=False, help="Dummy dependency folder from deployment job")
 args = parser.parse_args()
+
+if args.deploy_status:
+    print(f"[Dependency Check] deploy_status folder received: {args.deploy_status}")
+    if os.path.exists(args.deploy_status):
+        print(f"[Dependency Check] deploy_status folder exists and contains: {os.listdir(args.deploy_status)}")
+    else:
+        print(f"[Dependency Check] deploy_status folder path does not exist!")
 
 print("Initializing MLClient for endpoint testing...")
 msi_client_id = os.environ.get("DEFAULT_IDENTITY_CLIENT_ID")
@@ -60,8 +69,22 @@ except Exception as e:
     status_code = 500
     response_text = str(e)
 
-with open(args.output_report, "w") as f:
+
+# Ensure the output folder exists
+os.makedirs(args.report_folder, exist_ok=True)
+
+# Determine report file name based on endpoint_name
+endpoint_name_lower = args.endpoint_name.lower()
+if "-ex-" in endpoint_name_lower or endpoint_name_lower.endswith("-ex"):
+    report_filename = "test_endpoint_ex_report.txt"
+elif "-ws-" in endpoint_name_lower or endpoint_name_lower.endswith("-ws"):
+    report_filename = "test_endpoint_ws_report.txt"
+else:
+    report_filename = "test_endpoint_report.txt"
+
+report_path = os.path.join(args.report_folder, report_filename)
+with open(report_path, "w") as f:
     f.write(f"Status code: {status_code}\n")
     f.write(f"Response: {response_text}\n")
 
-print("Test results saved to", args.output_report)
+print("Test results saved to", report_path)
