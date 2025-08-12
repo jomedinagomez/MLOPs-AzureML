@@ -1,0 +1,17 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: create-env
+version: 1
+inputs:
+  env_name:
+    type: string
+    description: Name of the environment to create
+outputs:
+  env_status:
+    type: uri_folder
+    description: Dummy output folder for dependency enforcement
+command: >-
+  python create_env.py --env_name ${{inputs.env_name}} --env_status ${{outputs.env_status}}
+code: ../create_env
+environment: azureml:AzureML-sklearn-1.0-ubuntu20.04-py38-cpu@latest
+description: |
+  Create an Azure ML environment with the specified name. Writes a dummy file to env_status for dependency enforcement.

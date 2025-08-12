@@ -31,7 +31,7 @@ description: Train Classification model based on nyc taxi dataset for the produc
 #   - Example (dev):   mlw-dev-cc-01
 #   - Example (prod):  mlw-prod-cc-01
 # - The <prefix>, <workspace_prefix>, <location_code>, and <naming_suffix> are set in Terraform variables (see infra/variables.tf).
-# - This ensures strict separation of dev and prod environments, with no resource overlap.
+# - This ensures strict separation of dev and prod environments, with no resource overlap., 
 # - When running the pipeline, always use the correct workspace for the target environment.
 
 
@@ -198,7 +198,6 @@ jobs:
     outputs:
       report_folder:
 
-
   test_endpoint_ws_job:
     type: command
     component: ../src/components/test_endpoint.yaml
@@ -210,3 +209,12 @@ jobs:
       deploy_status: ${{parent.jobs.deployws_job.outputs.deploy_status}}
     outputs:
       report_folder:
+
+  create_env_job:
+    type: command
+    component: ../src/components/create_env.yaml
+    inputs:
+      env_name: taxi-class-env-prod
+    outputs:
+      env_status:
+    # This job creates the environment and can be used as a dependency for other jobs if needed
