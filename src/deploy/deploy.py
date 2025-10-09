@@ -15,6 +15,8 @@ from azure.ai.ml.entities import (
     Environment,
     CodeConfiguration,
     ProbeSettings,
+    DataCollector,
+    DeploymentCollection,
 )
 from azure.ai.ml.constants import ModelType
 
@@ -103,12 +105,20 @@ print(
 )
 
 ###Creating Deployment
+collections = {
+    "model_inputs": DeploymentCollection(enabled=True),
+    "model_outputs": DeploymentCollection(enabled=True),
+}
+
+data_collector = DataCollector(collections=collections, sampling_rate=1.0)
+
 deployment = ManagedOnlineDeployment(
     name=args.deployment_name,
     endpoint_name=args.endpoint_name,
     model=model,
     instance_type="Standard_F8S_V2",
     instance_count=1,
+    data_collector=data_collector,
     liveness_probe=ProbeSettings(
         failure_threshold=30,
         success_threshold=1,

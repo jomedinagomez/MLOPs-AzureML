@@ -167,7 +167,7 @@ jobs:
     inputs:
       # names include artifact_id (MLflow='m', custom='c') to distinguish implementations
       model_name: '${{parent.inputs.model_base}}-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
-      endpoint_name: '${{parent.inputs.model_base}}-ex-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
+      endpoint_name: '${{parent.inputs.model_base}}-ex-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}-col'
       deployment_name: ${{parent.inputs.deployment_name}}
       registry: ${{parent.inputs.registry}}
       register_job_status: ${{parent.jobs.registerex_job.outputs.register_output}}
@@ -181,7 +181,7 @@ jobs:
     inputs:
       # names include artifact_id (MLflow='m', custom='c') to distinguish implementations
       model_name: '${{parent.inputs.model_base}}-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
-      endpoint_name: '${{parent.inputs.model_base}}-ws-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
+      endpoint_name: '${{parent.inputs.model_base}}-ws-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}-col'
       deployment_name: ${{parent.inputs.deployment_name}}
       register_job_status: ${{parent.jobs.registerws_job.outputs.register_output}}
     # Dummy output to enforce dependency for test job. Not used for data transfer.
@@ -192,7 +192,7 @@ jobs:
     type: command
     component: ../src/components/test_endpoint.yaml
     inputs:
-      endpoint_name: '${{parent.inputs.model_base}}-ex-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
+      endpoint_name: '${{parent.inputs.model_base}}-ex-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}-col'
       deployment_name: ${{parent.inputs.deployment_name}}
       test_data: ${{parent.jobs.transform_job.outputs.test_data}}
       # This input is a dummy dependency to ensure this job runs after deployex_job
@@ -204,14 +204,13 @@ jobs:
     type: command
     component: ../src/components/test_endpoint.yaml
     inputs:
-      endpoint_name: '${{parent.inputs.model_base}}-ws-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
+      endpoint_name: '${{parent.inputs.model_base}}-ws-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}-col'
       deployment_name: ${{parent.inputs.deployment_name}}
       test_data: ${{parent.jobs.transform_job.outputs.test_data}}
       # This input is a dummy dependency to ensure this job runs after deployws_job
       deploy_status: ${{parent.jobs.deployws_job.outputs.deploy_status}}
     outputs:
       report_folder:
-
 
   create_env_job:
     type: command
@@ -222,13 +221,3 @@ jobs:
     outputs:
       env_status:
     # This job creates the environment and can be used as a dependency for other jobs if needed
-
-  test_env_ready_job:
-    type: command
-    command: echo "Env created successfully"
-    code: .
-    environment: azureml:taxi-class-env-prod@latest
-    compute: azureml:aml-cluster-prod-cc01
-    inputs:
-      env_status: ${{parent.jobs.create_env_job.outputs.env_status}}
-    # This job simply checks that the environment is available and can be used in a job
