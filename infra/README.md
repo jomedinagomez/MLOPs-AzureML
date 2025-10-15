@@ -1,58 +1,110 @@
-# Azure ML Infrastructure
+# Azure ML Platform Deployment Guide
 
-This folder contains the complete Terraform infrastructure for the Azure ML Operations (MLOps) project. The infrastructure uses a **module orchestration approach** to deploy networking, workspace, and registry components with proper dependency management and optimized for private networking.
+## Overview
 
-## 📁 **Infrastructure Architecture**
+This Azure ML platform follows the deployment strategy with **complete environment isolation** and uses a **single service principal** approach for infrastructure automation across all environments.
 
-### **Module Organization**
+### Access via Azure Bastion + Windows DSVM Jumpbox
+
+Ingress is provided exclusively through Azure Bastion into a Windows Data Science VM (microsoft-dsvm/dsvm-win-2022). No VPN or public ingress is used, and SSH is not required.
+
+Key characteristics:
+- Access Method: Browser-based RDP via Azure Bastion to the jumpbox.
+- Network: Flat two‑VNet model (dev, prod) with private endpoints and shared Private DNS; no hub/spoke.
+- Public Access: Disabled on all PaaS resources (storage, Key Vault, ACR, AML).
+- Operations: Use the jumpbox for portal access, tooling, and private resource reachability.
+
+Centralized Private DNS:
+- AML: privatelink.api.azureml.ms, privatelink.notebooks.azure.net, instances.azureml.ms
+- Core services: privatelink.blob.core.windows.net, privatelink.file.core.windows.net, privatelink.queue.core.windows.net, privatelink.table.core.windows.net, privatelink.vaultcore.azure.net, privatelink.azurecr.io
+
+## Deployment Architecture
+
+### Service Principal Strategy (Updated)
+
+The service principal is created by the root `main.tf` during deployment and is granted permissions across **7 resource groups** (3 dev + 3 prod + 1 shared DNS; no hub network):
 
 ```
-infra/
-├── 🎯 main.tf                     # Root orchestration file (DEPLOY FROM HERE)
-├── 🔧 variables.tf                # Root variable definitions  
-├── ⚙️ terraform.tfvars            # Main configuration file
-├── 📤 outputs.tf                  # Aggregated outputs from all modules
-├── 📋 terraform.tfstate           # State file (after deployment)
-│
-├── 🌐 aml-vnet/                   # Networking Foundation Module
-│   ├── main.tf                    # VNet, subnets, DNS zones, managed identities
-│   ├── variables.tf               # Network module variables
-│   ├── outputs.tf                 # Network outputs (IDs, names, principal IDs)
-│   ├── locals.tf                  # Resource naming and calculations
-│   └── terraform.tfvars          # Network-specific configuration
-│
-├── 🏢 aml-managed-smi/            # ML Workspace Module  
-│   ├── main.tf                    # Workspace, storage, Key Vault, ACR, compute
-│   ├── variables.tf               # Workspace module variables
-│   ├── outputs.tf                 # Workspace outputs
-│   ├── locals.tf                  # Resource naming and calculations
-│   ├── locals_dns.tf              # DNS zone conditional logic
-│   └── terraform.tfvars          # Workspace-specific configuration
-│
-├── 📚 aml-registry-smi/           # ML Registry Module
-│   ├── main.tf                    # Registry, Log Analytics, monitoring
-│   ├── variables.tf               # Registry module variables  
-│   ├── outputs.tf                 # Registry outputs
-│   ├── locals.tf                  # Resource naming and calculations
-│   └── terraform.tfvars          # Registry-specific configuration
-│
-└── 📁 modules/                    # Reusable component modules
-    ├── container-registry/        # ACR module
-    ├── key-vault/                 # Key Vault module
-    ├── private-endpoint/          # Private endpoint module
-    └── storage-account/           # Storage account module
+Service Principal: sp-aml-deployment-platform
+├── Scope: 7 resource groups across dev, prod, and shared DNS
+├── Permissions per resource group:
+│   ├── [Contributor](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#contributor): Deploy ML infrastructure
+│   ├── [User Access Administrator](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#user-access-administrator): Configure RBAC  
+│   └── [Network Contributor](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/networking#network-contributor): Configure networking
+└── Created and assigned by root main.tf
 ```
 
-## 🚦 Deployment Flow & Dependencies
+## Deployment Order
 
-This infrastructure uses a **modular orchestration** approach. The deployment order and dependencies are as follows:
+### Single Apply (Dev + Prod + Shared DNS)
 
-### Deployment Order
-1. **aml-vnet**: Deploys networking, DNS, and managed identities (foundation for all other modules)
-2. **aml-managed-smi**: Deploys ML workspace, storage, Key Vault, ACR, compute, and private endpoints. Consumes outputs from `aml-vnet`.
-3. **aml-registry-smi**: Deploys ML registry, Log Analytics, and private endpoint. Consumes outputs from `aml-vnet` and workspace identity from `aml-managed-smi`.
+1. Run from `infra/` to deploy both environments and the shared DNS RG in one go:
+  ```bash
+  cd infra
+  terraform init
+  terraform plan
+  terraform apply
+  ```
+
+  Root `main.tf` creates the service principal, all 7 resource groups, VNets, Bastion + jumpbox, workspaces, registries, RBAC, outbound rules, private endpoints, and shared Private DNS in a single run.
+
+## Key Benefits
+
+**Service Principal Pre-Authorization**: SP has permissions across all resource groups before deployment  
+**No Chicken-and-Egg**: No dependency between SP creation and resource group existence  
+**Deployment Strategy Compliance**: Single SP manages all 6 resource groups as specified  
+**CI/CD Ready**: SP credentials available immediately for pipeline configuration  
+**Environment Agnostic**: Same SP works for both dev and prod deployments  
+**Per-Environment Observability**: Separate Log Analytics workspaces for dev and prod support data segregation and compliance.
+
+This approach aligns with the deployment strategy requirement for a single service principal managing all resource groups across both environments (dev/prod) and the shared DNS RG.
+
+### Subscription Strategy
+Single subscription with strict resource group isolation (dev/prod vnet/ws/reg + shared DNS). Mitigations: strong RG‑scoped RBAC, consistent tagging for cost allocation, deterministic naming, distinct VNet CIDRs, separate Log Analytics per environment.
+
+### Geographic Strategy
+Both environments are deployed in the same Azure region to reduce complexity and avoid cross‑region egress/latency. Current examples use Canada Central (location code "cc"). If you add a second region, plan Private DNS, peering, and cross‑region data flows explicitly and account for cost.
+
+### Tagging Strategy
+All resources inherit the base `var.tags` map merged with contextual tags (environment, purpose, component). Update `terraform.tfvars` to propagate organization-wide metadata consistently.
+
+### Key Vault Purge Protection & Auto-Purge (Sandbox Behavior)
+Variables:
+```
+key_vault_purge_protection_enabled = false  # default (sandbox)
+enable_auto_purge                  = true   # enables destroy-time purge helper
+```
+For production harden by setting:
+```
+key_vault_purge_protection_enabled = true
+enable_auto_purge                  = false
+```
+This ensures soft-deleted vault items are retained and not purged automatically.
+1. **Networking + Shared DNS (root)**: Deploys VNets/subnets and shared Private DNS zones (foundation for all modules)
+2. **aml-managed-smi**: Deploys ML workspace, storage, Key Vault, ACR, compute, and private endpoints. Consumes network/DNS inputs from root.
+3. **aml-registry-smi**: Deploys ML registry, Log Analytics, and private endpoint. Consumes network/DNS inputs from root and workspace identity from `aml-managed-smi`.
 4. **workspace-to-registry-outbound-rule**: Creates user-defined outbound rule allowing workspace to create managed private endpoints to the registry.
 5. **workspace-storage-network-rules**: Configures storage account network access rules to enable asset sharing between workspace and registry.
+
+### Network Security & Outbound Rules
+Managed VNet workspaces use isolationMode `AllowOnlyApprovedOutbound`. For registry connectivity, create user‑defined outbound rules with:
+- Resource type: `Microsoft.MachineLearningServices/workspaces/outboundRules@2024-10-01-preview`
+- destination.serviceResourceId = registry resource ID
+- destination.subresourceTarget = "amlregistry" (mandatory)
+- Pre‑req RBAC: Workspace UAMI has Azure AI Enterprise Network Connection Approver at the target registry scope (assign before rule creation). Allow ~90–150s for RBAC propagation.
+
+Troubleshooting:
+- 400 ValidationError on rule create → missing `subresourceTarget = "amlregistry"`
+- 403 during workspace create against Key Vault → add Key Vault Reader (management plane) + Key Vault Secrets User (data plane) to Workspace UAMI
+- 409 FailedIdentityOperation after delete → wait ~150s before re‑provision
+
+### Deterministic Naming Examples
+- VNet: `vnet-{prefix}-{env}-{location_code}-{naming_suffix}`
+- Workspace: `mlw{env}{location_code}{naming_suffix}`
+- Storage: `st{env}{location_code}{naming_suffix}`
+- Container Registry: `cr{env}{location_code}{naming_suffix}`
+- Key Vault: `kv{env}{location_code}{naming_suffix}`
+- Registry: `mlr{env}{location_code}{naming_suffix}`
 
 ### Orchestration & Dependency Diagram
 ```mermaid
@@ -60,7 +112,6 @@ flowchart TD
     subgraph RG1["rg-aml-vnet-{env}-{loc}"]
         VNET[VNet & Subnets]
         DNS[DNS Zones]
-        MI[Managed Identities]
     end
     subgraph RG2["rg-aml-ws-{env}-{loc}"]
         WS[ML Workspace]
@@ -99,21 +150,28 @@ flowchart TD
 ```
 
 ### Microsoft-Managed Resource Groups
-> ⚠️ **Important:** When deploying the ML Registry, Azure automatically creates a Microsoft-managed resource group (`rg-{registry-name}`) containing internal infrastructure (storage, ACR, etc.). **Never modify or delete resources in this group.**
+> **Important:** When deploying the ML Registry, Azure automatically creates a Microsoft-managed resource group (`rg-{registry-name}`) containing internal infrastructure (storage, ACR, etc.). **Never modify or delete resources in this group.**
+
+#### Registry managed RG pre-authorization
+ML registries must create managed private endpoints within workspace managed VNets. Pre‑authorize the deployment identity by setting `properties.managedResourceGroupSettings.assignedIdentities` on the registry. A verification command is provided in the "Verify After Apply" section.
+
+##### Role assignment workaround (why it’s needed)
+When a workspace creates a managed private endpoint to a registry, the platform must read metadata from the registry’s Microsoft‑managed ACR and other internal resources. In locked‑down environments this can fail with permission errors. The practical workaround is to pre‑authorize your deployment identity on the registry via the registry property `properties.managedResourceGroupSettings.assignedIdentities` (this is not a standard RBAC assignment). This repo configures that property so the managed private endpoint can be created without ACR read errors. Use the verify command below to confirm your SP/objectId appears in the list.
+Effectively, this pre‑authorization grants the specified identity Azure AI Administrator permissions scoped to the registry’s Microsoft‑managed resource group so the platform can read required image/asset metadata during managed private endpoint creation.
 
 ### Key Dependency Callouts
-- **aml-managed-smi** and **aml-registry-smi** both require outputs from **aml-vnet** (subnet, DNS, managed identities)
+- **aml-managed-smi** and **aml-registry-smi** both require network inputs from root (subnet ID, shared DNS RG/zone IDs)
 - **aml-registry-smi** requires the workspace principal ID from **aml-managed-smi** for network connection approver permissions
 - **workspace-to-registry-outbound-rule** requires both workspace ID and registry ID, enabling managed private endpoint creation from workspace to external registry
 - All modules are orchestrated from the root `main.tf` for dependency management
 - Microsoft-managed resource groups are created automatically for the registry and are not managed by Terraform
 
-**Note:** Always deploy modules in the order above. Confirm outputs from `aml-vnet` before proceeding with dependent modules. All dependencies are managed via module outputs and remote state.
+**Note:** Always deploy modules in the order above. Confirm root networking/DNS resources before proceeding with dependent modules. All dependencies are managed via module outputs and remote state.
 
 **Key Dependencies:**
-1. **aml-vnet** creates networking foundation and managed identities
-2. **aml-managed-smi** consumes VNet outputs and managed identity references  
-3. **aml-registry-smi** consumes VNet outputs for private connectivity AND workspace identity for network connection approver role
+1. **Root networking** creates VNets/subnets and shared Private DNS zones
+2. **aml-managed-smi** consumes network/DNS inputs and provides the workspace UAMI principal ID  
+3. **aml-registry-smi** consumes network/DNS inputs and the workspace UAMI principal ID for network connection approver role
 4. All modules coordinate through root orchestration
 │   └── terraform.tfvars          # Registry configuration
 └── modules/                       # Reusable Terraform modules
@@ -123,7 +181,7 @@ flowchart TD
     └── private-endpoint/          # Private endpoint module
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -150,13 +208,13 @@ Edit `terraform.tfvars` with your specific values:
 purpose       = "dev"                    # Change to your environment
 location      = "canadacentral"          # Change to your preferred region
 location_code = "cc"                     # Update accordingly
-random_string = "001"                    # Your unique identifier
+naming_suffix = "01"                     # Deterministic suffix replacing random string
 
 # Azure Subscription (REQUIRED)
 sub_id = "your-subscription-id-here"     # Replace with actual subscription ID
 
 # User Management (REQUIRED)
-user_object_id = "your-user-object-id"   # Replace with your user object ID
+
 
 # Networking Configuration (Optional)
 vnet_address_space    = "10.1.0.0/16"
@@ -197,19 +255,115 @@ terraform output
 az ml workspace list --subscription <subscription-id>
 ```
 
-## 🏗️ Architecture Overview
+## Verify After Apply (CLI quick checks)
+From the Bastion jumpbox:
+- Outbound rules: list on dev/prod workspaces and confirm prod→dev exists
+- Managed private endpoints: list in each workspace managed RG; look for subresource "amlregistry"
+- Public access posture: check Storage, Key Vault, ACR all set to private/deny
+- RBAC: at registry scopes, Workspace UAMI has Approver; Compute UAMI has Registry User
+
+Examples (PowerShell):
+```powershell
+$SUBSCRIPTION_ID = (az account show --query id -o tsv)
+
+# Discover RG and resource names
+$DEV_RG_WS   = (az group list --query "[?starts_with(name, 'rg-aml-ws-dev-')].name | [0]" -o tsv)
+$PROD_RG_WS  = (az group list --query "[?starts_with(name, 'rg-aml-ws-prod-')].name | [0]" -o tsv)
+$DEV_RG_REG  = (az group list --query "[?starts_with(name, 'rg-aml-reg-dev-')].name | [0]" -o tsv)
+$PROD_RG_REG = (az group list --query "[?starts_with(name, 'rg-aml-reg-prod-')].name | [0]" -o tsv)
+
+$DEV_WS_NAME   = (az resource list -g $DEV_RG_WS  --resource-type Microsoft.MachineLearningServices/workspaces --query "[0].name" -o tsv)
+$PROD_WS_NAME  = (az resource list -g $PROD_RG_WS --resource-type Microsoft.MachineLearningServices/workspaces --query "[0].name" -o tsv)
+$DEV_REG_NAME  = (az resource list -g $DEV_RG_REG  --resource-type Microsoft.MachineLearningServices/registries --query "[0].name" -o tsv)
+$PROD_REG_NAME = (az resource list -g $PROD_RG_REG --resource-type Microsoft.MachineLearningServices/registries --query "[0].name" -o tsv)
+
+# 1) Registry managed RG pre-authorization
+az rest `
+  --method get `
+  --uri "https://management.azure.com/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$DEV_RG_REG/providers/Microsoft.MachineLearningServices/registries/$DEV_REG_NAME?api-version=2025-01-01-preview" `
+  --query "properties.managedResourceGroupSettings.assignedIdentities"
+
+# 2) Outbound rules
+az rest `
+  --method get `
+  --uri "https://management.azure.com/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$PROD_RG_WS/providers/Microsoft.MachineLearningServices/workspaces/$PROD_WS_NAME/outboundRules?api-version=2024-10-01-preview"
+
+# 3) Managed PEs (workspace managed RGs start with mrg-)
+$PROD_MRG = (az group list --query "[?starts_with(name, 'mrg-') && contains(name, '$PROD_WS_NAME')].name | [0]" -o tsv)
+az network private-endpoint list -g $PROD_MRG -o table
+
+# 4) Private-only posture checks
+az storage account show -g $DEV_RG_WS  --name (az resource list -g $DEV_RG_WS  --resource-type Microsoft.Storage/storageAccounts --query "[0].name" -o tsv)  --query "{publicNetworkAccess:publicNetworkAccess, defaultAction:networkRuleSet.defaultAction}" -o table
+az keyvault show -g $DEV_RG_WS -n (az resource list -g $DEV_RG_WS  --resource-type Microsoft.KeyVault/vaults --query "[0].name" -o tsv)  --query "{publicNetworkAccess:properties.publicNetworkAccess, defaultAction:properties.networkAcls.defaultAction}" -o table
+```
+
+## Destroy and verify (safe cleanup)
+
+This repo includes destroy-time cleanup hooks to avoid soft-delete collisions in future runs.
+
+- AML workspace: permanently deleted during destroy using Azure ML CLI (prevents name reuse conflicts)
+- Key Vault: optional purge helper (sandbox default) to remove soft-deleted vaults
+- Storage/ACR: best-effort cleanup of soft-deleted containers/blobs and ACR repos
+
+Quick destroy for a test cycle (example uses naming_suffix=ts01):
+
+```powershell
+cd infra
+terraform destroy -auto-approve -var naming_suffix=ts01
+```
+
+What to expect
+- AML purge step can take several minutes; logs show: "[AML Purge] Workspace permanently deleted."
+- After destroy, there should be no `rg-aml-*` resource groups for the chosen suffix.
+
+Optional verification
+```powershell
+# List any remaining ts01 resource groups (should return nothing)
+az group list --query "[?contains(name, '-ts01') && starts_with(name, 'rg-aml-')].name" -o table
+
+# Check that the workspace name is available again (should return empty for exact match)
+$WS='workspacename'
+az ml workspace list --query "[?name=='$WS'].[name,resourceGroup]" -o table
+```
+
+Notes
+- In production, consider disabling auto-purge for Key Vault by setting `enable_auto_purge = false` and enabling `key_vault_purge_protection_enabled = true`.
+- If you used targeted apply previously, prefer a full destroy to ensure shared Private DNS zones and links are removed in the correct order.
+
+Under the hood (exact commands used by destroy hooks)
+- AML purge (invoked automatically by Terraform):
+  ```powershell
+  az ml workspace delete --name <workspace-name> --resource-group <rg-name> --permanently-delete --yes
+  ```
+  The script ensures the ML CLI extension is installed and sets the subscription context, deriving subscription/RG from the workspace resource IDs.
+- Key Vault purge helper (when enabled for sandbox):
+  ```powershell
+  az keyvault purge --name <kv-name> --location <azure-region>
+  ```
+- Storage cleanup (best-effort): undelete deleted blobs and re-delete soft-deleted containers to clear remnants.
+- ACR cleanup (best-effort): delete any remaining repositories.
+
+## Cost considerations (summary)
+- Dev: enable compute auto‑shutdown; apply storage lifecycle policies; right‑size Bastion/jumpbox and stop when idle.
+- Prod: enable Key Vault purge protection; avoid auto‑purge; consider reservations for steady compute; monitor private endpoint/DNS costs.
+
+## Disaster recovery & business continuity (summary)
+- State: use remote Terraform state with backups; keep infra as code under version control.
+- Backups: back up model/artifact stores and critical data per policy; enforce retention.
+- Recovery: rebuild infra via Terraform; restore data and secrets; keep tested runbooks.
+
+## Architecture Overview
 
 ### Module Dependencies
 
 ```
 Root Orchestration (main.tf)
-├── 1. aml-vnet (networking foundation)
+├── 1. Networking (root) – foundation
 │   ├── Virtual Network (10.1.0.0/16)
 │   ├── Private Subnet (10.1.1.0/24)
-│   ├── 9 Private DNS Zones
-│   └── 2 Managed Identities
+│   └── Shared Private DNS Zones (AML + core services)
 │
-├── 2. aml-workspace (depends on aml-vnet)
+├── 2. aml-workspace (consumes root networking)
 │   ├── Azure ML Workspace
 │   ├── Storage Account + Private Endpoint
 │   ├── Key Vault + Private Endpoint
@@ -218,7 +372,7 @@ Root Orchestration (main.tf)
 │   ├── Compute Cluster
 │   └── Role Assignments
 │
-└── 3. aml-registry (depends on aml-vnet + aml-workspace)
+└── 3. aml-registry (consumes root networking + workspace outputs)
     ├── Azure ML Registry
     ├── Log Analytics Workspace
     ├── Private Endpoint
@@ -232,7 +386,7 @@ Root Orchestration (main.tf)
 
 | Module | Resource Types | Approximate Count | Resource Group |
 |--------|---------------|-------------------|----------------|
-| **aml-vnet** | VNet, Subnet, DNS Zones, Identities | ~12 resources | `rg-aml-vnet-{environment}-{location-code}` |
+| **Networking (root)** | VNet, Subnet, Shared DNS Zones | ~12 resources | `rg-aml-vnet-{environment}-{location-code}` |
 | **aml-workspace** | Workspace, Storage, KV, ACR, AI, Compute, PE | ~25 resources | `rg-aml-ws-{environment}-{location-code}` |
 | **aml-registry** | Registry, Log Analytics, PE | ~5 resources | `rg-aml-reg-{environment}-{location-code}` |
 | **outbound-rule** | Workspace network outbound rule | ~1 resource | Managed by workspace |
@@ -247,16 +401,16 @@ Root Orchestration (main.tf)
 - **Visibility**: Appears in your subscription but is not directly manageable through Terraform
 - **Lifecycle**: Automatically created when registry is deployed, removed when registry is deleted
 
-> ⚠️ **Critical Warning**: Do not attempt to manage, modify, or delete resources in the Microsoft managed resource group as this will break the ML Registry functionality and may require Microsoft support to resolve.
+> **Critical Warning**: Do not attempt to manage, modify, or delete resources in the Microsoft managed resource group as this will break the ML Registry functionality and may require Microsoft support to resolve.
 
-## 🔧 Configuration
+## Configuration
 
 ### Required Variables
 
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `sub_id` | Azure subscription ID | `"12345678-1234-1234-1234-123456789012"` |
-| `user_object_id` | User's Azure AD object ID | `"87654321-4321-4321-4321-210987654321"` |
+
 
 ### Optional Variables
 
@@ -265,11 +419,11 @@ Root Orchestration (main.tf)
 | `purpose` | `"dev"` | Environment identifier |
 | `location` | `"canadacentral"` | Azure region |
 | `location_code` | `"cc"` | Short region code |
-| `random_string` | `"001"` | Unique identifier |
+| `naming_suffix` | `"01"` | Deterministic suffix for naming |
 | `vnet_address_space` | `"10.1.0.0/16"` | VNet CIDR block |
 | `subnet_address_prefix` | `"10.1.1.0/24"` | Subnet CIDR block |
 
-## 📤 Outputs
+## Outputs
 
 The infrastructure provides comprehensive outputs for integration:
 
@@ -293,8 +447,9 @@ The infrastructure provides comprehensive outputs for integration:
 
 ### Summary Output
 - `deployment_summary`: High-level deployment overview
+- `dev_private_endpoint_fqdns` / `prod_private_endpoint_fqdns`: DNS smoke-test list of key private endpoints (workspace API, KV, storage blob/file, ACR)
 
-## 🔐 Security Features
+## Security Features
 
 ### Network Security
 - **Private Networking**: All resources use private endpoints
@@ -307,10 +462,19 @@ The infrastructure provides comprehensive outputs for integration:
 - **Cross-Service Permissions**: Workspace has network connection approver role on registry
 - **Key Management**: Azure Key Vault for secrets
 
+#### UAMI assignment prerequisite when using default/image build compute
+- If your workspace uses a compute with a **User-Assigned Managed Identity (UAMI)** for image builds or as default compute, the **workspace UAMI must have read access over that compute UAMI** to reference and assign it.
+- Best practice: Create the compute UAMI in the same workspace resource group. The workspace UAMI already has **Reader** on the workspace RG, which covers read access to the compute UAMI.
+- If the compute UAMI is in a different RG/subscription, grant the workspace UAMI **Reader** on that identity or its resource group prior to assignment.
+
+Runtime identity selection for jobs (DEFAULT_IDENTITY_CLIENT_ID):
+- When jobs use `DefaultAzureCredential` and set `DEFAULT_IDENTITY_CLIENT_ID`, they authenticate as that specific managed identity (typically the compute UAMI). Make sure that identity has the right RBAC (e.g., AzureML Registry User, Storage roles, Key Vault roles).
+- If `DEFAULT_IDENTITY_CLIENT_ID` is not set or mismatched, authentication can fall back to the workspace UAMI, and RBAC will be evaluated against the workspace identity instead.
+
 ### Network Connectivity
 - **User-Defined Outbound Rules**: Workspace can create managed private endpoints to external registry
-- **Managed Virtual Network**: AllowOnlyApprovedOutbound isolation mode with Azure Firewall Standard SKU
-- **Cross-Registry Connectivity**: Automated outbound rule creation for workspace→registry communication
+- **Managed Virtual Network**: AllowOnlyApprovedOutbound isolation mode
+- **Cross-Registry Connectivity**: Automated managed private endpoint creation for workspace→registry communication
 
 ### Asset Sharing Configuration
 This infrastructure automatically configures asset sharing between the secure workspace and the ML registry created in the same deployment, implementing the [Microsoft documentation requirements](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-registry-network-isolation?view=azureml-api-2&tabs=existing#share-assets-from-workspace-to-registry).
@@ -444,10 +608,10 @@ try:
     workspace_client.models.create_or_update(test_model)
     print("✓ Successfully created model in workspace")
     
-    print("🎉 Asset sharing configuration verified successfully!")
+  print("Asset sharing configuration verified successfully!")
     
 except Exception as e:
-    print(f"❌ Asset sharing test failed: {str(e)}")
+    print(f"Asset sharing test failed: {str(e)}")
     print("Check network configuration and permissions")
 ```
 
@@ -477,18 +641,18 @@ az ml registry show \
 ```
 
 ##### 7. Expected Success Indicators
-✅ **Storage Account**: Shows "Selected networks" with registry in resource instances  
-✅ **Outbound Rule**: `allow-external-registry-{purpose}` rule exists and shows "Approved" status  
-✅ **Registry Access**: Workspace can query registry models/environments without errors  
-✅ **Network Connectivity**: No timeout errors when accessing registry from workspace  
-✅ **Asset Operations**: Can successfully share/copy assets between workspace and registry
+**Storage Account**: Shows "Selected networks" with registry in resource instances  
+**Outbound Rule**: `allow-external-registry-{purpose}` rule exists and shows "Approved" status  
+**Registry Access**: Workspace can query registry models/environments without errors  
+**Network Connectivity**: No timeout errors when accessing registry from workspace  
+**Asset Operations**: Can successfully share/copy assets between workspace and registry
 
 ### Data Protection
 - **Encryption**: Data encrypted at rest and in transit
 - **Private Endpoints**: No public internet exposure
 - **Access Controls**: IP restrictions and firewall rules
 
-## 🧪 Testing & Validation
+## Testing & Validation
 
 ### Pre-deployment Checks
 ```bash
@@ -514,7 +678,7 @@ az network private-endpoint list --resource-group <rg-name>
 az role assignment list --scope <resource-scope>
 ```
 
-## 🔄 Module Outputs as Inputs
+## Module Outputs as Inputs
 
 The orchestration leverages module outputs for dependencies:
 
@@ -537,7 +701,7 @@ module "aml_workspace" {
 }
 ```
 
-## 🛠️ Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
@@ -550,8 +714,8 @@ az account set --subscription <subscription-id>
 
 #### 2. Resource Naming Conflicts
 ```bash
-# Update random_string in terraform.tfvars
-random_string = "002"  # Change to new unique value
+# Update naming_suffix in terraform.tfvars
+ naming_suffix = "02"  # Change to desired suffix when needed
 ```
 
 #### 3. Network Connectivity Issues
@@ -578,7 +742,7 @@ terraform import <resource-type>.<resource-name> <azure-resource-id>
 terraform force-unlock <lock-id>
 ```
 
-## 🛠️ **Troubleshooting**
+## Troubleshooting
 
 ### **Common Issues & Solutions**
 
@@ -594,8 +758,8 @@ az account show
 
 #### 2. **Resource Naming Conflicts**
 ```bash
-# Update random_string in terraform.tfvars to make names unique
-random_string = "002"  # Change to new unique value
+# Update naming_suffix in terraform.tfvars to adjust names
+ naming_suffix = "02"  # Change to desired suffix
 
 # Or check existing resources
 az resource list --resource-group {resource-group-name}
@@ -617,7 +781,15 @@ az role assignment list --assignee $(az ad signed-in-user show --query id -o tsv
 
 # Verify managed identity permissions
 az role assignment list --assignee "{managed-identity-name}" --all --output table
+
 ```
+
+#### 5. RoleAssignmentExists (drift)
+If you see 409 RoleAssignmentExists when assigning human user roles that were granted out‑of‑band:
+- Import the existing role assignment into state, or
+- Enable `skip_service_principal_aad_check` where applicable, or
+- Use lifecycle ignore on `principal_id`, or
+- Add conditional creation for user RBAC
 
 #### 5. **Module Dependency Errors**
 If you encounter dependency issues:
@@ -741,9 +913,9 @@ az consumption usage list --start-date 2025-01-01 --end-date 2025-01-31
 az ml compute list --workspace-name {workspace-name} --resource-group {resource-group-name} --query '[].{Name:name,State:state,VmSize:vmSize}'
 ```
 
-## 🧹 **Infrastructure Cleanup**
+## Infrastructure Cleanup
 
-### **Complete Destruction** ⚠️
+### **Complete Destruction**
 ```bash
 # CAUTION: This will destroy ALL infrastructure
 terraform destroy
@@ -786,7 +958,7 @@ az keyvault purge --name {key-vault-name} --location {location}
 az network private-dns record-set a list --resource-group {resource-group-name} --zone-name privatelink.blob.core.windows.net
 ```
 
-## 📈 **Monitoring & Maintenance**
+## Monitoring & Maintenance
 
 ### **Regular Health Checks**
 ```bash
@@ -800,7 +972,7 @@ az ml compute list --workspace-name {workspace-name} --resource-group {resource-
 az network private-endpoint list --resource-group {resource-group-name} --query '[].{Name:name,State:privateLinkServiceConnections[0].privateLinkServiceConnectionState.status}'
 ```
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 ### **Common Deployment Issues**
 
@@ -832,10 +1004,10 @@ enable_auto_purge = true
    - Prevents soft-delete conflicts on subsequent deployments
 
 3. **Benefits**:
-   - ✅ Fully automated cleanup
-   - ✅ Prevents deployment conflicts
-   - ✅ Safe for dev/test environments
-   - ❌ Should NEVER be used in production
+   - Fully automated cleanup
+   - Prevents deployment conflicts
+   - Safe for dev/test environments
+   - Should NEVER be used in production
 
 ##### **Option B: Manual Purge (Production-Safe)**
 
@@ -860,7 +1032,7 @@ Use the provided PowerShell script for safe, interactive cleanup:
 # Interactive cleanup with confirmations
 .\cleanup.ps1
 
-# Force cleanup without prompts (dev environments only)
+# Force cleanup without prompts (use with care)
 .\cleanup.ps1 -Force
 
 # Only purge Key Vaults without destroying infrastructure
@@ -868,11 +1040,11 @@ Use the provided PowerShell script for safe, interactive cleanup:
 ```
 
 **The script**:
-- ✅ Safely destroys infrastructure with confirmations
-- ✅ Automatically purges soft-deleted Key Vaults
-- ✅ Cleans up Terraform state files
-- ✅ Has safety checks and naming pattern validation
-- ✅ Works in both dev and production contexts
+- Safely destroys infrastructure with confirmations
+- Automatically purges soft-deleted Key Vaults
+- Cleans up Terraform state files
+- Has safety checks and naming pattern validation
+- Works in both dev and production contexts
 
 **Prevention**: 
 - Always purge Key Vaults when cleaning up test environments
@@ -938,7 +1110,7 @@ terraform plan
 terraform apply
 ```
 
-## 📝 Development
+## Development
 
 ### Adding New Modules
 1. Create module in appropriate location
@@ -954,181 +1126,21 @@ terraform apply
 - **Documentation**: Keep README updated
 - **Testing**: Validate before applying
 
-## �️ **Creating Windows Jump Box for Private Network Access**
+## Private Access
 
-Since the Azure ML workspace is deployed with private networking only, you need a Windows jump box within the VNet to access the workspace. Here are the Azure CLI commands to create the jump box:
+The platform uses a flat two‑VNet model (dev, prod) with private endpoints and shared Private DNS. Remote operator access is provided via Azure Bastion to a Windows DSVM jumpbox. No VPN is deployed.
 
-### **Prerequisites**
-Set these variables before running the commands:
-```bash
-# Configuration Variables - Modify these values
-RESOURCE_GROUP="rg-aml-vnet-dev-cc"           # VNet resource group name
-VM_NAME="ml-jumpbox-win"                      # Desired VM name
-VNET_NAME="vnet-amldevcc004"                  # VNet name from Terraform outputs
-SUBNET_NAME="subnet-amldevcc004"              # Subnet name from Terraform outputs
-LOCATION="canadacentral"                      # Azure region
-VM_SIZE="Standard_D4s_v3"                     # VM size (4 vCPUs, 16 GB RAM)
-VM_USERNAME="azureuser"                       # VM admin username
-VM_PASSWORD="P@ssw0rd123!"                    # VM admin password (change this!)
-BASTION_NAME="bastion-amldev"                 # Bastion host name
-BASTION_PIP_NAME="bastion-pip"                # Bastion public IP name
-
-# VM Image Options (choose one):
-# Option 1: Data Science VM (Recommended) - Includes VS Code, Python, Jupyter, etc.
-VM_IMAGE="microsoft-dsvm:dsvm-win-2022:winserver-2022:latest"
-
-# Option 2: Visual Studio Community VM - Includes VS, VS Code, development tools
-# VM_IMAGE="MicrosoftVisualStudio:visualstudio2022:vs-2022-comm-latest-ws2022:latest"
-
-# Option 3: Plain Windows Server (minimal, requires manual tool installation)
-# VM_IMAGE="MicrosoftWindowsServer:WindowsServer:2022-datacenter-g2:latest"
-```
-
-### **Step 1: Create Windows VM**
-```bash
-# Create Windows VM with development tools (using DSVM image)
-az vm create \
-  --resource-group $RESOURCE_GROUP \
-  --name $VM_NAME \
-  --image $VM_IMAGE \
-  --size $VM_SIZE \
-  --admin-username $VM_USERNAME \
-  --admin-password $VM_PASSWORD \
-  --vnet-name $VNET_NAME \
-  --subnet $SUBNET_NAME \
-  --public-ip-address "" \
-  --nsg "" \
-  --location $LOCATION \
-  --authentication-type password \
-  --os-disk-size-gb 128
-```
-
-### **VM Image Comparison**
-| **Image Type** | **What's Included** | **Best For** |
-|----------------|-------------------|--------------|
-| **Data Science VM (DSVM)** | ✅ VS Code, Python, Jupyter, Git, Azure CLI, Docker | **Recommended** - Ready for ML development |
-| **Visual Studio Community** | ✅ VS 2022, VS Code, .NET, Git, development tools | .NET development + ML work |
-| **Windows Server** | ❌ Minimal - requires manual installation | Cost-conscious, custom setups |
-
-### **Step 2: Create Azure Bastion Subnet**
-```bash
-# Create AzureBastionSubnet (required name)
-az network vnet subnet create \
-  --resource-group $RESOURCE_GROUP \
-  --vnet-name $VNET_NAME \
-  --name "AzureBastionSubnet" \
-  --address-prefixes "10.1.2.0/26"
-```
-
-### **Step 3: Create Public IP for Bastion**
-```bash
-# Create public IP for Bastion host
-az network public-ip create \
-  --resource-group $RESOURCE_GROUP \
-  --name $BASTION_PIP_NAME \
-  --sku Standard \
-  --location $LOCATION
-```
-
-### **Step 4: Create Azure Bastion Host**
-```bash
-# Create Bastion host for secure RDP access
-az network bastion create \
-  --resource-group $RESOURCE_GROUP \
-  --name $BASTION_NAME \
-  --public-ip-address $BASTION_PIP_NAME \
-  --vnet-name $VNET_NAME \
-  --location $LOCATION
-```
-
-### **Step 5: Remove VM Public IP (Security)**
-```bash
-# Remove any public IP from VM for security
-az vm update \
-  --resource-group $RESOURCE_GROUP \
-  --name $VM_NAME \
-  --remove networkProfile.networkInterfaces[0].ipConfigurations[0].publicIpAddress
-```
-
-### **Connection Instructions**
-1. Go to [Azure Portal](https://portal.azure.com)
-2. Navigate to Virtual Machines → `$VM_NAME`
-3. Click "Connect" → "Connect via Bastion"
-4. Enter credentials: `$VM_USERNAME` / `$VM_PASSWORD`
-5. Browser RDP session opens
-
-### **Jump Box Setup Commands**
-Once connected to the Windows VM:
-
-#### **For Data Science VM (DSVM) - Recommended**
-The DSVM comes pre-installed with most tools, just need Azure ML extension:
 ```powershell
-# Azure CLI is already installed, just add ML extension
-az extension add --name ml
+# Test access from the jumpbox (examples)
+az ml workspace show -g <rg-aml-ws-...> -w <mlw...>
+az ml compute list -g <rg-aml-ws-...> -w <mlw...>
 
-# Login and configure defaults
-az login
-az configure --defaults group=rg-aml-ws-dev-cc workspace=amldevcc004
-
-# Test workspace access
-az ml workspace show --name amldevcc004 --resource-group rg-aml-ws-dev-cc
-az ml compute list
+# Submit pipeline from jumpbox
+az ml job create --file ..\pipelines\taxi-fare-train-pipeline.yaml \
+  --resource-group <rg-dev-ws> --workspace-name <dev-workspace>
 ```
 
-#### **For Visual Studio Community VM**
-```powershell
-# Install Azure CLI (if not present)
-winget install Microsoft.AzureCLI
-
-# Install Azure ML Extension
-az extension add --name ml
-
-# Login and configure defaults
-az login
-az configure --defaults group=rg-aml-ws-dev-cc workspace=amldevcc004
-```
-
-#### **For Plain Windows Server**
-```powershell
-# Install Azure CLI
-$ProgressPreference = 'SilentlyContinue'; Invoke-WebRequest -Uri https://aka.ms/installazurecliwindows -OutFile .\AzureCLI.msi; Start-Process msiexec.exe -Wait -ArgumentList '/I AzureCLI.msi /quiet'; rm .\AzureCLI.msi
-
-# Install Azure ML Extension
-az extension add --name ml
-
-# Install VS Code (optional)
-winget install Microsoft.VisualStudioCode
-
-# Install Python (optional)
-winget install Python.Python.3.11
-
-# Login and configure defaults
-az login
-az configure --defaults group=rg-aml-ws-dev-cc workspace=amldevcc004
-```
-
-### **Resource Cleanup**
-When no longer needed:
-```bash
-# Delete VM
-az vm delete --resource-group $RESOURCE_GROUP --name $VM_NAME --yes
-
-# Delete Bastion (optional)
-az network bastion delete --resource-group $RESOURCE_GROUP --name $BASTION_NAME
-az network public-ip delete --resource-group $RESOURCE_GROUP --name $BASTION_PIP_NAME
-
-# Delete Bastion subnet (optional)
-az network vnet subnet delete --resource-group $RESOURCE_GROUP --vnet-name $VNET_NAME --name "AzureBastionSubnet"
-```
-
-### **Cost Optimization**
-- **Stop VM when not in use**: `az vm deallocate --resource-group $RESOURCE_GROUP --name $VM_NAME`
-- **Start VM when needed**: `az vm start --resource-group $RESOURCE_GROUP --name $VM_NAME`
-- **Estimated monthly costs** (if running 24/7):
-  - Windows VM (Standard_D4s_v3): ~$140/month
-  - Azure Bastion: ~$150/month
-
-## �🔗 Related Documentation
+## Related Documentation
 
 - [Main Project README](../README.md)
 - [Azure ML Documentation](https://docs.microsoft.com/azure/machine-learning/)
@@ -1138,6 +1150,4 @@ az network vnet subnet delete --resource-group $RESOURCE_GROUP --vnet-name $VNET
 
 ---
 
-**Authors**: Jose Medina Gomez & Matt Felton  
-**Last Updated**: July 29, 2025  
-**Version**: 1.4.0 - Production-Ready Diagnostic Settings Deployment
+Last Updated: 2025‑08‑09

@@ -18,9 +18,10 @@ variable "resource_name" {
   type        = string
 }
 
-variable "random_string" {
-  description = "The random string to append to the resource name"
+variable "naming_suffix" {
+  description = "Suffix for resource naming"
   type        = string
+  default     = null
 }
 
 variable "resource_group_name" {

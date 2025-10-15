@@ -1,5 +1,9 @@
+locals {
+  resolved_suffix = coalesce(var.naming_suffix, "")
+}
+
 resource "azurerm_container_registry" "acr" {
-  name                = "${local.acr_name}${var.purpose}${var.location_code}${var.random_string}"
+  name                = "${local.acr_name}${var.purpose}${var.location_code}${local.resolved_suffix}"
   resource_group_name = var.resource_group_name
   location            = var.location
 
@@ -20,7 +24,7 @@ resource "azurerm_container_registry" "acr" {
   tags = var.tags
 }
 resource "azurerm_monitor_diagnostic_setting" "diag-base" {
-  name                       = "diag-base"
+  name                       = "${azurerm_container_registry.acr.name}-diag-base-${var.purpose}-${local.resolved_suffix}"
   target_resource_id         = azurerm_container_registry.acr.id
   log_analytics_workspace_id = var.law_resource_id
 

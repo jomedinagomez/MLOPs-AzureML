@@ -4,15 +4,15 @@ command: >-
   --raw_data_green ${{inputs.raw_data_green}}
   --raw_data_yellow ${{inputs.raw_data_yellow}}
   --merged_data ${{outputs.merged_data}}
-code: ../code/merge_data
+code: ../src/merge_data
 inputs:
   raw_data_green:
     type: uri_file 
-    path: azureml:green-taxi-raw:1
+    path: ../data/taxi-data/raw/greenTaxiData.csv
   raw_data_yellow:
     type: uri_file
-    path: azureml:yellow-taxi-raw:1
+    path: ../data/taxi-data/raw/yellowTaxiData.csv
 outputs:
   merged_data:
 environment: azureml:AzureML-sklearn-1.0-ubuntu20.04-py38-cpu@latest
-compute: azureml:cpu-cluster
+compute: azureml:aml-cluster-prod-cc01

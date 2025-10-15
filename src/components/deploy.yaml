@@ -12,14 +12,16 @@ inputs:
     type: string
   register_job_status:
     type: uri_folder
+  registry:
+    type: string
+    optional: true
+outputs:
+  deploy_status:
+    type: uri_folder
 environment:
       conda_file: ../../environment/train/conda.yaml
       image: mcr.microsoft.com/azureml/openmpi5.0-ubuntu24.04:latest
 code: ../deploy
 command: >-
-  python deploy.py 
-  --model_name ${{inputs.model_name}} 
-  --endpoint_name ${{inputs.endpoint_name}} 
-  --deployment_name ${{inputs.deployment_name}} 
-  --register_job_status ${{inputs.register_job_status}} 
+  python deploy.py --model_name ${{inputs.model_name}} --endpoint_name ${{inputs.endpoint_name}} --deployment_name ${{inputs.deployment_name}} --register_job_status ${{inputs.register_job_status}} $[[--registry ${{inputs.registry}}]] --deploy_status ${{outputs.deploy_status}}
 # </component>

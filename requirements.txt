@@ -1,4 +1,0 @@
-azure-ai-ml
-azure-identity
-mlflow-azureml
-mlflow=2.22.1
