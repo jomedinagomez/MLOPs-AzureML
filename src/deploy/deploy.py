@@ -15,6 +15,8 @@ from azure.ai.ml.entities import (
     Environment,
     CodeConfiguration,
     ProbeSettings,
+    DataCollector,
+    DeploymentCollection,
 )
 from azure.ai.ml.constants import ModelType
 
@@ -23,6 +25,8 @@ parser.add_argument("--model_name", type=str, help="Model_name_to_register")
 parser.add_argument("--endpoint_name", type=str, help="Name of Endpoint")
 parser.add_argument("--deployment_name", type=str, help="Name of Deployment")
 parser.add_argument("--register_job_status", type=str, help="Name of score report")
+parser.add_argument("--registry", type=str, required=False, help="Registry name to get model from")
+parser.add_argument("--deploy_status", type=str, required=False, help="Dummy output folder for dependency enforcement")
 
 args = parser.parse_args()
 
@@ -58,14 +62,25 @@ print("Initializing MLclient")
 model_name = args.model_name
 print("Model Name: ", model_name)
 
+# Determine which client to use for model retrieval
+if args.registry:
+    print(f"Using external registry: {args.registry}")
+    # Create registry client for model retrieval
+    ml_client_model = MLClient(credential=credential, registry_name=args.registry)
+    print(f"Getting model from registry: {args.registry}")
+else:
+    print("Using workspace for model retrieval")
+    # Use workspace client for model retrieval
+    ml_client_model = ml_client
+
 # Let's pick the latest version of the model
 latest_model_version = max(
-    [int(m.version) for m in ml_client.models.list(name=model_name)]
+    [int(m.version) for m in ml_client_model.models.list(name=model_name)]
 )
 
-print("Model Name: ", latest_model_version)
+print("Latest Model Version: ", latest_model_version)
 
-model = ml_client.models.get(name=model_name, version=latest_model_version)
+model = ml_client_model.models.get(name=model_name, version=latest_model_version)
 
 # define an online endpoint
 endpoint = ManagedOnlineEndpoint(
@@ -90,12 +105,20 @@ print(
 )
 
 ###Creating Deployment
+collections = {
+    "model_inputs": DeploymentCollection(enabled=True),
+    "model_outputs": DeploymentCollection(enabled=True),
+}
+
+data_collector = DataCollector(collections=collections, sampling_rate=1.0)
+
 deployment = ManagedOnlineDeployment(
     name=args.deployment_name,
     endpoint_name=args.endpoint_name,
     model=model,
     instance_type="Standard_F8S_V2",
     instance_count=1,
+    data_collector=data_collector,
     liveness_probe=ProbeSettings(
         failure_threshold=30,
         success_threshold=1,
@@ -119,3 +142,19 @@ print("Deployment Created")
 # bankmarketing deployment to take 100% traffic
 endpoint.traffic = {args.deployment_name: 100}
 ml_client.begin_create_or_update(endpoint)
+
+# Write deployment logs and a dummy file to the deploy_status output folder to enforce dependency and provide traceability
+if args.deploy_status:
+    os.makedirs(args.deploy_status, exist_ok=True)
+    # Write a dummy file
+    with open(os.path.join(args.deploy_status, "done.txt"), "w") as f:
+        f.write("Deployment complete.")
+    # Write deployment logs
+    with open(os.path.join(args.deploy_status, "deployment_log.txt"), "w") as logf:
+        logf.write("Model name: {}\n".format(args.model_name))
+        logf.write("Endpoint name: {}\n".format(args.endpoint_name))
+        logf.write("Deployment name: {}\n".format(args.deployment_name))
+        logf.write("Registry: {}\n".format(args.registry if args.registry else "(workspace)"))
+        logf.write("Latest model version: {}\n".format(latest_model_version))
+        logf.write("Endpoint provisioning state: {}\n".format(endpoint.provisioning_state))
+        logf.write("Deployment created successfully.\n")

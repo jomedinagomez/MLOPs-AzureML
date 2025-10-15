@@ -34,11 +34,7 @@ variable "firewall_ip_rules" {
   default     = []
 }
 
-variable "kv_admin_object_id" {
-  description = "The object id of the user or service principal to assign the Key Vault Administrator role to"
-  type        = string
-  default     = null
-}
+
 
 variable "law_resource_id" {
   description = "The resource id of the Log Analytics Workspace to send diagnostic logs to"
@@ -61,14 +57,34 @@ variable "purge_protection" {
   default     = false
 }
 
+variable "prefix" {
+  description = "Base prefix for all resource names to ensure uniqueness and consistency"
+  type        = string
+}
+
+variable "resource_prefixes" {
+  description = "Specific prefixes for each resource type"
+  type = object({
+    vnet               = string
+    subnet             = string
+    workspace          = string
+    registry           = string
+    storage            = string
+    container_registry = string
+    key_vault          = string
+    log_analytics      = string
+  })
+}
+
 variable "purpose" {
   description = "The three character purpose of the resource"
   type        = string
 }
 
-variable "random_string" {
-  description = "The random string to append to the resource name"
+variable "naming_suffix" {
+  description = "Suffix for resource naming"
   type        = string
+  default     = null
 }
 
 variable "rbac_enabled" {
@@ -95,6 +111,12 @@ variable "tags" {
 
 variable "enable_auto_purge" {
   description = "Enable automatic purging of Key Vault on destroy (useful for dev/test environments)"
+  type        = bool
+  default     = false
+}
+
+variable "public_network_access_enabled" {
+  description = "Whether public network access is enabled for the Key Vault. Set to false to require private endpoints."
   type        = bool
   default     = false
 }

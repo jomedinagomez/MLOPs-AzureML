@@ -1,5 +1,9 @@
+locals {
+  resolved_suffix = coalesce(var.naming_suffix, "")
+}
+
 resource "azurerm_key_vault" "kv" {
-  name                = "${local.kv_name}${var.purpose}${var.location_code}${var.random_string}"
+  name                = "${local.kv_name}${var.purpose}${var.location_code}${local.resolved_suffix}"
   location            = var.location
   resource_group_name = var.resource_group_name
 
@@ -9,6 +13,7 @@ resource "azurerm_key_vault" "kv" {
   enabled_for_deployment          = local.deployment_vm
   enabled_for_template_deployment = local.deployment_template
   enable_rbac_authorization       = var.rbac_enabled
+  public_network_access_enabled   = var.public_network_access_enabled
 
   enabled_for_disk_encryption = var.disk_encryption
   soft_delete_retention_days  = var.soft_delete_retention_days
@@ -29,18 +34,7 @@ resource "azurerm_key_vault" "kv" {
   }
 }
 
-resource "azurerm_role_assignment" "assign-admin" {
 
-  count = var.rbac_enabled == true ? 1 : 0
-
-  depends_on = [
-    azurerm_key_vault.kv
-  ]
-  name                 = uuidv5("dns", "${azurerm_key_vault.kv.name}${var.kv_admin_object_id}")
-  scope                = "/subscriptions/${data.azurerm_subscription.current.subscription_id}/resourceGroups/${var.resource_group_name}/providers/Microsoft.KeyVault/vaults/${azurerm_key_vault.kv.name}"
-  role_definition_name = "Key Vault Administrator"
-  principal_id         = var.kv_admin_object_id
-}
 
 resource "azurerm_key_vault_access_policy" "access-policy" {
   for_each = {
@@ -59,11 +53,10 @@ resource "azurerm_key_vault_access_policy" "access-policy" {
 # Key Vault diagnostic settings with all supported log categories
 resource "azurerm_monitor_diagnostic_setting" "diag-base" {
   depends_on = [
-    azurerm_key_vault.kv,
-    azurerm_role_assignment.assign-admin
+    azurerm_key_vault.kv
   ]
 
-  name                       = "${azurerm_key_vault.kv.name}-terraform-diagnostics"
+  name                       = "${azurerm_key_vault.kv.name}-diagnostics-${var.purpose}-${local.resolved_suffix}"
   target_resource_id         = azurerm_key_vault.kv.id
   log_analytics_workspace_id = var.law_resource_id
 

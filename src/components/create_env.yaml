@@ -1,0 +1,22 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: create-env
+version: 1
+inputs:
+  env_name:
+    type: string
+    description: Name of the environment to create
+  conda_file:
+    type: string
+    description: Name of the conda.yaml file to use for the new AzureML environment (must be present in the code directory)
+outputs:
+  env_status:
+    type: uri_folder
+    description: Dummy output folder for dependency enforcement
+command: >-
+  python create_env.py --env_name ${{inputs.env_name}} --conda_file ${{inputs.conda_file}} --env_status ${{outputs.env_status}}
+code: ../create_env
+environment:
+      conda_file: ../../environment/train/conda.yaml
+      image: mcr.microsoft.com/azureml/openmpi5.0-ubuntu24.04:latest
+description: |
+  Create an Azure ML environment with the specified name. Writes a dummy file to env_status for dependency enforcement.
