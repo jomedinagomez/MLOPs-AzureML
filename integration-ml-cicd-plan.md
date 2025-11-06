@@ -23,8 +23,8 @@
 ### Trigger Conditions
 - **CI**: On PR to `integration` or direct commit into `integration` (protected to require checks).
 - Scope includes file filters:
-  - `src/**` → full ML validation and unit tests.
-  - non-`src/**` → unit tests only (optional).
+  - `src/**`, `pipelines/**`, `.github/workflows/**` → full ML validation and unit tests.
+  - Other paths → unit tests only (optional).
 
 ### High-Level Stages
 1. **Checkout & Setup**

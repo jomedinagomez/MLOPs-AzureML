@@ -6,15 +6,15 @@ on:
       - integration
     paths:
       - 'src/**'
-      - 'pipelines/integration-compare-pipeline.yaml'
-      - '.github/workflows/integration-ml-ci.yml'
+      - 'pipelines/**'
+      - '.github/workflows/**'
   pull_request:
     branches:
       - integration
     paths:
       - 'src/**'
-      - 'pipelines/integration-compare-pipeline.yaml'
-      - '.github/workflows/integration-ml-ci.yml'
+      - 'pipelines/**'
+      - '.github/workflows/**'
   workflow_dispatch:
     inputs:
       artifact_id:
