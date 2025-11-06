@@ -27,29 +27,26 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   promote-and-deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
     env:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      DEFAULT_IDENTITY_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AML_DEV_REGISTRY: ${{ vars.AML_DEV_REGISTRY }}
       AML_PROD_RESOURCE_GROUP: ${{ vars.AML_PROD_RESOURCE_GROUP }}
       AML_PROD_WORKSPACE: ${{ vars.AML_PROD_WORKSPACE }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Azure login (federated)
+      - name: Azure login (service principal)
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       - name: Install Azure ML CLI extension

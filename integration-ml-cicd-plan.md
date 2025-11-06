@@ -33,7 +33,7 @@
    - Execute Python unit tests located under `src/**` (e.g., `pytest src/tests`).
    - Fail fast on lint/test errors.
 3. **Azure Login & Context**
-   - Use federated credentials or service principal to log into Azure.
+  - Use the dedicated service principal (client secret stored in GitHub Secrets) to log into Azure.
    - Select Dev workspace (`mlwdevcc01`) and Dev external registry (`mlrdevcc01`).
 4. **Run ML Pipeline (Partial)**
    - Execute pipeline defined in `pipelines/dev-e2e-pipeline.yaml` but **stop after `compare_job`** (CompareTaxiFare stage).
@@ -105,8 +105,9 @@
 | Prod Workspace (`mlwprodcc01`) | Production serving environment | Consume vetted models from the Dev registry via the prod release pipeline; no training or manual experimentation; uses blue/green deployments with rollback parity to Dev |
 
 ## GitHub Configuration Prerequisites
-- **Secrets (required for Managed Identity / workload identity login in all workflows)**
+- **Secrets (service principal authentication for CI/CD workflows)**
   - `AZURE_CLIENT_ID`
+  - `AZURE_CLIENT_SECRET`
   - `AZURE_TENANT_ID`
   - `AZURE_SUBSCRIPTION_ID`
 - **Repository Variables (used by `.github/workflows/integration-ml-ci.yml` and `.github/workflows/prod-ml-release.yml`)**
@@ -116,7 +117,7 @@
 - The integration workflow now captures and reuses the exact model version produced by `pipelines/integration-compare-pipeline.yaml`; these secrets/variables must be in place before the workflow runs or the deployment guard will fail.
 
 ## Security Considerations
-- Prefer managed identities for pipeline agents so no secrets are embedded in the workflow.
+- Use a dedicated Azure AD service principal for the GitHub Actions workflows so credentials are scoped and rotated independently of runtime managed identities.
 - Scope access narrowly to the Dev workspace and Dev registry for integration runs; the prod release pipeline uses a separate identity limited to the Prod workspace.
 - Keep sensitive configuration values in Key Vault linked to the Dev workspace when needed and mirror prod secrets in prod-controlled vaults only.
 
@@ -142,7 +143,7 @@
 - `.github/workflows/integration-ml-ci.yml` runs on PRs and pushes targeting `integration` with changes in `src/**` or the integration pipeline definition. Jobs cover unit tests, the `pipelines/integration-compare-pipeline.yaml` submission, and (for pushes) `pipelines/dev-deploy-validation.yaml` to stage, test, and promote the model inside the Dev workspace before the next merge.
 - The same workflow now exposes a `workflow_dispatch` trigger so operators can manually kick off the compare pipeline from feature branches; optional inputs control the artifact suffix and whether to execute the Dev deployment validation stage during the manual run.
 - `.github/workflows/prod-ml-release.yml` is a manual release workflow that submits `pipelines/prod-deploy-pipeline.yaml` to the Prod workspace, pulling the approved model from the Dev registry and orchestrating blue/green traffic updates once validation succeeds.
-- Repository secrets required: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (federated credentials for the CI/CD identity).
+- Repository secrets required: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (service principal credentials for the CI/CD identity).
 - Repository variables recommended: `AML_DEV_RESOURCE_GROUP`, `AML_DEV_WORKSPACE`, `AML_DEV_COMPUTE`, `AML_DEV_REGISTRY`, `AML_DEV_DEPLOYMENT_NAME`, `AML_DEV_TRAFFIC_PERCENT`, `AML_PROD_RESOURCE_GROUP`, `AML_PROD_WORKSPACE`.
 - New pipeline definitions `pipelines/integration-compare-pipeline.yaml`, `pipelines/dev-deploy-validation.yaml`, and `pipelines/prod-deploy-pipeline.yaml` stage validation, Dev deployment tests, and Prod blue/green rollouts respectively without retraining steps.
 
@@ -154,7 +155,7 @@
 ## Next Steps
 1. Draft the CI pipeline YAML (Azure DevOps/GitHub Actions) that mirrors these integration stages and reuses existing command components under `components/` and scripts in `src/`.
 2. Confirm the existing entry points (`src/compare/compare.py`, `src/register/register.py`, etc.) expose the parameters the pipeline needs; add lightweight wrappers only if argument reshaping is required.
-3. Wire up Azure authentication for the CI runner (managed identity/workload federation) and validate that the scripts work with the available credentials instead of the current managed-identity-only assumption.
+3. Wire up Azure authentication for the CI runner using the service principal credentials stored in GitHub Secrets and validate that the scripts work with those permissions.
 4. Configure branch protections and required status checks on `integration` and `main`, adding manual approval gates for the prod release pipeline.
 5. Author the prod release pipeline YAML that pulls the promoted model from the Dev registry, deploys to the Prod workspace, runs smoke tests, and references the existing deployment scripts in `src/`.
 6. Document and dry-run the rollback automation added to both deployment pipelines, ensuring the `rollback_job` cleans up traffic and slots as expected.
