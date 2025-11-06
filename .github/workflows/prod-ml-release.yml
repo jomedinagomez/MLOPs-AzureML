@@ -1,0 +1,158 @@
+name: prod-ml-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      model-base:
+        description: Base model name (defaults to taxi-class)
+        required: false
+      artifact-id:
+        description: Artifact identifier (defaults to m)
+        required: false
+      deployment-name:
+        description: Online deployment slot name (defaults to green)
+        required: false
+      source-environment:
+        description: Registry environment suffix for the source model (defaults to dev)
+        required: false
+      endpoint-environment:
+        description: Environment suffix used in prod endpoint naming (defaults to prod)
+        required: false
+      traffic-percent:
+        description: Traffic percentage to allocate to the new deployment when promoting (defaults to 30)
+        required: false
+      model-version:
+        description: Specific model version to promote (defaults to latest available in registry)
+        required: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  promote-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      DEFAULT_IDENTITY_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AML_DEV_REGISTRY: ${{ vars.AML_DEV_REGISTRY }}
+      AML_PROD_RESOURCE_GROUP: ${{ vars.AML_PROD_RESOURCE_GROUP }}
+      AML_PROD_WORKSPACE: ${{ vars.AML_PROD_WORKSPACE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Azure login (federated)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Install Azure ML CLI extension
+        run: |
+          set -euo pipefail
+          az extension add --name ml --yes
+      - name: Configure Azure ML defaults
+        run: |
+          set -euo pipefail
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+          az configure --defaults group="$AML_PROD_RESOURCE_GROUP" workspace="$AML_PROD_WORKSPACE"
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AML_PROD_RESOURCE_GROUP: ${{ vars.AML_PROD_RESOURCE_GROUP }}
+          AML_PROD_WORKSPACE: ${{ vars.AML_PROD_WORKSPACE }}
+      - name: Resolve pipeline parameters
+        id: params
+        run: |
+          set -euo pipefail
+          MODEL_BASE="${{ github.event.inputs.model-base }}"
+          ARTIFACT_ID="${{ github.event.inputs['artifact-id'] }}"
+          DEPLOYMENT_NAME="${{ github.event.inputs['deployment-name'] }}"
+          SOURCE_ENV="${{ github.event.inputs['source-environment'] }}"
+          ENDPOINT_ENV="${{ github.event.inputs['endpoint-environment'] }}"
+          TRAFFIC_PERCENT="${{ github.event.inputs['traffic-percent'] }}"
+          if [ -z "$MODEL_BASE" ]; then MODEL_BASE="taxi-class"; fi
+          if [ -z "$ARTIFACT_ID" ]; then ARTIFACT_ID="m"; fi
+          if [ -z "$DEPLOYMENT_NAME" ]; then DEPLOYMENT_NAME="green"; fi
+          if [ -z "$SOURCE_ENV" ]; then SOURCE_ENV="dev"; fi
+          if [ -z "$ENDPOINT_ENV" ]; then ENDPOINT_ENV="prod"; fi
+          if [ -z "$TRAFFIC_PERCENT" ]; then TRAFFIC_PERCENT="30"; fi
+          echo "model_base=$MODEL_BASE" >> "$GITHUB_OUTPUT"
+          echo "artifact_id=$ARTIFACT_ID" >> "$GITHUB_OUTPUT"
+          echo "deployment_name=$DEPLOYMENT_NAME" >> "$GITHUB_OUTPUT"
+          echo "source_environment=$SOURCE_ENV" >> "$GITHUB_OUTPUT"
+          echo "endpoint_environment=$ENDPOINT_ENV" >> "$GITHUB_OUTPUT"
+          REQUESTED_VERSION="${{ github.event.inputs['model-version'] }}"
+          echo "traffic_percent=$TRAFFIC_PERCENT" >> "$GITHUB_OUTPUT"
+          if [ -n "$REQUESTED_VERSION" ]; then
+            echo "requested_version=$REQUESTED_VERSION" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Determine model version
+        id: model
+        run: |
+          set -euo pipefail
+
+          MODEL_BASE="${{ steps.params.outputs.model_base }}"
+          ARTIFACT_ID="${{ steps.params.outputs.artifact_id }}"
+          SOURCE_ENV="${{ steps.params.outputs.source_environment }}"
+          REGISTRY="$AML_DEV_REGISTRY"
+          REQUESTED="${{ steps.params.outputs.requested_version }}"
+
+          MODEL_NAME="${MODEL_BASE}-${SOURCE_ENV}-${ARTIFACT_ID}"
+
+          if [ -n "$REQUESTED" ]; then
+            MODEL_VERSION="$REQUESTED"
+          else
+            MODEL_VERSION=$(az ml model list \
+              --registry-name "$REGISTRY" \
+              --name "$MODEL_NAME" \
+              --query "sort_by(@, to_number(@.version))[-1].version" -o tsv)
+          fi
+
+          if [ -z "$MODEL_VERSION" ]; then
+            echo "Could not resolve a model version for $MODEL_NAME" >&2
+            exit 1
+          fi
+
+          if ! az ml model show --registry-name "$REGISTRY" --name "$MODEL_NAME" --version "$MODEL_VERSION" --query id -o tsv >/dev/null 2>&1; then
+            echo "Model $MODEL_NAME version $MODEL_VERSION not found in registry $REGISTRY" >&2
+            exit 1
+          fi
+
+          echo "model_name=$MODEL_NAME" >> "$GITHUB_OUTPUT"
+          echo "model_version=$MODEL_VERSION" >> "$GITHUB_OUTPUT"
+      - name: Submit prod release pipeline
+        id: submit
+        run: |
+          set -euo pipefail
+          JOB_ID=$(az ml job create \
+            --file pipelines/prod-deploy-pipeline.yaml \
+            --set inputs.model_base="${{ steps.params.outputs.model_base }}" \
+            --set inputs.artifact_id="${{ steps.params.outputs.artifact_id }}" \
+            --set inputs.deployment_name="${{ steps.params.outputs.deployment_name }}" \
+            --set inputs.source_environment="${{ steps.params.outputs.source_environment }}" \
+            --set inputs.endpoint_environment="${{ steps.params.outputs.endpoint_environment }}" \
+            --set inputs.registry="$AML_DEV_REGISTRY" \
+            --set inputs.model_version="${{ steps.model.outputs.model_version }}" \
+            --set inputs.traffic_percent=${{ steps.params.outputs.traffic_percent }} \
+            --query name -o tsv)
+          echo "Submitted job: $JOB_ID"
+          echo "job_id=$JOB_ID" >> "$GITHUB_OUTPUT"
+        env:
+          AML_DEV_REGISTRY: ${{ vars.AML_DEV_REGISTRY }}
+      - name: Stream job logs
+        run: |
+          set -euo pipefail
+          az ml job stream --name "${{ steps.submit.outputs.job_id }}"
+      - name: Verify job status
+        run: |
+          set -euo pipefail
+          STATUS=$(az ml job show --name "${{ steps.submit.outputs.job_id }}" --query status -o tsv)
+          echo "Final job status: $STATUS"
+          if [ "$STATUS" != "Completed" ]; then
+            exit 1
+          fi

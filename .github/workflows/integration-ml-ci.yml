@@ -1,0 +1,268 @@
+name: integration-ml-ci
+
+on:
+  push:
+    branches:
+      - integration
+    paths:
+      - 'src/**'
+      - 'pipelines/integration-compare-pipeline.yaml'
+      - '.github/workflows/integration-ml-ci.yml'
+  pull_request:
+    branches:
+      - integration
+    paths:
+      - 'src/**'
+      - 'pipelines/integration-compare-pipeline.yaml'
+      - '.github/workflows/integration-ml-ci.yml'
+  workflow_dispatch:
+    inputs:
+      artifact_id:
+        description: Optional artifact suffix used when submitting ML jobs.
+        required: false
+        default: m-manual
+      run_dev_deploy:
+        description: Also run the dev deployment validation job after the compare pipeline.
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install -r notebooks/requirements.txt pytest
+      - name: Run pytest suite
+        run: |
+          set -euo pipefail
+          pytest src --maxfail=1 --disable-warnings -q
+
+  aml-compare:
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      compare_job_id: ${{ steps.compare.outputs.job_id }}
+      model_version: ${{ steps.compare.outputs.model_version }}
+      artifact_id: ${{ steps.compare.outputs.artifact_id }}
+      model_name: ${{ steps.compare.outputs.model_name }}
+      model_base: ${{ steps.compare.outputs.model_base }}
+      source_environment: ${{ steps.compare.outputs.environment }}
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      DEFAULT_IDENTITY_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AML_DEV_RESOURCE_GROUP: ${{ vars.AML_DEV_RESOURCE_GROUP }}
+      AML_DEV_WORKSPACE: ${{ vars.AML_DEV_WORKSPACE }}
+      AML_DEV_COMPUTE: ${{ vars.AML_DEV_COMPUTE }}
+      AML_DEV_REGISTRY: ${{ vars.AML_DEV_REGISTRY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Azure login (federated)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Install Azure ML CLI extension
+        run: |
+          set -euo pipefail
+          az extension add --name ml --yes
+      - name: Configure Azure ML defaults
+        run: |
+          set -euo pipefail
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+          az configure --defaults group="$AML_DEV_RESOURCE_GROUP" workspace="$AML_DEV_WORKSPACE"
+      - name: Run integration compare pipeline
+        id: compare
+        run: |
+          set -euo pipefail
+
+          ARTIFACT_ID="${{ github.event.inputs.artifact_id }}"
+          if [ -z "$ARTIFACT_ID" ]; then ARTIFACT_ID="m"; fi
+
+          MODEL_BASE="${{ vars.AML_MODEL_BASE }}"
+          if [ -z "$MODEL_BASE" ]; then MODEL_BASE="taxi-class"; fi
+          SOURCE_ENV="dev"
+
+          COMPUTE="$AML_DEV_COMPUTE"
+          REGISTRY="$AML_DEV_REGISTRY"
+
+          JOB_ID=""
+          MODEL_VERSION=""
+
+          for ATTEMPT in 1 2; do
+            FORCE="false"
+            if [ "$ATTEMPT" -eq 2 ]; then
+              FORCE="true"
+              echo "Initial run did not leave a valid model version; rerunning with force_rerun=true" >&2
+            fi
+
+            JOB_ID=$(az ml job create \
+              --file pipelines/integration-compare-pipeline.yaml \
+              --set inputs.automl_compute="$COMPUTE" \
+              --set inputs.registry="$REGISTRY" \
+              --set inputs.artifact_id="$ARTIFACT_ID" \
+              --set inputs.model_base="$MODEL_BASE" \
+              --set settings.force_rerun=$FORCE \
+              --query name -o tsv)
+
+            echo "Submitted job: $JOB_ID" >&2
+            az ml job stream --name "$JOB_ID" >&2
+
+            STATUS=$(az ml job show --name "$JOB_ID" --query status -o tsv)
+            echo "Final job status: $STATUS" >&2
+            if [ "$STATUS" != "Completed" ]; then
+              echo "Job $JOB_ID ended with status $STATUS" >&2
+              exit 1
+            fi
+
+            TEMP_DIR=$(mktemp -d)
+            az ml job download \
+              --name "$JOB_ID" \
+              --output-name register_metadata \
+              --download-path "$TEMP_DIR" \
+              --only-show-errors >&2
+
+            METADATA_FILE=$(find "$TEMP_DIR" -name model_versions.json -print -quit)
+            if [ -z "$METADATA_FILE" ]; then
+              echo "model_versions.json missing from register output for $JOB_ID" >&2
+              rm -rf "$TEMP_DIR"
+              exit 1
+            fi
+
+            MODEL_VERSION=$(jq -r '.registry_version // .workspace_version // empty' "$METADATA_FILE")
+            if [ -z "$MODEL_VERSION" ] || [ "$MODEL_VERSION" = "null" ]; then
+              echo "No model version recorded in model_versions.json for job $JOB_ID" >&2
+              exit 1
+            fi
+
+            rm -rf "$TEMP_DIR"
+
+            MODEL_NAME="${MODEL_BASE}-${SOURCE_ENV}-${ARTIFACT_ID}"
+            if az ml model show --name "$MODEL_NAME" --version "$MODEL_VERSION" --registry-name "$REGISTRY" --query id -o tsv >/dev/null 2>&1; then
+              echo "job_id=$JOB_ID" >> "$GITHUB_OUTPUT"
+              echo "model_version=$MODEL_VERSION" >> "$GITHUB_OUTPUT"
+              echo "artifact_id=$ARTIFACT_ID" >> "$GITHUB_OUTPUT"
+              echo "model_name=$MODEL_NAME" >> "$GITHUB_OUTPUT"
+              echo "model_base=$MODEL_BASE" >> "$GITHUB_OUTPUT"
+              echo "environment=$SOURCE_ENV" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            if az ml model show --name "$MODEL_NAME" --version "$MODEL_VERSION" --resource-group "$AML_DEV_RESOURCE_GROUP" --workspace-name "$AML_DEV_WORKSPACE" --query id -o tsv >/dev/null 2>&1; then
+              echo "job_id=$JOB_ID" >> "$GITHUB_OUTPUT"
+              echo "model_version=$MODEL_VERSION" >> "$GITHUB_OUTPUT"
+              echo "artifact_id=$ARTIFACT_ID" >> "$GITHUB_OUTPUT"
+              echo "model_name=$MODEL_NAME" >> "$GITHUB_OUTPUT"
+              echo "model_base=$MODEL_BASE" >> "$GITHUB_OUTPUT"
+              echo "environment=$SOURCE_ENV" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            if [ "$ATTEMPT" -eq 2 ]; then
+              echo "Model version $MODEL_VERSION was not found in registry or workspace after force rerun" >&2
+              exit 1
+            fi
+          done
+
+          echo "Unable to resolve model version" >&2
+          exit 1
+
+  dev-deploy:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_dev_deploy == 'true')
+    needs: aml-compare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      DEFAULT_IDENTITY_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AML_DEV_RESOURCE_GROUP: ${{ vars.AML_DEV_RESOURCE_GROUP }}
+      AML_DEV_WORKSPACE: ${{ vars.AML_DEV_WORKSPACE }}
+      AML_DEV_COMPUTE: ${{ vars.AML_DEV_COMPUTE }}
+      AML_DEV_REGISTRY: ${{ vars.AML_DEV_REGISTRY }}
+      AML_DEV_DEPLOYMENT_NAME: ${{ vars.AML_DEV_DEPLOYMENT_NAME }}
+      AML_DEV_TRAFFIC_PERCENT: ${{ vars.AML_DEV_TRAFFIC_PERCENT }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Azure login (federated)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Install Azure ML CLI extension
+        run: |
+          set -euo pipefail
+          az extension add --name ml --yes
+      - name: Configure Azure ML defaults
+        run: |
+          set -euo pipefail
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+          az configure --defaults group="$AML_DEV_RESOURCE_GROUP" workspace="$AML_DEV_WORKSPACE"
+      - name: Submit dev deployment validation pipeline
+        id: submit
+        run: |
+          set -euo pipefail
+          DEPLOYMENT_NAME="$AML_DEV_DEPLOYMENT_NAME"
+          if [ -z "$DEPLOYMENT_NAME" ]; then DEPLOYMENT_NAME="blue"; fi
+          TRAFFIC_PERCENT="$AML_DEV_TRAFFIC_PERCENT"
+          if [ -z "$TRAFFIC_PERCENT" ]; then TRAFFIC_PERCENT="30"; fi
+          ARTIFACT_ID="${{ needs.aml-compare.outputs.artifact_id }}"
+          MODEL_BASE="${{ needs.aml-compare.outputs.model_base }}"
+          if [ -z "$MODEL_BASE" ]; then MODEL_BASE="taxi-class"; fi
+          SOURCE_ENV="${{ needs.aml-compare.outputs.source_environment }}"
+          if [ -z "$SOURCE_ENV" ]; then SOURCE_ENV="dev"; fi
+          MODEL_VERSION="${{ needs.aml-compare.outputs.model_version }}"
+          if [ -z "$MODEL_VERSION" ]; then
+            echo "Model version from compare job is required" >&2
+            exit 1
+          fi
+          JOB_ID=$(az ml job create \
+            --file pipelines/dev-deploy-validation.yaml \
+            --set inputs.model_base="$MODEL_BASE" \
+            --set inputs.source_environment="$SOURCE_ENV" \
+            --set inputs.deployment_name="$DEPLOYMENT_NAME" \
+            --set inputs.traffic_percent=$TRAFFIC_PERCENT \
+            --set inputs.registry="$AML_DEV_REGISTRY" \
+            --set inputs.artifact_id="$ARTIFACT_ID" \
+            --set inputs.model_version="$MODEL_VERSION" \
+            --set inputs.automl_compute="$AML_DEV_COMPUTE" \
+            --query name -o tsv)
+          echo "Submitted dev deployment job: $JOB_ID"
+          echo "job_id=$JOB_ID" >> "$GITHUB_OUTPUT"
+      - name: Stream dev deployment logs
+        run: |
+          set -euo pipefail
+          az ml job stream --name "${{ steps.submit.outputs.job_id }}"
+      - name: Verify dev deployment status
+        run: |
+          set -euo pipefail
+          STATUS=$(az ml job show --name "${{ steps.submit.outputs.job_id }}" --query status -o tsv)
+          echo "Final dev deployment job status: $STATUS"
+          if [ "$STATUS" != "Completed" ]; then
+            exit 1
+          fi
