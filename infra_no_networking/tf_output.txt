@@ -1,0 +1,117 @@
+Apply complete! Resources: 28 added, 6 changed, 1 destroyed.
+
+Outputs:
+
+cross_environment_connectivity = {
+  "dev_to_prod_registry_access" = {
+    "description" = "Production workspace can pull from development registry"
+    "enabled" = true
+  }
+  "prod_workspace_permissions" = {
+    "dev_registry_contributor" = "Configured for asset promotion"
+    "dev_registry_reader" = "Configured"
+  }
+}
+dev_container_registry_name = "acrdevcc01"
+dev_key_vault_name = "kvdevcc01"
+dev_private_endpoint_fqdns = tomap({})
+dev_registry_id = "/subscriptions/5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25/resourceGroups/rg-aml-reg-dev-cc-01/providers/Microsoft.MachineLearningServices/registries/mlrdevcc01"
+dev_registry_name = "mlrdevcc01"
+dev_storage_account_name = "stdevcc01"
+dev_workspace_id = "/subscriptions/5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25/resourceGroups/rg-aml-ws-dev-cc-01/providers/Microsoft.MachineLearningServices/workspaces/mlwdevcc01"
+dev_workspace_name = "mlwdevcc01"
+key_vault_purge_protection_enabled = false
+naming_suffix = "01"
+platform_deployment_summary = {
+  "deployment_timestamp" = "2025-11-05T16:55:50Z"
+  "environment_config" = {
+    "development" = {
+      "auto_purge_enabled" = true
+      "cross_env_rbac" = false
+      "purpose" = "dev"
+      "subnet_address_prefix" = "10.1.1.0/24"
+      "vnet_address_space" = "10.1.0.0/16"
+    }
+    "production" = {
+      "auto_purge_enabled" = false
+      "cross_env_rbac" = true
+      "purpose" = "prod"
+      "subnet_address_prefix" = "10.2.1.0/24"
+      "vnet_address_space" = "10.2.0.0/16"
+    }
+  }
+  "environments_deployed" = [
+    "development",
+    "production",
+  ]
+  "key_endpoints" = {
+    "development" = {
+      "container_registry" = "acrdevcc01.azurecr.io"
+      "key_vault" = "https://kvdevcc01.vault.azure.net"
+      "registry_endpoint" = "https://mlrdevcc01.registry.azureml.ms"
+      "storage_account" = "https://stdevcc01.blob.core.windows.net"
+      "workspace_endpoint" = "https://mlwdevcc01.api.azureml.ms"
+    }
+    "production" = {
+      "container_registry" = "acrprodcc01.azurecr.io"
+      "key_vault" = "https://kvprodcc01.vault.azure.net"
+      "registry_endpoint" = "https://mlrprodcc01.registry.azureml.ms"
+      "storage_account" = "https://stprodcc01.blob.core.windows.net"
+      "workspace_endpoint" = "https://mlwprodcc01.api.azureml.ms"
+    }
+  }
+  "key_vault_security" = {
+    "auto_purge_enabled" = true
+    "purge_protection_enabled" = false
+  }
+  "region" = "canadacentral"
+  "region_code" = "cc"
+  "resource_groups" = {
+    "dev_registry_rg" = "rg-aml-reg-dev-cc-01"
+    "dev_vnet_rg" = null
+    "dev_workspace_rg" = "rg-aml-ws-dev-cc-01"
+    "prod_registry_rg" = "rg-aml-reg-prod-cc-01"
+    "prod_vnet_rg" = null
+    "prod_workspace_rg" = "rg-aml-ws-prod-cc-01"
+    "shared_dns_rg" = null
+  }
+  "resource_naming" = {
+    "example_dev" = "mlwdevcc01"
+    "example_prod" = "mlwprodcc01"
+    "pattern" = "[prefix][service][purpose][location_code][naming_suffix]"
+  }
+  "service_principal" = {
+    "application_id" = "d30ac97f-182c-4ec9-afb0-ba4b2a11b9ac"
+    "name" = "sp-aml-deployment-platform"
+  }
+  "tags_applied" = tomap({
+    "SecurityControl" = "Ignore"
+    "created_by" = "terraform"
+    "deployment" = "flat-vnet-bastion"
+    "environment" = "multi-env"
+    "owner" = "ml-team"
+    "project" = "ml-platform"
+  })
+  "terraform_version" = "~> 1.0"
+}
+prod_container_registry_name = "acrprodcc01"
+prod_key_vault_name = "kvprodcc01"
+prod_private_endpoint_fqdns = tomap({})
+prod_registry_id = "/subscriptions/5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25/resourceGroups/rg-aml-reg-prod-cc-01/providers/Microsoft.MachineLearningServices/registries/mlrprodcc01"
+prod_registry_name = "mlrprodcc01"
+prod_storage_account_name = "stprodcc01"
+prod_workspace_id = "/subscriptions/5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25/resourceGroups/rg-aml-ws-prod-cc-01/providers/Microsoft.MachineLearningServices/workspaces/mlwprodcc01"
+prod_workspace_name = "mlwprodcc01"
+resource_group_names = {
+  "dev_registry" = "rg-aml-reg-dev-cc-01"
+  "dev_vnet" = null
+  "dev_workspace" = "rg-aml-ws-dev-cc-01"
+  "prod_registry" = "rg-aml-reg-prod-cc-01"
+  "prod_vnet" = null
+  "prod_workspace" = "rg-aml-ws-prod-cc-01"
+  "shared_dns" = null
+}
+service_principal_application_id = "d30ac97f-182c-4ec9-afb0-ba4b2a11b9ac"
+service_principal_display_name = "sp-aml-deployment-platform"
+service_principal_object_id = "fff20fdd-507f-4439-9cc4-2283cd65fe63"
+shared_aml_dns_zone_ids = tomap({})

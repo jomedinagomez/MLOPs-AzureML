@@ -1,0 +1,41 @@
+artifact_path: outputs/mlflow-model
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.9.23
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: pickle
+    sklearn_version: 1.5.1
+metadata:
+  azureml.base_image: mcr.microsoft.com/azureml/curated/ai-ml-automl:27
+  azureml.engine: automl
+mlflow_version: 2.15.1
+model_size_bytes: 8344673
+model_uuid: fce1afd3a5b04990b3347e289d47b7b9
+run_id: silly_chayote_8k0jkxfqt2_4
+signature:
+  inputs: '[{"type": "double", "name": "distance", "required": true}, {"type": "double",
+    "name": "dropoff_latitude", "required": true}, {"type": "double", "name": "dropoff_longitude",
+    "required": true}, {"type": "long", "name": "passengers", "required": true}, {"type":
+    "double", "name": "pickup_latitude", "required": true}, {"type": "double", "name":
+    "pickup_longitude", "required": true}, {"type": "boolean", "name": "store_forward",
+    "required": true}, {"type": "long", "name": "vendor", "required": true}, {"type":
+    "long", "name": "pickup_weekday", "required": true}, {"type": "boolean", "name":
+    "pickup_month", "required": true}, {"type": "long", "name": "pickup_monthday",
+    "required": true}, {"type": "long", "name": "pickup_hour", "required": true},
+    {"type": "long", "name": "pickup_minute", "required": true}, {"type": "boolean",
+    "name": "pickup_second", "required": true}, {"type": "long", "name": "dropoff_weekday",
+    "required": true}, {"type": "boolean", "name": "dropoff_month", "required": true},
+    {"type": "long", "name": "dropoff_monthday", "required": true}, {"type": "long",
+    "name": "dropoff_hour", "required": true}, {"type": "long", "name": "dropoff_minute",
+    "required": true}, {"type": "boolean", "name": "dropoff_second", "required": true}]'
+  outputs: '[{"type": "tensor", "tensor-spec": {"dtype": "str", "shape": [-1]}}]'
+  params: null
+utc_time_created: '2025-11-06 15:06:36.976312'

@@ -1,0 +1,115 @@
+$schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
+type: pipeline
+experiment_name: nyc-taxi-deploy-validate-dev
+description: Deploy promoted model from the dev registry, validate endpoint, and promote traffic.
+
+inputs:
+  model_base: 'taxi-class'
+  source_environment: 'dev'
+  artifact_id: 'm'
+  endpoint_environment: 'dev'
+  deployment_name: 'blue'
+  registry: 'mlrdevcc01'
+  model_version: 'latest'
+  traffic_percent: 30
+  automl_compute: 'aml-cluster-dev-cc01'
+outputs:
+  staging_test_data:
+    mode: rw_mount
+
+settings:
+  default_datastore: azureml:workspaceblobstore
+  default_compute: azureml:aml-cluster-dev-cc01
+  continue_on_step_failure: false
+jobs:
+  merge_job:
+    type: command
+    code: ../src/merge_data
+    command: >-
+      python merge_data.py
+      --raw_data_green ${{inputs.raw_data_green}}
+      --raw_data_yellow ${{inputs.raw_data_yellow}}
+      --merged_data ${{outputs.merged_data}}
+    inputs:
+      raw_data_green:
+        type: uri_file
+        path: ../data/taxi-data/raw/greenTaxiData.csv
+      raw_data_yellow:
+        type: uri_file
+        path: ../data/taxi-data/raw/yellowTaxiData.csv
+    outputs:
+      merged_data:
+        mode: upload
+    environment: azureml:AzureML-sklearn-1.0-ubuntu20.04-py38-cpu@latest
+
+  transform_job:
+    type: command
+    component: ../src/components/transform.yaml
+    inputs:
+      test_split_ratio: 0.3
+      clean_data: ${{parent.jobs.merge_job.outputs.merged_data}}
+    outputs:
+      train_data:
+      test_data: ${{parent.outputs.staging_test_data}}
+
+  deploy_job:
+    type: command
+    component: ../src/components/deploy.yaml
+    inputs:
+      model_name: '${{parent.inputs.model_base}}-${{parent.inputs.source_environment}}-${{parent.inputs.artifact_id}}'
+      endpoint_name: '${{parent.inputs.model_base}}-ws-${{parent.inputs.endpoint_environment}}-${{parent.inputs.artifact_id}}-col'
+      deployment_name: ${{parent.inputs.deployment_name}}
+      registry: ${{parent.inputs.registry}}
+      model_version: ${{parent.inputs.model_version}}
+      initial_traffic_percent: 100
+    outputs:
+      deploy_status:
+
+  test_job:
+    type: command
+    component: ../src/components/test_endpoint.yaml
+    inputs:
+      endpoint_name: '${{parent.inputs.model_base}}-ws-${{parent.inputs.endpoint_environment}}-${{parent.inputs.artifact_id}}-col'
+      deployment_name: ${{parent.inputs.deployment_name}}
+      test_data: ${{parent.jobs.transform_job.outputs.test_data}}
+      deploy_status: ${{parent.jobs.deploy_job.outputs.deploy_status}}
+    outputs:
+      report_folder:
+
+  traffic_job:
+    type: command
+    component: ../src/components/update_traffic.yaml
+    condition: succeeded(parent.jobs.test_job)
+    inputs:
+      endpoint_name: '${{parent.inputs.model_base}}-ws-${{parent.inputs.endpoint_environment}}-${{parent.inputs.artifact_id}}-col'
+      deployment_name: ${{parent.inputs.deployment_name}}
+      deployment_state: ${{parent.jobs.deploy_job.outputs.deploy_status}}
+      traffic_percent: ${{parent.inputs.traffic_percent}}
+      mode: 'promote'
+    outputs:
+      persisted_state:
+
+  rollback_job:
+    type: command
+    component: ../src/components/update_traffic.yaml
+    condition: failed(parent.jobs.test_job)
+    inputs:
+      endpoint_name: '${{parent.inputs.model_base}}-ws-${{parent.inputs.endpoint_environment}}-${{parent.inputs.artifact_id}}-col'
+      deployment_name: ${{parent.inputs.deployment_name}}
+      deployment_state: ${{parent.jobs.deploy_job.outputs.deploy_status}}
+      mode: 'rollback'
+      delete_on_rollback: 'true'
+    outputs:
+      persisted_state:
+
+  cleanup_job:
+    type: command
+    component: ../src/components/cleanup_models.yaml
+    condition: succeeded(parent.jobs.traffic_job)
+    inputs:
+      model_name: '${{parent.inputs.model_base}}-${{parent.inputs.source_environment}}-${{parent.inputs.artifact_id}}'
+      registry: ${{parent.inputs.registry}}
+      retain_versions: 1
+      deploy_state: ${{parent.jobs.deploy_job.outputs.deploy_status}}
+    outputs:
+      summary:

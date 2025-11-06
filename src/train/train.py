@@ -48,6 +48,9 @@ parser.add_argument("--test_data", type=str, help="Path to test data")
 parser.add_argument("--model_output", type=str, help="Path of output model")
 parser.add_argument("--model_name", type=str, help="Model name")
 parser.add_argument("--automl_compute", type=str, default="aml-cluster-dev-cc01", help="Compute cluster for AutoML job")
+parser.add_argument("--max_automl_trials", type=int, default=1, help="Maximum number of AutoML trials")
+parser.add_argument("--enable_vote_ensemble", type=str, default="false", help="Set to true to enable vote ensemble")
+parser.add_argument("--enable_stack_ensemble", type=str, default="false", help="Set to true to enable stack ensemble")
 args = parser.parse_args()
 compute_name = args.automl_compute
 _ = ml_client.compute.get(compute_name)
@@ -73,7 +76,12 @@ my_training_data_input = Input(
 
 ####
 # General job parameters
-max_trials = 1
+def _str_to_bool(value: str) -> bool:
+    if value is None:
+        return False
+    return str(value).lower() in {"true", "1", "yes", "y", "on"}
+
+max_trials = max(1, args.max_automl_trials)
 exp_name = "Taxi-Regression-AutoML-Job-subrun"
 
 #https://github.com/Azure/azureml-examples/blob/main/sdk/python/jobs/automl-standalone-jobs/automl-classification-task-bankmarketing/automl-classification-task-bankmarketing.ipynb
@@ -102,8 +110,8 @@ classification_job.set_limits(
 # Training properties are optional
 classification_job.set_training(
     enable_onnx_compatible_models=True,
-    enable_stack_ensemble=False,
-    enable_vote_ensemble=False,
+    enable_stack_ensemble=_str_to_bool(args.enable_stack_ensemble),
+    enable_vote_ensemble=_str_to_bool(args.enable_vote_ensemble),
 )
 
 ### Run Command

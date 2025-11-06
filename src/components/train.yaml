@@ -6,12 +6,23 @@ type: command
 inputs:
   training_data: 
     type: uri_folder
+  testing_data:
+    type: uri_folder
   model_name:
     type: string
     default: test
   automl_compute:
     type: string
     default: aml-cluster-dev-cc01
+  max_automl_trials:
+    type: integer
+    default: 1
+  enable_vote_ensemble:
+    type: boolean
+    default: false
+  enable_stack_ensemble:
+    type: boolean
+    default: false
 outputs:
   model_output:
     type: mlflow_model
@@ -26,8 +37,12 @@ environment:
 command: >-
   python train.py 
   --training_data ${{inputs.training_data}} 
+  --test_data ${{inputs.testing_data}}
   --model_name ${{inputs.model_name}} 
   --model_output ${{outputs.model_output}}
   --automl_compute ${{inputs.automl_compute}}
+  --max_automl_trials ${{inputs.max_automl_trials}}
+  --enable_vote_ensemble ${{inputs.enable_vote_ensemble}}
+  --enable_stack_ensemble ${{inputs.enable_stack_ensemble}}
 
 # </component>
