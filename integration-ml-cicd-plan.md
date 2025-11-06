@@ -34,6 +34,7 @@
    - Fail fast on lint/test errors.
 3. **Azure Login & Context**
   - Use the dedicated service principal (client secret stored in GitHub Secrets) to log into Azure.
+  - CI runners use Python 3.13 for unit tests and CLI tooling; keep dependency pins compatible with that runtime.
    - Select Dev workspace (`mlwdevcc01`) and Dev external registry (`mlrdevcc01`).
 4. **Run ML Pipeline (Partial)**
    - Execute pipeline defined in `pipelines/dev-e2e-pipeline.yaml` but **stop after `compare_job`** (CompareTaxiFare stage).
