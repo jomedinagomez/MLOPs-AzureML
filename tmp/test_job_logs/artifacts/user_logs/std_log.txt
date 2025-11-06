@@ -1,0 +1,7 @@
+usage: test_endpoint [-h] --endpoint_name ENDPOINT_NAME
+                     [--deployment_name DEPLOYMENT_NAME]
+                     [--deployment_name_file DEPLOYMENT_NAME_FILE]
+                     [--default_slot DEFAULT_SLOT] --test_data TEST_DATA
+                     --report_folder REPORT_FOLDER
+                     [--deploy_status DEPLOY_STATUS]
+test_endpoint: error: unrecognized arguments: --deployment_nameblue

@@ -1,0 +1,2 @@
+Status code: 500
+Response: expected str, bytes or os.PathLike object, not NoneType

@@ -4,6 +4,9 @@ outputs.txt
 # Local inventory / exported terraform artifacts (not tracked)
 .local_inventory/
 
+# Local credentials / notes
+credentials/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
