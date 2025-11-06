@@ -6,14 +6,16 @@ on:
       - integration
     paths:
       - 'src/**'
-      - 'pipelines/**'
+      - 'pipelines/integration-compare-pipeline.yaml'
+      - 'pipelines/dev-deploy-validation.yaml'
       - '.github/workflows/**'
   pull_request:
     branches:
       - integration
     paths:
       - 'src/**'
-      - 'pipelines/**'
+      - 'pipelines/integration-compare-pipeline.yaml'
+      - 'pipelines/dev-deploy-validation.yaml'
       - '.github/workflows/**'
   workflow_dispatch:
     inputs:
@@ -48,7 +50,7 @@ jobs:
       - name: Run pytest suite
         run: |
           set -euo pipefail
-          pytest src --maxfail=1 --disable-warnings -q
+          pytest tests src/test_endpoint --maxfail=1 --disable-warnings -q
 
   aml-compare:
     needs: unit-tests

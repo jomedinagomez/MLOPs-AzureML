@@ -23,7 +23,7 @@
 ### Trigger Conditions
 - **CI**: On PR to `integration` or direct commit into `integration` (protected to require checks).
 - Scope includes file filters:
-  - `src/**`, `pipelines/**`, `.github/workflows/**` → full ML validation and unit tests.
+  - `src/**`, `pipelines/integration-compare-pipeline.yaml`, `pipelines/dev-deploy-validation.yaml`, `.github/workflows/**` → full ML validation and unit tests.
   - Other paths → unit tests only (optional).
 
 ### High-Level Stages
@@ -56,7 +56,7 @@
 - Cache dependency installs (pip cache) to improve repeat runs.
 
 ### Unit Testing Strategy
-- Command: `pytest src --maxfail=1 --disable-warnings -q`.
+- Command: `pytest tests src/test_endpoint --maxfail=1 --disable-warnings -q`.
 - Coverage reporting optional but recommended for metrics.
 - Fail pipeline when tests fail.
 
