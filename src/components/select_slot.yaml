@@ -1,0 +1,29 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: select_deployment_slot
+display_name: SelectDeploymentSlot
+inputs:
+  endpoint_name:
+    type: string
+  default_slot:
+    type: string
+    optional: true
+  alternate_slot:
+    type: string
+    optional: true
+  preferred_slot:
+    type: string
+    optional: true
+outputs:
+  selected_slot:
+    type: uri_file
+environment:
+  conda_file: ../../environment/score/conda.yaml
+  image: mcr.microsoft.com/azureml/openmpi5.0-ubuntu24.04:latest
+code: ../traffic
+command: >-
+  python select_slot.py
+  --endpoint_name ${{inputs.endpoint_name}}
+  $[[--default_slot ${{inputs.default_slot}}]]
+  $[[--alternate_slot ${{inputs.alternate_slot}}]]
+  $[[--preferred_slot ${{inputs.preferred_slot}}]]
+  --output_slot ${{outputs.selected_slot}}

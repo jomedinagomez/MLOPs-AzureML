@@ -1,0 +1,18 @@
+/azureml-envs/azureml_3c92b2cff7012b09699b6e09ff02149c/lib/python3.9/site-packages/azureml/core/__init__.py:11: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+Class DeploymentTemplateOperations: This is an experimental class, and may change at any time. Please see https://aka.ms/azuremlexperimental for more information.
+Registering model
+Model name: taxi-class-dev-m-test
+Endpoint name: taxi-class-ws-dev-m-test-col
+Requested deployment name: blue
+Deployment name file: None
+Resolved deployment slot: blue
+Initializing MLclient
+Initializing MLclient
+Model Name:  taxi-class-dev-m-test
+Using external registry: mlrdevcc01
+Getting model from registry: mlrdevcc01
+Traceback (most recent call last):
+  File "/mnt/azureml/cr/j/d4beebeb6b4e479ab358bcfafd72d912/exe/wd/deploy.py", line 92, in <module>
+    latest_model_version = max(
+ValueError: max() arg is an empty sequence

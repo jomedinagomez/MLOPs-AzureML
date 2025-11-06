@@ -1,0 +1,43 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: update_traffic
+display_name: UpdateTraffic
+inputs:
+  endpoint_name:
+    type: string
+  deployment_name:
+    type: string
+  deployment_name_file:
+    type: uri_file
+    optional: true
+  deployment_state:
+    type: uri_folder
+  traffic_percent:
+    type: integer
+    optional: true
+  mode:
+    type: string
+    optional: true
+  delete_on_rollback:
+    type: string
+    optional: true
+  default_slot:
+    type: string
+    optional: true
+outputs:
+  persisted_state:
+    type: uri_folder
+environment:
+  conda_file: ../../environment/score/conda.yaml
+  image: mcr.microsoft.com/azureml/openmpi5.0-ubuntu24.04:latest
+code: ../traffic
+command: >-
+  python update_traffic.py
+  --endpoint_name ${{inputs.endpoint_name}}
+  --deployment_name ${{inputs.deployment_name}}
+  $[[--deployment_name_file ${{inputs.deployment_name_file}}]]
+  --deployment_state ${{inputs.deployment_state}}
+  --output_deployment_state ${{outputs.persisted_state}}
+  $[[--traffic_percent ${{inputs.traffic_percent}}]]
+  $[[--mode ${{inputs.mode}}]]
+  $[[--delete_on_rollback ${{inputs.delete_on_rollback}}]]
+  $[[--default_slot ${{inputs.default_slot}}]]

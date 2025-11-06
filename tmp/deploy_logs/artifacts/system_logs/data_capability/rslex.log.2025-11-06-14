@@ -1,0 +1,7 @@
+2025-11-06T14:15:39.027066Z  INFO rslex: [init_environment()] initializing Environment
+2025-11-06T14:15:39.027656Z  INFO rslex_http_stream::http_client::hyper_client::hyper_client: dns resolution concurrency concurrency=150
+2025-11-06T14:15:39.031051Z  INFO rslex_azure_storage::adls_gen1_stream_handler::retry_strategy: [rslex-azure-storage::adls_gen1_stream_handler::AdlsGen1RetryCondition] retry configuration retry_on_append_timeout=true bad_offset_error_retry_count=3
+2025-11-06T14:15:39.031974Z  INFO rslex_azureml::azureml::handler: [AzureMLHandler::uri_scheme()]
+2025-11-06T14:15:39.034154Z  INFO rslex_azure_storage::adls_gen1_stream_handler::retry_strategy: [rslex-azure-storage::adls_gen1_stream_handler::AdlsGen1RetryCondition] retry configuration retry_on_append_timeout=true bad_offset_error_retry_count=3
+2025-11-06T14:15:39.036561Z  INFO rslex: [init_environment] using os managed compute resources
+2025-11-06T14:15:45.887825Z  INFO rslex_azureml::azureml::handler: [AzureMLHandler::parse_uri()] Parse uri [azureml://subscriptions/5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25/resourcegroups/rg-aml-ws-dev-cc-01/workspaces/mlwdevcc01/datastores/workspaceblobstore/paths/azureml/e433a45e-23c0-4dc8-82c3-47978e422aae/deploy_status/], normalized [azureml://subscriptions/5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25/resourcegroups/rg-aml-ws-dev-cc-01/workspaces/mlwdevcc01/datastores/workspaceblobstore/paths/azureml/e433a45e-23c0-4dc8-82c3-47978e422aae/deploy_status/]

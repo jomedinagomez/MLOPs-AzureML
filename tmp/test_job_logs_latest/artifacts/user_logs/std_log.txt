@@ -1,0 +1,9 @@
+Class DeploymentTemplateOperations: This is an experimental class, and may change at any time. Please see https://aka.ms/azuremlexperimental for more information.
+[Dependency Check] deploy_status folder received: /mnt/azureml/cr/j/f6bbb42592c842eb98fc949150ec8d6e/cap/data-capability/wd/INPUT_deploy_status
+[Dependency Check] deploy_status folder exists and contains: ['deployment_log.txt', 'deployment_state.json', 'done.txt']
+Initializing MLClient for endpoint testing...
+Getting endpoint: taxi-class-ws-dev-m-col
+Targeting deployment slot: blue
+Invoking endpoint using MLClient.invoke()...
+Test results saved to /mnt/azureml/cr/j/f6bbb42592c842eb98fc949150ec8d6e/cap/data-capability/wd/report_folder/test_endpoint_ws_report.txt
+Endpoint invocation failed; reverting to previous deployment required.

@@ -1,0 +1,12 @@
+Class DeploymentTemplateOperations: This is an experimental class, and may change at any time. Please see https://aka.ms/azuremlexperimental for more information.
+Readonly attribute principal_id will be ignored in class <class 'azure.ai.ml._restclient.v2022_05_01.models._models_py3.ManagedServiceIdentity'>
+Readonly attribute tenant_id will be ignored in class <class 'azure.ai.ml._restclient.v2022_05_01.models._models_py3.ManagedServiceIdentity'>
+Loaded metadata: prior traffic={'green': 100}, has_prior=True
+Prior deployment detected. Applying weighted distribution with new deployment share.
+Resulting traffic distribution: {'green': 70, 'blue': 30}
+Traceback (most recent call last):
+  File "/mnt/azureml/cr/j/12437626875241c58837e05247a397a1/exe/wd/update_traffic.py", line 137, in <module>
+    main()
+  File "/mnt/azureml/cr/j/12437626875241c58837e05247a397a1/exe/wd/update_traffic.py", line 130, in main
+    with open(os.path.join(args.deployment_state, "deployment_state.json"), "w") as fh:
+OSError: [Errno 30] Read-only file system: '/mnt/azureml/cr/j/12437626875241c58837e05247a397a1/cap/data-capability/wd/INPUT_deployment_state/deployment_state.json'

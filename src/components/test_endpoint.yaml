@@ -7,6 +7,11 @@ inputs:
     type: string
   deployment_name:
     type: string
+  deployment_name_file:
+    type: uri_file
+    optional: true
+  default_slot:
+    type: string
     optional: true
   test_data:
     type: uri_folder
@@ -21,7 +26,11 @@ environment:
   image: mcr.microsoft.com/azureml/openmpi5.0-ubuntu24.04:latest
 code: ../test_endpoint
 command: >-
-  python test_endpoint.py \
-    --endpoint_name ${{inputs.endpoint_name}}\
-    --test_data ${{inputs.test_data}}\
-    --report_folder ${{outputs.report_folder}}
+  python test_endpoint.py
+  --endpoint_name ${{inputs.endpoint_name}}
+  --test_data ${{inputs.test_data}}
+  --report_folder ${{outputs.report_folder}}
+  --deployment_name ${{inputs.deployment_name}}
+  $[[--deployment_name_file ${{inputs.deployment_name_file}}]]
+  $[[--default_slot ${{inputs.default_slot}}]]
+  $[[--deploy_status ${{inputs.deploy_status}}]]

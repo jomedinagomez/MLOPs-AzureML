@@ -1,0 +1,46 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: cleanup_models
+display_name: CleanupModels
+version: 1
+inputs:
+  model_name:
+    type: string
+  registry:
+    type: string
+    optional: true
+  retain_versions:
+    type: integer
+    optional: true
+  scope:
+    type: string
+    optional: true
+  deploy_state:
+    type: uri_folder
+    optional: true
+  subscription_id:
+    type: string
+    optional: true
+  resource_group:
+    type: string
+    optional: true
+  workspace_name:
+    type: string
+    optional: true
+outputs:
+  summary:
+    type: uri_folder
+environment:
+  conda_file: ../../environment/score/conda.yaml
+  image: mcr.microsoft.com/azureml/openmpi5.0-ubuntu24.04:latest
+code: ../cleanup_models
+command: >-
+  python cleanup_models.py
+  --model_name ${{inputs.model_name}}
+  $[[--registry ${{inputs.registry}}]]
+  $[[--retain_versions ${{inputs.retain_versions}}]]
+  $[[--scope ${{inputs.scope}}]]
+  $[[--deploy_state ${{inputs.deploy_state}}]]
+  $[[--subscription_id ${{inputs.subscription_id}}]]
+  $[[--resource_group ${{inputs.resource_group}}]]
+  $[[--workspace_name ${{inputs.workspace_name}}]]
+  --output_folder ${{outputs.summary}}

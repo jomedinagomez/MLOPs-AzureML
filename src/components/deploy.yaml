@@ -12,7 +12,20 @@ inputs:
     type: string
   register_job_status:
     type: uri_folder
+    optional: true
   registry:
+    type: string
+    optional: true
+  model_version:
+    type: string
+    optional: true
+  initial_traffic_percent:
+    type: integer
+    optional: true
+  deployment_name_file:
+    type: uri_file
+    optional: true
+  default_slot:
     type: string
     optional: true
 outputs:
@@ -23,5 +36,15 @@ environment:
       image: mcr.microsoft.com/azureml/openmpi5.0-ubuntu24.04:latest
 code: ../deploy
 command: >-
-  python deploy.py --model_name ${{inputs.model_name}} --endpoint_name ${{inputs.endpoint_name}} --deployment_name ${{inputs.deployment_name}} --register_job_status ${{inputs.register_job_status}} $[[--registry ${{inputs.registry}}]] --deploy_status ${{outputs.deploy_status}}
+  python deploy.py
+  --model_name ${{inputs.model_name}}
+  --endpoint_name ${{inputs.endpoint_name}}
+  --deployment_name ${{inputs.deployment_name}}
+  $[[--deployment_name_file ${{inputs.deployment_name_file}}]]
+  $[[--default_slot ${{inputs.default_slot}}]]
+  $[[--register_job_status ${{inputs.register_job_status}}]]
+  $[[--registry ${{inputs.registry}}]]
+  $[[--model_version ${{inputs.model_version}}]]
+  $[[--initial_traffic_percent ${{inputs.initial_traffic_percent}}]]
+  --deploy_status ${{outputs.deploy_status}}
 # </component>

@@ -1,0 +1,38 @@
+locals {
+  # Conditional DNS zone IDs - only resolve when private networking is enabled
+  dns_zone_blob_id = var.enable_private_networking ? (
+    var.dns_zone_blob_id != null ? var.dns_zone_blob_id : "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net"
+  ) : null
+
+  dns_zone_file_id = var.enable_private_networking ? (
+    var.dns_zone_file_id != null ? var.dns_zone_file_id : "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.file.core.windows.net"
+  ) : null
+
+  dns_zone_table_id = var.enable_private_networking ? (
+    var.dns_zone_table_id != null ? var.dns_zone_table_id : "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.table.core.windows.net"
+  ) : null
+
+  dns_zone_queue_id = var.enable_private_networking ? (
+    var.dns_zone_queue_id != null ? var.dns_zone_queue_id : "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.queue.core.windows.net"
+  ) : null
+
+  dns_zone_keyvault_id = var.enable_private_networking ? (
+    var.dns_zone_keyvault_id != null ? var.dns_zone_keyvault_id : "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net"
+  ) : null
+
+  dns_zone_acr_id = var.enable_private_networking ? (
+    var.dns_zone_acr_id != null ? var.dns_zone_acr_id : "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.azurecr.io"
+  ) : null
+
+  dns_zone_aml_api_id = var.enable_private_networking ? (
+    var.dns_zone_aml_api_id != null ? var.dns_zone_aml_api_id : "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.api.azureml.ms"
+  ) : null
+
+  dns_zone_aml_notebooks_id = var.enable_private_networking ? (
+    var.dns_zone_aml_notebooks_id != null ? var.dns_zone_aml_notebooks_id : "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.notebooks.azure.net"
+  ) : null
+
+  dns_zone_aml_instances_id = var.enable_private_networking ? (
+    var.dns_zone_aml_instances_id != null ? var.dns_zone_aml_instances_id : "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/instances.azureml.ms"
+  ) : null
+}

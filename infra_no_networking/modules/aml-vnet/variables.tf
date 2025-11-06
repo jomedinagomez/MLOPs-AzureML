@@ -1,0 +1,98 @@
+
+variable "prefix" {
+  description = "Base prefix for all resource names to ensure uniqueness and consistency"
+  type        = string
+}
+
+variable "resource_prefixes" {
+  description = "Specific prefixes for each resource type"
+  type = object({
+    vnet               = string
+    subnet             = string
+    workspace          = string
+    registry           = string
+    storage            = string
+    container_registry = string
+    key_vault          = string
+    log_analytics      = string
+  })
+}
+
+variable "purpose" {
+  description = "Environment identifier (e.g., 'dev', 'prod', 'test')"
+  type        = string
+}
+
+variable "location" {
+  description = "Azure region for all resources"
+  type        = string
+}
+
+variable "location_code" {
+  description = "Short code for the region (e.g., 'we' for West Europe)"
+  type        = string
+}
+
+variable "naming_suffix" {
+  description = "Suffix for resource naming"
+  type        = string
+  default     = null
+}
+
+variable "vnet_address_space" {
+  description = "Address space for the VNet (e.g., '10.1.0.0/16')"
+  type        = string
+}
+
+variable "subnet_address_prefix" {
+  description = "Address prefix for the subnet (e.g., '10.1.1.0/24')"
+  type        = string
+}
+
+variable "tags" {
+  description = "Map of tags to apply to resources"
+  type        = map(string)
+}
+
+variable "log_analytics_sku" {
+  description = "SKU for Log Analytics workspace"
+  type        = string
+  default     = "PerGB2018"
+}
+
+variable "log_analytics_retention_days" {
+  description = "Retention period in days for Log Analytics workspace"
+  type        = number
+  default     = 30
+  validation {
+    condition     = var.log_analytics_retention_days >= 30 && var.log_analytics_retention_days <= 730
+    error_message = "Log Analytics retention must be between 30 and 730 days."
+  }
+}
+
+variable "enable_auto_purge" {
+  description = "Enable automatic purging of Log Analytics workspace on destroy (useful for dev/test environments)"
+  type        = bool
+  default     = false
+  validation {
+    condition     = var.enable_auto_purge == true || var.enable_auto_purge == false
+    error_message = "Enable auto purge must be true or false."
+  }
+}
+
+variable "resource_group_name" {
+  description = "Resource group name where the VNet and DNS resources will be deployed (must exist)"
+  type        = string
+}
+
+variable "manage_aml_private_dns_zones" {
+  description = "Whether this module should create per-environment AML private DNS zones (api/notebooks/instances) and link them. Disable when using centralized shared AML DNS zones."
+  type        = bool
+  default     = true
+}
+
+variable "manage_supporting_private_dns_zones" {
+  description = "Whether this module should create supporting service private DNS zones (blob/file/queue/table/vaultcore/azurecr) and links. Disable when using centralized shared supporting DNS zones."
+  type        = bool
+  default     = true
+}

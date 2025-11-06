@@ -19,6 +19,7 @@ COMMON USAGE:
 """
 
 import argparse
+import json
 import pandas as pd
 import os
 from pathlib import Path
@@ -85,8 +86,25 @@ ml_client_workspace = MLClient(credential=credential,subscription_id=ws._subscri
 print("Initializing MLclient")
 
 model_name = args.model_name
-mlflow_model_path = str(Path(args.model_input) / "outputs")+"/"+"mlflow-model"
-arr = os.listdir(mlflow_model_path)
+
+base_path = Path(args.model_input)
+candidate_paths = [
+    base_path / "outputs" / "mlflow-model",
+    base_path / "mlflow-model",
+    base_path,
+]
+
+mlflow_model_path = None
+for candidate in candidate_paths:
+    if (candidate / "MLmodel").exists():
+        mlflow_model_path = str(candidate)
+        break
+
+if not mlflow_model_path:
+    raise SystemExit(
+        "Could not locate MLflow model artifacts under the provided model_input. "
+        "Ensure the path contains an MLmodel file."
+    )
 
 print(mlflow_model_path)
 model = Model(
@@ -95,6 +113,12 @@ model = Model(
     description="my sample classification model",
     type=AssetTypes.MLFLOW_MODEL,
 )
+    
+output_dir = Path(args.register_output)
+output_dir.mkdir(parents=True, exist_ok=True)
+
+workspace_registered_model = None
+registry_registered_model = None
 
 # for downloaded file
 # model = Model(path="artifact_downloads/outputs/model.pkl", name=model_name)
@@ -129,7 +153,7 @@ if args.registry:
             description="my sample classification model",
             type=AssetTypes.MLFLOW_MODEL)
 
-        registered_model_workspace = ml_client_workspace.models.create_or_update(model)
+        workspace_registered_model = ml_client_workspace.models.create_or_update(model)
         print("Model successfully registered to workspace")
     except Exception as workspace_error:
         print(f"FAILED: Could not register model to workspace: {workspace_error}")
@@ -164,7 +188,7 @@ if args.registry:
                 description="my sample classification model",
                 type=AssetTypes.MLFLOW_MODEL)
                     
-            registered_model_registry = ml_client_registry.models.create_or_update(model_for_registry)
+            registry_registered_model = ml_client_registry.models.create_or_update(model_for_registry)
             print("Model successfully registered to both workspace and registry")
         except Exception as registry_registration_error:
             print(f"FAILED: Could not register model to registry: {registry_registration_error}")
@@ -187,11 +211,20 @@ else:
     """
     
     try:
-        registered_model = ml_client_workspace.models.create_or_update(model)
+        workspace_registered_model = ml_client_workspace.models.create_or_update(model)
         print("Model successfully registered to workspace")
     except Exception as workspace_error:
         print(f"FAILED: Could not register model to workspace: {workspace_error}")
         raise workspace_error
 
-with open((Path(args.register_output) / "register.txt"), "a") as f:
+metadata = {
+    "model_name": model_name,
+    "workspace_version": getattr(workspace_registered_model, "version", None),
+    "registry_version": getattr(registry_registered_model, "version", None),
+}
+
+with open(output_dir / "model_versions.json", "w", encoding="utf-8") as metadata_file:
+    json.dump(metadata, metadata_file)
+
+with open(output_dir / "register.txt", "a", encoding="utf-8") as f:
     f.write("Model Registered:")

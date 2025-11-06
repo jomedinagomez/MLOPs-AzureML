@@ -1,7 +1,8 @@
+
 $schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
 type: pipeline
 experiment_name: nyc-taxi-pipeline-class-dev
-description: Train Classification model based on nyc taxi dataset for the dev environment
+description: Train Classification model based on nyc taxi dataset for the development environment
 
 # Notes:
 # - These jobs currently use MLflow models. Later you can switch to a custom artifact flow.
@@ -12,6 +13,15 @@ description: Train Classification model based on nyc taxi dataset for the dev en
 #   and a corresponding dummy input in test jobs. This does not transfer data, but ensures correct job order.
 #   No code changes are needed for these dummy outputs/inputs.
 #
+# Patterns for environment-dependent inputs:
+# - environment: 'dev' or 'prod' (controls the environment context for the pipeline)
+# - automl_compute: 'aml-cluster-dev-cc01' for dev, 'aml-cluster-prod-cc01' for prod (set to your actual compute names)
+# - registry: 'mlrdevcc01' for dev, 'mlrprodcc01' for prod (set to your actual registry names)
+# - deployment_name: can be 'green', 'blue', or any deployment slot name; may differ between dev and prod
+# - default_compute: should match automl_compute for the environment
+#
+# To switch between dev and prod, update these values accordingly in the inputs and settings sections.
+#
 # Workspace separation and naming pattern:
 # - Dev and prod pipelines run in completely separate Azure ML workspaces, each in its own resource group.
 # - Workspace resource group names follow the pattern: 'rg-<prefix>-ws-<env>-<location_code>-<naming_suffix>'
@@ -21,7 +31,7 @@ description: Train Classification model based on nyc taxi dataset for the dev en
 #   - Example (dev):   mlw-dev-cc-01
 #   - Example (prod):  mlw-prod-cc-01
 # - The <prefix>, <workspace_prefix>, <location_code>, and <naming_suffix> are set in Terraform variables (see infra/variables.tf).
-# - This ensures strict separation of dev and prod environments, with no resource overlap.
+# - This ensures strict separation of dev and prod environments, with no resource overlap., 
 # - When running the pipeline, always use the correct workspace for the target environment.
 
 # <inputs_and_outputs>
@@ -33,9 +43,11 @@ inputs:
   # artifact identifier for naming: 'm' (MLflow now), 'c' (custom later)
   artifact_id: 'm'
   deployment_name: 'green'
-  registry: 'mlrdevcc01'
+  registry: 'mlrdevcc01'  # <-- set to your devuction registry
   # compute cluster for automl job
-  automl_compute: 'aml-cluster-dev-cc01'
+  automl_compute: 'aml-cluster-dev-cc01'  # <-- set to your devuction compute
+  # conda file for the environment to be created
+  conda_file: custom_dev.yaml
 outputs: 
   pipeline_job_trained_model:
     mode: rw_mount
@@ -51,7 +63,7 @@ outputs:
 settings:
   default_datastore: azureml:workspaceblobstore
   # All jobs use this compute unless overridden at the job level. To change, edit this value.
-  default_compute: azureml:aml-cluster-dev-cc01
+  default_compute: azureml:aml-cluster-dev-cc01  # <-- set to your devuction compute
   continue_on_step_failure: false
 
 jobs:
@@ -154,7 +166,7 @@ jobs:
     inputs:
       # names include artifact_id (MLflow='m', custom='c') to distinguish implementations
       model_name: '${{parent.inputs.model_base}}-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
-      endpoint_name: '${{parent.inputs.model_base}}-ex-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
+      endpoint_name: '${{parent.inputs.model_base}}-ex-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}-col'
       deployment_name: ${{parent.inputs.deployment_name}}
       registry: ${{parent.inputs.registry}}
       register_job_status: ${{parent.jobs.registerex_job.outputs.register_output}}
@@ -168,7 +180,7 @@ jobs:
     inputs:
       # names include artifact_id (MLflow='m', custom='c') to distinguish implementations
       model_name: '${{parent.inputs.model_base}}-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
-      endpoint_name: '${{parent.inputs.model_base}}-ws-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
+      endpoint_name: '${{parent.inputs.model_base}}-ws-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}-col'
       deployment_name: ${{parent.inputs.deployment_name}}
       register_job_status: ${{parent.jobs.registerws_job.outputs.register_output}}
     # Dummy output to enforce dependency for test job. Not used for data transfer.
@@ -179,7 +191,7 @@ jobs:
     type: command
     component: ../src/components/test_endpoint.yaml
     inputs:
-      endpoint_name: '${{parent.inputs.model_base}}-ex-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
+      endpoint_name: '${{parent.inputs.model_base}}-ex-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}-col'
       deployment_name: ${{parent.inputs.deployment_name}}
       test_data: ${{parent.jobs.transform_job.outputs.test_data}}
       # This input is a dummy dependency to ensure this job runs after deployex_job
@@ -187,15 +199,25 @@ jobs:
     outputs:
       report_folder:
 
-
   test_endpoint_ws_job:
     type: command
     component: ../src/components/test_endpoint.yaml
     inputs:
-      endpoint_name: '${{parent.inputs.model_base}}-ws-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
+      endpoint_name: '${{parent.inputs.model_base}}-ws-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}-col'
       deployment_name: ${{parent.inputs.deployment_name}}
       test_data: ${{parent.jobs.transform_job.outputs.test_data}}
       # This input is a dummy dependency to ensure this job runs after deployws_job
       deploy_status: ${{parent.jobs.deployws_job.outputs.deploy_status}}
     outputs:
       report_folder:
+
+  create_env_job:
+    type: command
+    component: ../src/components/create_env.yaml
+    inputs:
+      env_name: taxi-class-env-dev
+      conda_file: ${{parent.inputs.conda_file}}
+    outputs:
+      env_status:
+    # This job creates the environment and can be used as a dependency for other jobs if needed
+
