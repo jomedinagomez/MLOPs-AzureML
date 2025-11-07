@@ -111,7 +111,7 @@ jobs:
             MODEL_VERSION=$(az ml model list \
               --registry-name "$REGISTRY" \
               --name "$MODEL_NAME" \
-              --query "sort_by(@, to_number(@.version))[-1].version" -o tsv)
+              --query "sort_by(@, &to_number(version))[-1].version" -o tsv)
           fi
 
           if [ -z "$MODEL_VERSION" ]; then
