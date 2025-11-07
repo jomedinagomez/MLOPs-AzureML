@@ -37,11 +37,15 @@ End‑to‑end Azure Machine Learning platform (dev + prod) with an opinionated 
 
 ### CI/CD Implementation Details
 - [Integration Branch ML CI/CD Plan](#integration-branch-ml-cicd-plan)
+  - [Overview](#overview)
   - [Goals](#goals)
   - [Branching Strategy](#branching-strategy)
+  - [CI/CD Architecture Diagram](#cicd-architecture-diagram)
   - [GitHub Configuration Prerequisites](#github-configuration-prerequisites)
   - [Security Considerations - Service Principal RBAC](#security-considerations---service-principal-rbac)
   - [Pipeline Stages](#pipeline-stages)
+    - [Integration Pipeline Flow](#integration-pipeline-flow)
+    - [Production Release Flow](#production-release-flow)
   - [Environment Usage](#environment-usage)
   - [Artifact Flow and Traceability](#artifact-flow-and-traceability)
   - [Operator Runbook Highlights](#operator-runbook-highlights)
@@ -325,18 +329,92 @@ Key recent changes: Key Vault RBAC fix (add Reader + Secrets User), outbound rul
 
 ## Integration Branch ML CI/CD Plan
 
+### Overview
+
+This CI/CD implementation provides automated model validation, promotion, and deployment across environments with quality gates at each stage. The workflow ensures only validated models reach production through a structured promotion path.
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+│   Feature   │────▶│ Integration  │────▶│    Main     │
+│   Branch    │     │    Branch    │     │  (Production)│
+└─────────────┘     └──────────────┘     └─────────────┘
+      │                    │                     │
+      │                    │                     │
+      ▼                    ▼                     ▼
+   Local Dev        CI Validation          Prod Deploy
+                    + Model Quality
+```
+
 ### Goals
-- Standardize end-to-end CI/CD for the Azure ML project with explicit integration branch validation
-- Ensure only model improvements (measured by the taxi fare comparison step) move forward to the dev registry and ultimately to production
-- Run unit tests and ML pipeline validation automatically for all changes that touch the `src/` folder
-- Maintain clear separation of environments: Dev workspace (experimentation), Dev external registry (model promotion), Prod workspace (serving)
+- **Standardize CI/CD**: End-to-end automation with explicit integration branch validation
+- **Quality Gates**: Only model improvements (measured by comparison metrics) progress to production
+- **Automated Testing**: Unit tests and ML pipeline validation run automatically for changes in `src/`
+- **Environment Separation**: Clear boundaries between Dev workspace (experimentation), Dev registry (promotion gate), and Prod workspace (serving)
+- **Traceability**: Complete audit trail from code commit to production model
 
 ### Branching Strategy
+
+```mermaid
+gitGraph
+    commit id: "Initial"
+    branch integration
+    checkout integration
+    branch feature/model-improvements
+    commit id: "Feature work"
+    commit id: "Local testing"
+    checkout integration
+    merge feature/model-improvements tag: "CI validation"
+    commit id: "Model promoted"
+    checkout main
+    merge integration tag: "Prod release"
+```
+
 | Branch | Purpose | Notes |
 |--------|---------|-------|
 | `feature/*` | Individual feature work | Developers branch from latest `integration` |
 | `integration` | Shared validation branch | All merges land here after validation |
 | `main` | Production-ready | Only updated when prod deployment succeeds using validated artifacts |
+
+**Workflow**:
+1. Developer creates `feature/*` branch from `integration`
+2. After local testing, PR to `integration` triggers CI validation
+3. CI runs tests, training, model comparison
+4. If quality gates pass, model promoted to Dev registry
+5. Manual approval gates PR from `integration` to `main`
+6. Merge to `main` triggers production deployment
+
+### CI/CD Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         GitHub Repository                                │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐             │
+│  │   feature/*  │───▶│ integration  │───▶│     main     │             │
+│  └──────────────┘    └──────────────┘    └──────────────┘             │
+└──────────┬────────────────────┬────────────────────┬────────────────────┘
+           │                    │                    │
+           │                    ▼                    ▼
+           │          ┌─────────────────┐  ┌─────────────────┐
+           │          │ Integration CI  │  │  Prod Release   │
+           │          │   Workflow      │  │    Workflow     │
+           │          └─────────────────┘  └─────────────────┘
+           │                    │                    │
+           │                    │                    │
+┏━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━┓
+┃                          Azure ML Platform                         ┃
+┃                                                                     ┃
+┃  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┃
+┃  │  Dev Workspace  │  │   Dev Registry  │  │ Prod Workspace  │  ┃
+┃  │                 │  │                 │  │                 │  ┃
+┃  │ • Training      │─▶│ • Model Store   │─▶│ • Serving       │  ┃
+┃  │ • Validation    │  │ • Quality Gate  │  │ • Production    │  ┃
+┃  │ • Testing       │  │ • Promotion Hub │  │ • Endpoints     │  ┃
+┃  └─────────────────┘  └─────────────────┘  └─────────────────┘  ┃
+┃         ▲                      │                      ▲            ┃
+┃         │                      │                      │            ┃
+┃         └──────── Model Flow ──┴──────────────────────┘            ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+```
 
 ### GitHub Configuration Prerequisites
 **Secrets** (service principal authentication):
@@ -364,6 +442,57 @@ The GitHub Actions service principal requires these minimum Azure RBAC roles:
 
 ### Pipeline Stages
 
+#### Integration Pipeline Flow
+
+```
+┌──────────────┐
+│ Pull Request │
+│      to      │
+│ integration  │
+└──────┬───────┘
+       │
+       ▼
+┌─────────────────────────────────────────────────────────┐
+│              Integration CI Pipeline                     │
+├─────────────────────────────────────────────────────────┤
+│                                                           │
+│  1. ┌──────────────┐                                    │
+│     │ Unit Tests   │  pytest suite validation           │
+│     └──────┬───────┘                                    │
+│            │                                             │
+│            ▼                                             │
+│  2. ┌──────────────┐                                    │
+│     │ Azure Login  │  Service principal auth            │
+│     └──────┬───────┘                                    │
+│            │                                             │
+│            ▼                                             │
+│  3. ┌──────────────────────────────┐                   │
+│     │ ML Pipeline Execution        │                   │
+│     │ integration-compare-pipeline │                   │
+│     └──────┬───────────────────────┘                   │
+│            │                                             │
+│            ▼                                             │
+│  4. ┌──────────────────────────┐                       │
+│     │ Model Evaluation         │ Quality Gate          │
+│     │ Parse metrics, compare   │ ─────────┐            │
+│     └──────┬───────────────────┘          │            │
+│            │ PASS                          │ FAIL       │
+│            ▼                               ▼            │
+│  5. ┌──────────────────────────┐   ┌─────────────┐    │
+│     │ Model Promotion          │   │ Job Failed  │    │
+│     │ Register to Dev registry │   └─────────────┘    │
+│     │ Tag: integration, SHA    │                       │
+│     └──────┬───────────────────┘                       │
+│            │                                             │
+│            ▼                                             │
+│  6. ┌──────────────────────────┐                       │
+│     │ Dev Deployment (optional)│                       │
+│     │ dev-deploy-validation    │                       │
+│     └──────────────────────────┘                       │
+│                                                           │
+└─────────────────────────────────────────────────────────┘
+```
+
 **Integration Pipeline** (`.github/workflows/integration-ml-ci.yml`):
 1. **Unit Tests** - pytest suite validation
 2. **Azure Login** - Service principal authentication
@@ -371,6 +500,49 @@ The GitHub Actions service principal requires these minimum Azure RBAC roles:
 4. **Model Evaluation** - Parse compare_job metrics, fail if no improvement
 5. **Model Promotion** - Register to Dev registry with tags (branch, commit SHA, run ID)
 6. **Dev Deployment** (on push) - Execute `pipelines/dev-deploy-validation.yaml` for endpoint testing
+
+#### Production Release Flow
+
+```
+┌──────────────┐
+│ Pull Request │
+│      to      │
+│     main     │
+└──────┬───────┘
+       │ (Manual approval required)
+       ▼
+┌─────────────────────────────────────────────────────────┐
+│           Production Release Pipeline                    │
+├─────────────────────────────────────────────────────────┤
+│                                                           │
+│  1. ┌──────────────────────────┐                        │
+│     │ Pull Model from          │                        │
+│     │ Dev Registry             │                        │
+│     └──────┬───────────────────┘                        │
+│            │                                             │
+│            ▼                                             │
+│  2. ┌──────────────────────────┐                        │
+│     │ Blue/Green Deployment    │                        │
+│     │ 30% traffic to new slot  │                        │
+│     └──────┬───────────────────┘                        │
+│            │                                             │
+│            ▼                                             │
+│  3. ┌──────────────────────────┐                        │
+│     │ Smoke Tests              │                        │
+│     │ Health checks            │                        │
+│     └──────┬───────────────────┘                        │
+│            │                                             │
+│            ├─── PASS ────┐                              │
+│            │             │                              │
+│            ▼             ▼                              │
+│  4. ┌─────────────┐  ┌──────────────┐                 │
+│     │ Finalize    │  │ Rollback     │                 │
+│     │ Merge       │  │ Traffic to   │                 │
+│     │ Update Logs │  │ Previous     │                 │
+│     └─────────────┘  └──────────────┘                 │
+│                                                           │
+└─────────────────────────────────────────────────────────┘
+```
 
 **Prod Release Pipeline** (`.github/workflows/prod-ml-release.yml`):
 1. Triggered on PRs to `main` or manual `workflow_dispatch`
@@ -388,9 +560,24 @@ The GitHub Actions service principal requires these minimum Azure RBAC roles:
 | Prod Workspace | Production serving environment | Consume vetted models via prod release pipeline |
 
 ### Artifact Flow and Traceability
+
+```
+Code Commit ──▶ CI Pipeline ──▶ Model Registration ──▶ Prod Deployment
+    │               │                   │                     │
+    ├─ SHA          ├─ Job Run ID       ├─ Model Version     ├─ Endpoint
+    ├─ Branch       ├─ Metrics          ├─ Tags              ├─ Traffic %
+    └─ Timestamp    └─ Artifacts        └─ Metadata          └─ Health Status
+                                              │
+                                              ▼
+                                    Auditable Chain:
+                                    SHA → Run ID → Model v3 → Endpoint
+```
+
+**Traceability Features**:
 - Integration pipeline records job run IDs and compare metrics
 - Successful runs promote model to Dev registry with tags: `integration`, commit SHA, pipeline run ID
 - Prod release pipeline references these tags/run IDs for auditable chain from code to production
+- All deployments include metadata linking back to source code and validation results
 
 ### Operator Runbook Highlights
 
@@ -417,6 +604,7 @@ python src/cleanup_models/cleanup_models.py \
   --retain_versions 1 \
   --dry_run
 ```
+
 
 ---
 
