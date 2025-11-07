@@ -452,45 +452,45 @@ The GitHub Actions service principal requires these minimum Azure RBAC roles:
 └──────┬───────┘
        │
        ▼
-┌─────────────────────────────────────────────────────────┐
-│              Integration CI Pipeline                     │
-├─────────────────────────────────────────────────────────┤
+┌───────────────────────────────────────────────────────────┐
+│              Integration CI Pipeline                      │
+├───────────────────────────────────────────────────────────┤
 │                                                           │
-│  1. ┌──────────────┐                                    │
-│     │ Unit Tests   │  pytest suite validation           │
-│     └──────┬───────┘                                    │
-│            │                                             │
-│            ▼                                             │
-│  2. ┌──────────────┐                                    │
-│     │ Azure Login  │  Service principal auth            │
-│     └──────┬───────┘                                    │
-│            │                                             │
-│            ▼                                             │
-│  3. ┌──────────────────────────────┐                   │
-│     │ ML Pipeline Execution        │                   │
-│     │ integration-compare-pipeline │                   │
-│     └──────┬───────────────────────┘                   │
-│            │                                             │
-│            ▼                                             │
-│  4. ┌──────────────────────────┐                       │
-│     │ Model Evaluation         │ Quality Gate          │
-│     │ Parse metrics, compare   │ ─────────┐            │
-│     └──────┬───────────────────┘          │            │
-│            │ PASS                          │ FAIL       │
-│            ▼                               ▼            │
-│  5. ┌──────────────────────────┐   ┌─────────────┐    │
-│     │ Model Promotion          │   │ Job Failed  │    │
-│     │ Register to Dev registry │   └─────────────┘    │
-│     │ Tag: integration, SHA    │                       │
-│     └──────┬───────────────────┘                       │
-│            │                                             │
-│            ▼                                             │
-│  6. ┌──────────────────────────┐                       │
-│     │ Dev Deployment (optional)│                       │
-│     │ dev-deploy-validation    │                       │
-│     └──────────────────────────┘                       │
+│  1. ┌──────────────┐                                      │
+│     │ Unit Tests   │  pytest suite validation             │
+│     └──────┬───────┘                                      │
+│            │                                              │
+│            ▼                                              │
+│  2. ┌──────────────┐                                      │
+│     │ Azure Login  │  Service principal auth              │
+│     └──────┬───────┘                                      │
+│            │                                              │
+│            ▼                                              │
+│  3. ┌──────────────────────────────┐                      │
+│     │ ML Pipeline Execution        │                      │
+│     │ integration-compare-pipeline │                      │
+│     └──────┬───────────────────────┘                      │
+│            │                                              │
+│            ▼                                              │
+│  4. ┌──────────────────────────┐                          │
+│     │ Model Evaluation         │  Quality Gate            │
+│     │ Parse metrics, compare   │  ──────────┐             │
+│     └──────┬───────────────────┘            │             │
+│            │ PASS                            │ FAIL       │
+│            ▼                                 ▼            │
+│  5. ┌──────────────────────────┐     ┌─────────────┐      │
+│     │ Model Promotion          │     │ Job Failed  │      │ 
+│     │ Register to Dev registry │     └─────────────┘      │
+│     │ Tag: integration, SHA    │                          │
+│     └──────┬───────────────────┘                          │
+│            │                                              │
+│            ▼                                              │
+│  6. ┌──────────────────────────┐                          │
+│     │ Dev Deployment (optional)│                          │
+│     │ dev-deploy-validation    │                          │
+│     └──────────────────────────┘                          │
 │                                                           │
-└─────────────────────────────────────────────────────────┘
+└───────────────────────────────────────────────────────────┘
 ```
 
 **Integration Pipeline** (`.github/workflows/integration-ml-ci.yml`):
@@ -511,37 +511,37 @@ The GitHub Actions service principal requires these minimum Azure RBAC roles:
 └──────┬───────┘
        │ (Manual approval required)
        ▼
-┌─────────────────────────────────────────────────────────┐
-│           Production Release Pipeline                    │
-├─────────────────────────────────────────────────────────┤
+┌───────────────────────────────────────────────────────────┐
+│           Production Release Pipeline                     │
+├───────────────────────────────────────────────────────────┤
 │                                                           │
-│  1. ┌──────────────────────────┐                        │
-│     │ Pull Model from          │                        │
-│     │ Dev Registry             │                        │
-│     └──────┬───────────────────┘                        │
-│            │                                             │
-│            ▼                                             │
-│  2. ┌──────────────────────────┐                        │
-│     │ Blue/Green Deployment    │                        │
-│     │ 30% traffic to new slot  │                        │
-│     └──────┬───────────────────┘                        │
-│            │                                             │
-│            ▼                                             │
-│  3. ┌──────────────────────────┐                        │
-│     │ Smoke Tests              │                        │
-│     │ Health checks            │                        │
-│     └──────┬───────────────────┘                        │
-│            │                                             │
-│            ├─── PASS ────┐                              │
-│            │             │                              │
-│            ▼             ▼                              │
-│  4. ┌─────────────┐  ┌──────────────┐                 │
-│     │ Finalize    │  │ Rollback     │                 │
-│     │ Merge       │  │ Traffic to   │                 │
-│     │ Update Logs │  │ Previous     │                 │
-│     └─────────────┘  └──────────────┘                 │
+│  1. ┌──────────────────────────┐                          │
+│     │ Pull Model from          │                          │
+│     │ Dev Registry             │                          │
+│     └──────┬───────────────────┘                          │
+│            │                                              │
+│            ▼                                              │
+│  2. ┌──────────────────────────┐                          │
+│     │ Blue/Green Deployment    │                          │
+│     │ 30% traffic to new slot  │                          │
+│     └──────┬───────────────────┘                          │
+│            │                                              │
+│            ▼                                              │
+│  3. ┌──────────────────────────┐                          │
+│     │ Smoke Tests              │                          │
+│     │ Health checks            │                          │
+│     └──────┬───────────────────┘                          │
+│            │                                              │
+│            ├─── PASS ───┐                                 │
+│            │            │                                 │
+│            ▼            ▼                                 │
+│  4. ┌─────────────┐  ┌──────────────┐                     │
+│     │ Finalize    │  │ Rollback     │                     │
+│     │ Merge       │  │ Traffic to   │                     │
+│     │ Update Logs │  │ Previous     │                     │
+│     └─────────────┘  └──────────────┘                     │
 │                                                           │
-└─────────────────────────────────────────────────────────┘
+└───────────────────────────────────────────────────────────┘
 ```
 
 **Prod Release Pipeline** (`.github/workflows/prod-ml-release.yml`):
