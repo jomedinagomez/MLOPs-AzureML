@@ -77,7 +77,6 @@ jobs:
       - name: Azure login (service principal)
         uses: azure/login@v2
         with:
-          auth-type: service-principal
           creds: ${{ format('{{"clientId":"{0}","clientSecret":"{1}","tenantId":"{2}","subscriptionId":"{3}"}}', secrets.AZURE_CLIENT_ID, secrets.AZURE_CLIENT_SECRET, secrets.AZURE_TENANT_ID, secrets.AZURE_SUBSCRIPTION_ID) }}
       - name: Install Azure ML CLI extension
         run: |
@@ -205,7 +204,6 @@ jobs:
       - name: Azure login (service principal)
         uses: azure/login@v2
         with:
-          auth-type: service-principal
           creds: ${{ format('{{"clientId":"{0}","clientSecret":"{1}","tenantId":"{2}","subscriptionId":"{3}"}}', secrets.AZURE_CLIENT_ID, secrets.AZURE_CLIENT_SECRET, secrets.AZURE_TENANT_ID, secrets.AZURE_SUBSCRIPTION_ID) }}
       - name: Install Azure ML CLI extension
         run: |
