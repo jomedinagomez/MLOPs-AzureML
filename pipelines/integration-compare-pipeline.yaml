@@ -105,3 +105,6 @@ jobs:
       registry: ${{parent.inputs.registry}}
     outputs:
       register_output: ${{parent.outputs.register_metadata}}
+
+
+#demo
