@@ -1,6 +1,13 @@
 name: prod-ml-release
 
 on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
   workflow_dispatch:
     inputs:
       model-base:
@@ -45,10 +52,7 @@ jobs:
       - name: Azure login (service principal)
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          creds: ${{ format('{{"clientId":"{0}","clientSecret":"{1}","tenantId":"{2}","subscriptionId":"{3}"}}', secrets.AZURE_CLIENT_ID, secrets.AZURE_CLIENT_SECRET, secrets.AZURE_TENANT_ID, secrets.AZURE_SUBSCRIPTION_ID) }}
       - name: Install Azure ML CLI extension
         run: |
           set -euo pipefail
@@ -107,7 +111,7 @@ jobs:
             MODEL_VERSION=$(az ml model list \
               --registry-name "$REGISTRY" \
               --name "$MODEL_NAME" \
-              --query "sort_by(@, to_number(@.version))[-1].version" -o tsv)
+              --query "sort_by(@, &to_number(version))[-1].version" -o tsv)
           fi
 
           if [ -z "$MODEL_VERSION" ]; then
