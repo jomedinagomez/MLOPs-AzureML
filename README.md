@@ -6,15 +6,11 @@ End‑to‑end Azure Machine Learning platform (dev + prod) with an opinionated 
 
 **This README consolidates all documentation**:
 - Quick start and MLOps workflow overview
-- CI/CD implementation details (from `integration-ml-cicd-plan.md`)
-- Infrastructure architecture summary (from `DeploymentStrategy.md`)
+- CI/CD implementation details
+- Infrastructure architecture summary
 
 **For detailed infrastructure deployment**, see:
 - **[infra/README.md](infra/README.md)** - Complete Terraform deployment guide with step-by-step instructions
-
-**Historical reference** (full content now in this README):
-- `DeploymentStrategy.md` - 108KB comprehensive architecture document (kept for reference)
-- `integration-ml-cicd-plan.md` - 18KB detailed CI/CD plan (kept for reference)
 
 ## Platform Snapshot
 | Aspect | Implementation | Notes |
@@ -361,15 +357,13 @@ python src/cleanup_models/cleanup_models.py \
   --dry_run
 ```
 
-For complete implementation details, see historical `integration-ml-cicd-plan.md` in git history.
-
 ---
 
 # Infrastructure & Deployment Strategy
 
 ## Architecture Overview
 
-This platform implements a **flat dual-VNet architecture** with Azure Bastion jumpbox access and complete environment isolation. For comprehensive deployment strategy, troubleshooting, and architectural decisions, see **[infra/README.md](infra/README.md)** and historical `DeploymentStrategy.md` in git history.
+This platform implements a **flat dual-VNet architecture** with Azure Bastion jumpbox access and complete environment isolation. For comprehensive deployment strategy, troubleshooting, and architectural decisions, see **[infra/README.md](infra/README.md)**.
 
 ### Key Architecture Features
 - **Flat Dual VNets**: Independent dev and prod VNets with required VNet peering for admin VM access
@@ -448,8 +442,6 @@ az storage account show -g $DEV_RG_WS --name $STORAGE_NAME `
 - VNet peering required for prod jumpbox to reach dev resources for admin tasks
 - Separate Log Analytics per environment for compliance and data segregation
 - Key Vault purge protection disabled by default (sandbox behavior); enable for production
-
-For detailed architecture, implementation plans, validation checklists, and complete troubleshooting guide, see **[DeploymentStrategy.md](DeploymentStrategy.md)** in this repository or the comprehensive guide at **[infra/README.md](infra/README.md)**.
 
 ---
 
