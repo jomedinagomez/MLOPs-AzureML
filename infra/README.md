@@ -1,5 +1,100 @@
 # Azure ML Platform Deployment Guide
 
+## Table of Contents
+
+### Getting Started
+- [Overview](#overview)
+  - [Access via Azure Bastion + Windows DSVM Jumpbox](#access-via-azure-bastion--windows-dsvm-jumpbox)
+- [Deployment Architecture](#deployment-architecture)
+  - [Service Principal Strategy (Updated)](#service-principal-strategy-updated)
+- [Deployment Order](#deployment-order)
+  - [Single Apply (Dev + Prod + Shared DNS)](#single-apply-dev--prod--shared-dns)
+- [Key Benefits](#key-benefits)
+
+### Planning & Configuration
+- [Subscription Strategy](#subscription-strategy)
+- [Geographic Strategy](#geographic-strategy)
+- [Tagging Strategy](#tagging-strategy)
+- [Key Vault Purge Protection & Auto-Purge](#key-vault-purge-protection--auto-purge-sandbox-behavior)
+- [Network Security & Outbound Rules](#network-security--outbound-rules)
+- [Deterministic Naming Examples](#deterministic-naming-examples)
+- [Orchestration & Dependency Diagram](#orchestration--dependency-diagram)
+  - [Microsoft-Managed Resource Groups](#microsoft-managed-resource-groups)
+  - [Key Dependency Callouts](#key-dependency-callouts)
+
+### Deployment
+- [Quick Start](#quick-start)
+  - [Prerequisites](#prerequisites)
+  - [1. Configure Variables](#1-configure-variables)
+  - [2. Deploy Infrastructure](#2-deploy-infrastructure)
+  - [3. Verify Deployment](#3-verify-deployment)
+- [Verify After Apply (CLI quick checks)](#verify-after-apply-cli-quick-checks)
+- [Destroy and verify (safe cleanup)](#destroy-and-verify-safe-cleanup)
+
+### Cost & Recovery
+- [Cost considerations (summary)](#cost-considerations-summary)
+- [Disaster recovery & business continuity (summary)](#disaster-recovery--business-continuity-summary)
+
+### Architecture Details
+- [Architecture Overview](#architecture-overview)
+  - [Module Dependencies](#module-dependencies)
+  - [Resource Count](#resource-count)
+  - [Microsoft Managed Resource Groups](#microsoft-managed-resource-groups-1)
+- [Configuration](#configuration)
+  - [Required Variables](#required-variables)
+  - [Optional Variables](#optional-variables)
+- [Outputs](#outputs)
+  - [Networking Outputs](#networking-outputs)
+  - [ML Workspace Outputs](#ml-workspace-outputs)
+  - [ML Registry Outputs](#ml-registry-outputs)
+  - [Summary Output](#summary-output)
+
+### Security
+- [Security Features](#security-features)
+  - [Network Security](#network-security)
+  - [Identity & Access](#identity--access)
+  - [Network Connectivity](#network-connectivity)
+  - [Asset Sharing Configuration](#asset-sharing-configuration)
+  - [Data Protection](#data-protection)
+
+### Testing & Operations
+- [Testing & Validation](#testing--validation)
+  - [Pre-deployment Checks](#pre-deployment-checks)
+  - [Post-deployment Validation](#post-deployment-validation)
+- [Module Outputs as Inputs](#module-outputs-as-inputs)
+
+### Troubleshooting
+- [Troubleshooting](#troubleshooting)
+  - [Common Issues](#common-issues)
+  - [Common Issues & Solutions](#common-issues--solutions)
+  - [Terraform State Issues](#terraform-state-issues)
+  - [Deployment Validation](#deployment-validation)
+  - [Performance Optimization](#performance-optimization)
+  - [Cost Monitoring](#cost-monitoring)
+  - [Common Deployment Issues](#common-deployment-issues)
+  - [Diagnostic Commands](#diagnostic-commands)
+  - [Security Auditing](#security-auditing)
+  - [Update Management](#update-management)
+
+### Cleanup & Maintenance
+- [Infrastructure Cleanup](#infrastructure-cleanup)
+  - [Complete Destruction](#complete-destruction)
+  - [Selective Cleanup](#selective-cleanup)
+  - [Manual Cleanup Tasks](#manual-cleanup-tasks)
+- [Monitoring & Maintenance](#monitoring--maintenance)
+  - [Regular Health Checks](#regular-health-checks)
+
+### Advanced Topics
+- [Development](#development)
+  - [Adding New Modules](#adding-new-modules)
+  - [Best Practices](#best-practices)
+- [Private Access](#private-access)
+- [Related Documentation](#related-documentation)
+- [Optional: Disabling SSO for AzureML Compute Instances](#optional-disabling-sso-for-azureml-compute-instances-pobo-pattern)
+- [Optional: Assigning a Public IP to the Jump Box VM](#optional-assigning-a-public-ip-to-the-jump-box-vm-nic)
+
+---
+
 ## Overview
 
 This Azure ML platform follows the deployment strategy with **complete environment isolation** and uses a **single service principal** approach for infrastructure automation across all environments.

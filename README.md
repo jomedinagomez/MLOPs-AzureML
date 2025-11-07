@@ -2,6 +2,67 @@
 
 End‑to‑end Azure Machine Learning platform (dev + prod) with an opinionated MLOps workflow: reproducible pipelines, model governance & promotion, private‑only networking, and centralized AML/Core Private DNS.
 
+## Table of Contents
+
+### Getting Started
+- [Documentation Structure](#documentation-structure)
+- [Platform Snapshot](#platform-snapshot)
+- [Quick Infrastructure Deploy](#quick-infrastructure-deploy)
+- [Repository Layout (High-Level)](#repository-layout-high-level)
+
+### MLOps Workflow
+- [MLOps Lifecycle](#mlops-lifecycle)
+- [Components Overview](#components-overview-srccomponentsyaml)
+- [Pipelines](#pipelines-pipelinesyaml)
+- [Environments](#environments)
+- [Notebooks](#notebooks-notebooks)
+- [Asset Promotion Strategy & Cross‑Environment Access](#asset-promotion-strategy--crossenvironment-access)
+
+### CI/CD & Development
+- [CI/CD (Recommended Outline)](#cicd-recommended-outline)
+- [Developer Inner Loop](#developer-inner-loop)
+- [Source Code Highlights](#source-code-highlights)
+
+### Architecture & Security
+- [RBAC Snapshot (Operational)](#rbac-snapshot-operational)
+- [Central AML & Core Service Private DNS](#central-aml--core-service-private-dns)
+- [Network Security & Outbound Rules](#network-security--outbound-rules)
+- [Verify After Apply (CLI)](#verify-after-apply-cli)
+
+### Platform Management
+- [Roadmap (Suggested Next Enhancements)](#roadmap-suggested-next-enhancements)
+- [Changelog Pointer](#changelog-pointer)
+- [Platform Limitations and Constraints](#platform-limitations-and-constraints)
+- [Environment Promotion Behavior](#environment-promotion-behavior-images-and-components)
+
+### CI/CD Implementation Details
+- [Integration Branch ML CI/CD Plan](#integration-branch-ml-cicd-plan)
+  - [Goals](#goals)
+  - [Branching Strategy](#branching-strategy)
+  - [GitHub Configuration Prerequisites](#github-configuration-prerequisites)
+  - [Security Considerations - Service Principal RBAC](#security-considerations---service-principal-rbac)
+  - [Pipeline Stages](#pipeline-stages)
+  - [Environment Usage](#environment-usage)
+  - [Artifact Flow and Traceability](#artifact-flow-and-traceability)
+  - [Operator Runbook Highlights](#operator-runbook-highlights)
+
+### Infrastructure & Deployment Strategy
+- [Architecture Overview](#architecture-overview)
+  - [Key Architecture Features](#key-architecture-features)
+  - [Service Principal Strategy](#service-principal-strategy)
+  - [Network Security & Outbound Rules](#network-security--outbound-rules-1)
+  - [Key Vault Configuration](#key-vault-configuration)
+  - [Troubleshooting Quick Reference](#troubleshooting-quick-reference)
+  - [Centralized Private DNS Strategy](#centralized-private-dns-strategy)
+  - [Verification Commands](#verification-commands-from-bastion-jumpbox)
+  - [Cost Considerations](#cost-considerations)
+  - [Disaster Recovery](#disaster-recovery)
+  - [Decision Log Highlights](#decision-log-highlights)
+
+- [License](#license)
+
+---
+
 ## Documentation Structure
 
 **This README consolidates all documentation**:

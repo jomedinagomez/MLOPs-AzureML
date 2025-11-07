@@ -2,6 +2,57 @@
 
 This Terraform module deploys the foundational networking infrastructure for secure Azure Machine Learning deployments. It creates the complete networking foundation including virtual network, private DNS zones, and managed identities required for a private ML environment.
 
+## Table of Contents
+
+### Overview
+- [Module Overview](#module-overview)
+- [Deployment Flow & Dependencies](#-deployment-flow--dependencies)
+  - [Deployment Order](#deployment-order)
+  - [Module Dependency Diagram](#module-dependency-diagram)
+  - [Key Outputs Consumed by Other Modules](#key-outputs-consumed-by-other-modules)
+- [Architecture](#architecture)
+
+### Configuration
+- [Required Configuration](#required-configuration)
+  - [Critical Settings to Update](#critical-settings-to-update)
+  - [Resource Naming Convention](#resource-naming-convention)
+
+### Security & Resources
+- [Security Features](#security-features)
+- [Resources Created](#resources-created)
+  - [Core Network Infrastructure](#core-network-infrastructure)
+  - [DNS Infrastructure](#dns-infrastructure-9-private-dns-zones)
+  - [VNet Links](#vnet-links)
+  - [Identity Management](#identity-management)
+
+### Deployment
+- [Prerequisites](#prerequisites)
+- [Deployment Steps](#deployment-steps)
+- [Post-Deployment Configuration](#post-deployment-configuration)
+
+### Outputs & Troubleshooting
+- [Outputs](#outputs)
+  - [Network Outputs](#network-outputs)
+  - [DNS Zone Outputs](#dns-zone-outputs)
+  - [Identity Outputs](#identity-outputs)
+- [Troubleshooting](#troubleshooting)
+  - [Common Issues](#common-issues)
+  - [Useful Commands](#useful-commands)
+
+### Cleanup & Integration
+- [Clean Up](#clean-up)
+- [Dependencies](#dependencies)
+- [Module Structure](#module-structure)
+- [Related Modules](#related-modules)
+- [Module Integration](#module-integration)
+
+### Best Practices & Planning
+- [Best Practices](#best-practices)
+- [Network Planning Guidelines](#network-planning-guidelines)
+  - [DNS Zone Requirements](#dns-zone-requirements)
+
+---
+
 ## Module Overview
 
 ## 🚦 Deployment Flow & Dependencies
