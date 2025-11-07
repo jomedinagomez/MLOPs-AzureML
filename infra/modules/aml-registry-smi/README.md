@@ -2,6 +2,59 @@
 
 This Terraform module deploys an Azure Machine Learning Registry with private network connectivity, monitoring, and RBAC configuration. The registry enables centralized model and component sharing across multiple Azure ML workspaces.
 
+## Table of Contents
+
+### Overview
+- [Module Overview](#module-overview)
+- [Architecture](#architecture)
+  - [Microsoft Managed Resource Groups](#important-microsoft-managed-resource-groups)
+
+### Configuration
+- [Required Configuration](#required-configuration)
+  - [Critical Settings to Update](#critical-settings-to-update)
+- [RBAC Configuration](#rbac-configuration)
+  - [User Registry Access](#user-registry-access)
+  - [Managed Identity Access](#managed-identity-access)
+- [Optional Customizations](#optional-customizations)
+
+### Features & Usage
+- [Registry Features](#registry-features)
+  - [Asset Types Supported](#asset-types-supported)
+  - [Private Network Integration](#private-network-integration)
+  - [Monitoring & Logging](#monitoring--logging)
+- [Usage Examples](#usage-examples)
+  - [Accessing Registry from Workspace](#accessing-registry-from-workspace)
+  - [Sharing Models via Registry](#sharing-models-via-registry)
+- [Deployment Considerations](#deployment-considerations)
+
+### Security
+- [Security Features](#security-features)
+- [Role Assignments](#role-assignments)
+
+### Deployment
+- [Prerequisites](#prerequisites)
+- [Deployment Steps](#deployment-steps)
+- [Post-Deployment Configuration](#post-deployment-configuration)
+
+### Resources & Outputs
+- [Resources Created](#resources-created)
+- [Outputs](#outputs)
+
+### Troubleshooting & Cleanup
+- [Troubleshooting](#troubleshooting)
+  - [Common Issues](#common-issues)
+  - [Common Deployment Issues](#common-deployment-issues)
+  - [Diagnostic Commands](#diagnostic-commands)
+- [Clean Up](#clean-up)
+
+### Integration
+- [Dependencies](#dependencies)
+- [Module Structure](#module-structure)
+- [Related Modules](#related-modules)
+- [Best Practices](#best-practices)
+
+---
+
 ## Module Overview
 
 This module creates a secure, centralized Azure ML Registry featuring:

@@ -1,6 +1,81 @@
 # Azure ML Platform & MLOps Workflow
 
-End‑to‑end Azure Machine Learning platform (dev + prod) with an opinionated MLOps workflow: reproducible pipelines, model governance & promotion, private‑only networking, and centralized AML/Core Private DNS. This README now includes all architectural decisions and implementation details; no separate strategy doc is required.
+End‑to‑end Azure Machine Learning platform (dev + prod) with an opinionated MLOps workflow: reproducible pipelines, model governance & promotion, private‑only networking, and centralized AML/Core Private DNS.
+
+## Table of Contents
+
+### Getting Started
+- [Documentation Structure](#documentation-structure)
+- [Platform Snapshot](#platform-snapshot)
+- [Quick Infrastructure Deploy](#quick-infrastructure-deploy)
+- [Repository Layout (High-Level)](#repository-layout-high-level)
+
+### MLOps Workflow
+- [MLOps Lifecycle](#mlops-lifecycle)
+- [Components Overview](#components-overview-srccomponentsyaml)
+- [Pipelines](#pipelines-pipelinesyaml)
+- [Environments](#environments)
+- [Notebooks](#notebooks-notebooks)
+- [Asset Promotion Strategy & Cross‑Environment Access](#asset-promotion-strategy--crossenvironment-access)
+
+### CI/CD & Development
+- [CI/CD (Recommended Outline)](#cicd-recommended-outline)
+- [Developer Inner Loop](#developer-inner-loop)
+- [Source Code Highlights](#source-code-highlights)
+
+### Architecture & Security
+- [RBAC Snapshot (Operational)](#rbac-snapshot-operational)
+- [Central AML & Core Service Private DNS](#central-aml--core-service-private-dns)
+- [Network Security & Outbound Rules](#network-security--outbound-rules)
+- [Verify After Apply (CLI)](#verify-after-apply-cli)
+
+### Platform Management
+- [Roadmap (Suggested Next Enhancements)](#roadmap-suggested-next-enhancements)
+- [Changelog Pointer](#changelog-pointer)
+- [Platform Limitations and Constraints](#platform-limitations-and-constraints)
+- [Environment Promotion Behavior](#environment-promotion-behavior-images-and-components)
+
+### CI/CD Implementation Details
+- [Integration Branch ML CI/CD Plan](#integration-branch-ml-cicd-plan)
+  - [Overview](#overview)
+  - [Goals](#goals)
+  - [Branching Strategy](#branching-strategy)
+  - [CI/CD Architecture Diagram](#cicd-architecture-diagram)
+  - [GitHub Configuration Prerequisites](#github-configuration-prerequisites)
+  - [Security Considerations - Service Principal RBAC](#security-considerations---service-principal-rbac)
+  - [Pipeline Stages](#pipeline-stages)
+    - [Integration Pipeline Flow](#integration-pipeline-flow)
+    - [Production Release Flow](#production-release-flow)
+  - [Environment Usage](#environment-usage)
+  - [Artifact Flow and Traceability](#artifact-flow-and-traceability)
+  - [Operator Runbook Highlights](#operator-runbook-highlights)
+
+### Infrastructure & Deployment Strategy
+- [Architecture Overview](#architecture-overview)
+  - [Key Architecture Features](#key-architecture-features)
+  - [Service Principal Strategy](#service-principal-strategy)
+  - [Network Security & Outbound Rules](#network-security--outbound-rules-1)
+  - [Key Vault Configuration](#key-vault-configuration)
+  - [Troubleshooting Quick Reference](#troubleshooting-quick-reference)
+  - [Centralized Private DNS Strategy](#centralized-private-dns-strategy)
+  - [Verification Commands](#verification-commands-from-bastion-jumpbox)
+  - [Cost Considerations](#cost-considerations)
+  - [Disaster Recovery](#disaster-recovery)
+  - [Decision Log Highlights](#decision-log-highlights)
+
+- [License](#license)
+
+---
+
+## Documentation Structure
+
+**This README consolidates all documentation**:
+- Quick start and MLOps workflow overview
+- CI/CD implementation details
+- Infrastructure architecture summary
+
+**For detailed infrastructure deployment**, see:
+- **[infra/README.md](infra/README.md)** - Complete Terraform deployment guide with step-by-step instructions
 
 ## Platform Snapshot
 | Aspect | Implementation | Notes |
@@ -247,6 +322,377 @@ Key recent changes: Key Vault RBAC fix (add Reader + Secrets User), outbound rul
 - Docker environments shared to a registry build an image that lives in the source registry’s ACR; promoting to another workspace reuses the same image URI. The image is not copied to the prod registry ACR.
 - Components are not shareable across workspaces/registries; store their YAML in version control and recreate in the target workspace.
 - Practical guidance and code examples are available in `notebooks/asset_sharing/sharing_assets_registries_workspaces.ipynb`.
+
+---
+
+# CI/CD Implementation Details
+
+## Integration Branch ML CI/CD Plan
+
+### Overview
+
+This CI/CD implementation provides automated model validation, promotion, and deployment across environments with quality gates at each stage. The workflow ensures only validated models reach production through a structured promotion path.
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+│   Feature   │────▶│ Integration  │────▶│    Main     │
+│   Branch    │     │    Branch    │     │  (Production)│
+└─────────────┘     └──────────────┘     └─────────────┘
+      │                    │                     │
+      │                    │                     │
+      ▼                    ▼                     ▼
+   Local Dev        CI Validation          Prod Deploy
+                    + Model Quality
+```
+
+### Goals
+- **Standardize CI/CD**: End-to-end automation with explicit integration branch validation
+- **Quality Gates**: Only model improvements (measured by comparison metrics) progress to production
+- **Automated Testing**: Unit tests and ML pipeline validation run automatically for changes in `src/`
+- **Environment Separation**: Clear boundaries between Dev workspace (experimentation), Dev registry (promotion gate), and Prod workspace (serving)
+- **Traceability**: Complete audit trail from code commit to production model
+
+### Branching Strategy
+
+```mermaid
+gitGraph
+    commit id: "Initial"
+    branch integration
+    checkout integration
+    branch feature/model-improvements
+    commit id: "Feature work"
+    commit id: "Local testing"
+    checkout integration
+    merge feature/model-improvements tag: "CI validation"
+    commit id: "Model promoted"
+    checkout main
+    merge integration tag: "Prod release"
+```
+
+| Branch | Purpose | Notes |
+|--------|---------|-------|
+| `feature/*` | Individual feature work | Developers branch from latest `integration` |
+| `integration` | Shared validation branch | All merges land here after validation |
+| `main` | Production-ready | Only updated when prod deployment succeeds using validated artifacts |
+
+**Workflow**:
+1. Developer creates `feature/*` branch from `integration`
+2. After local testing, PR to `integration` triggers CI validation
+3. CI runs tests, training, model comparison
+4. If quality gates pass, model promoted to Dev registry
+5. Manual approval gates PR from `integration` to `main`
+6. Merge to `main` triggers production deployment
+
+### CI/CD Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         GitHub Repository                                │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐             │
+│  │   feature/*  │───▶│ integration  │───▶│     main     │             │
+│  └──────────────┘    └──────────────┘    └──────────────┘             │
+└──────────┬────────────────────┬────────────────────┬────────────────────┘
+           │                    │                    │
+           │                    ▼                    ▼
+           │          ┌─────────────────┐  ┌─────────────────┐
+           │          │ Integration CI  │  │  Prod Release   │
+           │          │   Workflow      │  │    Workflow     │
+           │          └─────────────────┘  └─────────────────┘
+           │                    │                    │
+           │                    │                    │
+┏━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━┓
+┃                          Azure ML Platform                         ┃
+┃                                                                     ┃
+┃  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┃
+┃  │  Dev Workspace  │  │   Dev Registry  │  │ Prod Workspace  │  ┃
+┃  │                 │  │                 │  │                 │  ┃
+┃  │ • Training      │─▶│ • Model Store   │─▶│ • Serving       │  ┃
+┃  │ • Validation    │  │ • Quality Gate  │  │ • Production    │  ┃
+┃  │ • Testing       │  │ • Promotion Hub │  │ • Endpoints     │  ┃
+┃  └─────────────────┘  └─────────────────┘  └─────────────────┘  ┃
+┃         ▲                      │                      ▲            ┃
+┃         │                      │                      │            ┃
+┃         └──────── Model Flow ──┴──────────────────────┘            ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+```
+
+### GitHub Configuration Prerequisites
+**Secrets** (service principal authentication):
+- `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`
+
+**Repository Variables**:
+- Dev: `AML_DEV_RESOURCE_GROUP`, `AML_DEV_WORKSPACE`, `AML_DEV_COMPUTE`, `AML_DEV_REGISTRY`, `AML_DEV_DEPLOYMENT_NAME`, `AML_DEV_TRAFFIC_PERCENT`
+- Prod: `AML_PROD_RESOURCE_GROUP`, `AML_PROD_WORKSPACE`
+- Optional: `AML_MODEL_BASE` (defaults to `taxi-class`)
+
+### Security Considerations - Service Principal RBAC
+The GitHub Actions service principal requires these minimum Azure RBAC roles:
+
+**Dev scope** (`rg-aml-ws-dev-cc-01` and registry `mlrdevcc01`):
+- Contributor
+- Storage Blob Data Contributor  
+- AcrPull
+- Key Vault Secrets User
+
+**Prod scope** (`rg-aml-ws-prod-cc-01`):
+- Contributor
+- Storage Blob Data Reader
+- AcrPull
+- Key Vault Secrets User
+
+### Pipeline Stages
+
+#### Integration Pipeline Flow
+
+```
+┌──────────────┐
+│ Pull Request │
+│      to      │
+│ integration  │
+└──────┬───────┘
+       │
+       ▼
+┌───────────────────────────────────────────────────────────┐
+│              Integration CI Pipeline                      │
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  1. ┌──────────────┐                                      │
+│     │ Unit Tests   │  pytest suite validation             │
+│     └──────┬───────┘                                      │
+│            │                                              │
+│            ▼                                              │
+│  2. ┌──────────────┐                                      │
+│     │ Azure Login  │  Service principal auth              │
+│     └──────┬───────┘                                      │
+│            │                                              │
+│            ▼                                              │
+│  3. ┌──────────────────────────────┐                      │
+│     │ ML Pipeline Execution        │                      │
+│     │ integration-compare-pipeline │                      │
+│     └──────┬───────────────────────┘                      │
+│            │                                              │
+│            ▼                                              │
+│  4. ┌──────────────────────────┐                          │
+│     │ Model Evaluation         │  Quality Gate            │
+│     │ Parse metrics, compare   │  ──────────┐             │
+│     └──────┬───────────────────┘            │             │
+│            │ PASS                            │ FAIL       │
+│            ▼                                 ▼            │
+│  5. ┌──────────────────────────┐     ┌─────────────┐      │
+│     │ Model Promotion          │     │ Job Failed  │      │ 
+│     │ Register to Dev registry │     └─────────────┘      │
+│     │ Tag: integration, SHA    │                          │
+│     └──────┬───────────────────┘                          │
+│            │                                              │
+│            ▼                                              │
+│  6. ┌──────────────────────────┐                          │
+│     │ Dev Deployment (optional)│                          │
+│     │ dev-deploy-validation    │                          │
+│     └──────────────────────────┘                          │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
+```
+
+**Integration Pipeline** (`.github/workflows/integration-ml-ci.yml`):
+1. **Unit Tests** - pytest suite validation
+2. **Azure Login** - Service principal authentication
+3. **ML Pipeline Execution** - Run `pipelines/integration-compare-pipeline.yaml` through compare stage
+4. **Model Evaluation** - Parse compare_job metrics, fail if no improvement
+5. **Model Promotion** - Register to Dev registry with tags (branch, commit SHA, run ID)
+6. **Dev Deployment** (on push) - Execute `pipelines/dev-deploy-validation.yaml` for endpoint testing
+
+#### Production Release Flow
+
+```
+┌──────────────┐
+│ Pull Request │
+│      to      │
+│     main     │
+└──────┬───────┘
+       │ (Manual approval required)
+       ▼
+┌───────────────────────────────────────────────────────────┐
+│           Production Release Pipeline                     │
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  1. ┌──────────────────────────┐                          │
+│     │ Pull Model from          │                          │
+│     │ Dev Registry             │                          │
+│     └──────┬───────────────────┘                          │
+│            │                                              │
+│            ▼                                              │
+│  2. ┌──────────────────────────┐                          │
+│     │ Blue/Green Deployment    │                          │
+│     │ 30% traffic to new slot  │                          │
+│     └──────┬───────────────────┘                          │
+│            │                                              │
+│            ▼                                              │
+│  3. ┌──────────────────────────┐                          │
+│     │ Smoke Tests              │                          │
+│     │ Health checks            │                          │
+│     └──────┬───────────────────┘                          │
+│            │                                              │
+│            ├─── PASS ───┐                                 │
+│            │            │                                 │
+│            ▼            ▼                                 │
+│  4. ┌─────────────┐  ┌──────────────┐                     │
+│     │ Finalize    │  │ Rollback     │                     │
+│     │ Merge       │  │ Traffic to   │                     │
+│     │ Update Logs │  │ Previous     │                     │
+│     └─────────────┘  └──────────────┘                     │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
+```
+
+**Prod Release Pipeline** (`.github/workflows/prod-ml-release.yml`):
+1. Triggered on PRs to `main` or manual `workflow_dispatch`
+2. Pull vetted model from Dev registry
+3. Deploy to Prod workspace using blue/green strategy (30% traffic to new slot)
+4. Run smoke/health checks
+5. On success: finalize merge, update release notes
+6. On failure: rollback traffic to previous deployment
+
+### Environment Usage
+| Environment | Purpose | Responsibilities |
+|-------------|---------|------------------|
+| Dev Workspace | Execution sandbox for CI runs | Unit tests, partial pipeline execution, short-lived endpoints |
+| Dev External Registry | Promotion gate for validated models | Receive only models that passed compare stage |
+| Prod Workspace | Production serving environment | Consume vetted models via prod release pipeline |
+
+### Artifact Flow and Traceability
+
+```
+Code Commit ──▶ CI Pipeline ──▶ Model Registration ──▶ Prod Deployment
+    │               │                   │                     │
+    ├─ SHA          ├─ Job Run ID       ├─ Model Version     ├─ Endpoint
+    ├─ Branch       ├─ Metrics          ├─ Tags              ├─ Traffic %
+    └─ Timestamp    └─ Artifacts        └─ Metadata          └─ Health Status
+                                              │
+                                              ▼
+                                    Auditable Chain:
+                                    SHA → Run ID → Model v3 → Endpoint
+```
+
+**Traceability Features**:
+- Integration pipeline records job run IDs and compare metrics
+- Successful runs promote model to Dev registry with tags: `integration`, commit SHA, pipeline run ID
+- Prod release pipeline references these tags/run IDs for auditable chain from code to production
+- All deployments include metadata linking back to source code and validation results
+
+### Operator Runbook Highlights
+
+**Integration Pipeline – First Run (No Prior Dev Deployment)**:
+- Monitor job submission for `pipelines/dev-deploy-validation.yaml`
+- Confirm endpoint creation and validation
+- Manual cleanup: Remove dev deployment after testing
+
+**Integration Pipeline – Existing Dev Deployment**:
+- Verify `deploy_job` preserved previous traffic (check `deployment_state.json`)
+- Review `traffic_job` logs for configured percentage allocation
+- Manual cleanup: Delete dev deployment slot when testing completes
+
+**Integration Pipeline Failure**:
+- Pull logs: `az ml job download --name <test_job_id> --all`
+- Confirm `rollback_job` restored prior traffic
+- Diagnose data/payload issues from artifacts
+
+**Manual Model Cleanup (Optional)**:
+```bash
+python src/cleanup_models/cleanup_models.py \
+  --model_name <name> \
+  --registry <registry> \
+  --retain_versions 1 \
+  --dry_run
+```
+
+
+---
+
+# Infrastructure & Deployment Strategy
+
+## Architecture Overview
+
+This platform implements a **flat dual-VNet architecture** with Azure Bastion jumpbox access and complete environment isolation. For comprehensive deployment strategy, troubleshooting, and architectural decisions, see **[infra/README.md](infra/README.md)**.
+
+### Key Architecture Features
+- **Flat Dual VNets**: Independent dev and prod VNets with required VNet peering for admin VM access
+- **Bastion-Only Access**: Browser-based RDP to Windows DSVM jumpbox (no VPN/SSH)
+- **Deterministic Naming**: Names derive from `prefix`, `purpose`, `location_code`, `naming_suffix` (no random postfixes)
+- **Centralized Private DNS**: Shared zones for AML (api, notebooks, instances) and core services (blob, file, queue, table, vaultcore, acr)
+- **Private-Only Posture**: Public network access disabled for all PaaS resources
+- **Per-Environment Log Analytics**: Dedicated dev & prod workspaces for observability isolation
+
+### Service Principal Strategy
+Single service principal created by root `main.tf` manages all resource groups:
+- **Scope**: 7 resource groups (3 dev + 3 prod + 1 shared DNS)
+- **Permissions**: Contributor, User Access Administrator, Network Contributor per RG
+- **CI/CD Ready**: SP credentials available immediately for pipeline configuration
+
+### Network Security & Outbound Rules
+- Workspaces use managed VNet with `AllowOnlyApprovedOutbound` isolation mode
+- User-defined outbound rules to registries require `destination.subresourceTarget = "amlregistry"`
+- Workspace UAMI needs Azure AI Enterprise Network Connection Approver role at registry scope
+- Allow ~90–150s for RBAC propagation before creating outbound rules
+
+### Key Vault Configuration
+Dual roles required for Workspace UAMI:
+- **Key Vault Reader** (management plane) - for resource metadata during provisioning
+- **Key Vault Secrets User** (data plane) - for secret access operations
+
+### Troubleshooting Quick Reference
+| Symptom | Root Cause | Resolution |
+|---------|------------|-----------|
+| 403 `vaults/read` during workspace creation | Missing management-plane role | Add Key Vault Reader to workspace UAMI |
+| 409 `FailedIdentityOperation` after delete | Rapid re-create before cleanup | Wait 150s before re-provisioning |
+| 400 ValidationError outbound rule | Missing `subresourceTarget` | Add `subresourceTarget = "amlregistry"` |
+
+### Centralized Private DNS Strategy
+
+**Shared DNS Zones** (consolidated in single DNS RG):
+- AML: `privatelink.api.azureml.ms`, `privatelink.notebooks.azure.net`, `instances.azureml.ms`
+- Core: `privatelink.blob.core.windows.net`, `privatelink.file.core.windows.net`, `privatelink.queue.core.windows.net`, `privatelink.table.core.windows.net`, `privatelink.vaultcore.azure.net`, `privatelink.azurecr.io`
+
+**Benefits**:
+- Eliminate duplicate zone resources (simpler state, faster plans)
+- Single update point for DNS policy (reduced drift risk)
+- Easier multi-subscription future expansion
+- Faster environment teardown (no contention for global zone names)
+
+**DNS Record Coexistence**: Workspace and registry endpoints include unique environment-specific prefixes (e.g., `mlwdevcc02` vs `mlwprodcc02`), so dev and prod records coexist in the same zone with no collision.
+
+### Verification Commands (from Bastion jumpbox)
+```powershell
+# Registry managed RG pre-authorization
+az rest --method get `
+  --uri "https://management.azure.com/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$DEV_RG_REG/providers/Microsoft.MachineLearningServices/registries/$DEV_REG_NAME?api-version=2025-01-01-preview" `
+  --query "properties.managedResourceGroupSettings.assignedIdentities"
+
+# Outbound rules
+az rest --method get `
+  --uri "https://management.azure.com/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$PROD_RG_WS/providers/Microsoft.MachineLearningServices/workspaces/$PROD_WS_NAME/outboundRules?api-version=2024-10-01-preview"
+
+# Private-only posture checks
+az storage account show -g $DEV_RG_WS --name $STORAGE_NAME `
+  --query "{publicNetworkAccess:publicNetworkAccess, defaultAction:networkRuleSet.defaultAction}"
+```
+
+### Cost Considerations
+- **Dev**: Enable compute auto-shutdown, apply storage lifecycle policies, right-size Bastion/jumpbox
+- **Prod**: Enable Key Vault purge protection, consider reservations for steady compute, monitor private endpoint costs
+
+### Disaster Recovery
+- **State**: Use remote Terraform state with backups, keep IaC under version control
+- **Backups**: Back up model/artifact stores per policy, enforce retention
+- **Recovery**: Rebuild infra via Terraform, restore data and secrets, maintain tested runbooks
+
+### Decision Log Highlights
+- Two registries (dev, prod) for promotion demonstration; single registry viable for most production deployments
+- No VPN gateway; all remote access via Azure Bastion to maintain zero-trust posture
+- VNet peering required for prod jumpbox to reach dev resources for admin tasks
+- Separate Log Analytics per environment for compliance and data segregation
+- Key Vault purge protection disabled by default (sandbox behavior); enable for production
+
+---
 
 ## License
 MIT
