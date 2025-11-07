@@ -1,5 +1,100 @@
 # Azure ML Platform Deployment Guide
 
+## Table of Contents
+
+### Getting Started
+- [Overview](#overview)
+  - [Access via Azure Bastion + Windows DSVM Jumpbox](#access-via-azure-bastion--windows-dsvm-jumpbox)
+- [Deployment Architecture](#deployment-architecture)
+  - [Service Principal Strategy (Updated)](#service-principal-strategy-updated)
+- [Deployment Order](#deployment-order)
+  - [Single Apply (Dev + Prod + Shared DNS)](#single-apply-dev--prod--shared-dns)
+- [Key Benefits](#key-benefits)
+
+### Planning & Configuration
+- [Subscription Strategy](#subscription-strategy)
+- [Geographic Strategy](#geographic-strategy)
+- [Tagging Strategy](#tagging-strategy)
+- [Key Vault Purge Protection & Auto-Purge](#key-vault-purge-protection--auto-purge-sandbox-behavior)
+- [Network Security & Outbound Rules](#network-security--outbound-rules)
+- [Deterministic Naming Examples](#deterministic-naming-examples)
+- [Orchestration & Dependency Diagram](#orchestration--dependency-diagram)
+  - [Microsoft-Managed Resource Groups](#microsoft-managed-resource-groups)
+  - [Key Dependency Callouts](#key-dependency-callouts)
+
+### Deployment
+- [Quick Start](#quick-start)
+  - [Prerequisites](#prerequisites)
+  - [1. Configure Variables](#1-configure-variables)
+  - [2. Deploy Infrastructure](#2-deploy-infrastructure)
+  - [3. Verify Deployment](#3-verify-deployment)
+- [Verify After Apply (CLI quick checks)](#verify-after-apply-cli-quick-checks)
+- [Destroy and verify (safe cleanup)](#destroy-and-verify-safe-cleanup)
+
+### Cost & Recovery
+- [Cost considerations (summary)](#cost-considerations-summary)
+- [Disaster recovery & business continuity (summary)](#disaster-recovery--business-continuity-summary)
+
+### Architecture Details
+- [Architecture Overview](#architecture-overview)
+  - [Module Dependencies](#module-dependencies)
+  - [Resource Count](#resource-count)
+  - [Microsoft Managed Resource Groups](#microsoft-managed-resource-groups-1)
+- [Configuration](#configuration)
+  - [Required Variables](#required-variables)
+  - [Optional Variables](#optional-variables)
+- [Outputs](#outputs)
+  - [Networking Outputs](#networking-outputs)
+  - [ML Workspace Outputs](#ml-workspace-outputs)
+  - [ML Registry Outputs](#ml-registry-outputs)
+  - [Summary Output](#summary-output)
+
+### Security
+- [Security Features](#security-features)
+  - [Network Security](#network-security)
+  - [Identity & Access](#identity--access)
+  - [Network Connectivity](#network-connectivity)
+  - [Asset Sharing Configuration](#asset-sharing-configuration)
+  - [Data Protection](#data-protection)
+
+### Testing & Operations
+- [Testing & Validation](#testing--validation)
+  - [Pre-deployment Checks](#pre-deployment-checks)
+  - [Post-deployment Validation](#post-deployment-validation)
+- [Module Outputs as Inputs](#module-outputs-as-inputs)
+
+### Troubleshooting
+- [Troubleshooting](#troubleshooting)
+  - [Common Issues](#common-issues)
+  - [Common Issues & Solutions](#common-issues--solutions)
+  - [Terraform State Issues](#terraform-state-issues)
+  - [Deployment Validation](#deployment-validation)
+  - [Performance Optimization](#performance-optimization)
+  - [Cost Monitoring](#cost-monitoring)
+  - [Common Deployment Issues](#common-deployment-issues)
+  - [Diagnostic Commands](#diagnostic-commands)
+  - [Security Auditing](#security-auditing)
+  - [Update Management](#update-management)
+
+### Cleanup & Maintenance
+- [Infrastructure Cleanup](#infrastructure-cleanup)
+  - [Complete Destruction](#complete-destruction)
+  - [Selective Cleanup](#selective-cleanup)
+  - [Manual Cleanup Tasks](#manual-cleanup-tasks)
+- [Monitoring & Maintenance](#monitoring--maintenance)
+  - [Regular Health Checks](#regular-health-checks)
+
+### Advanced Topics
+- [Development](#development)
+  - [Adding New Modules](#adding-new-modules)
+  - [Best Practices](#best-practices)
+- [Private Access](#private-access)
+- [Related Documentation](#related-documentation)
+- [Optional: Disabling SSO for AzureML Compute Instances](#optional-disabling-sso-for-azureml-compute-instances-pobo-pattern)
+- [Optional: Assigning a Public IP to the Jump Box VM](#optional-assigning-a-public-ip-to-the-jump-box-vm-nic)
+
+---
+
 ## Overview
 
 This Azure ML platform follows the deployment strategy with **complete environment isolation** and uses a **single service principal** approach for infrastructure automation across all environments.
@@ -1147,6 +1242,93 @@ az ml job create --file ..\pipelines\taxi-fare-train-pipeline.yaml \
 - [Terraform Azure Provider](https://registry.terraform.io/providers/hashicorp/azurerm/latest)
 - [Azure Private Endpoints](https://docs.microsoft.com/azure/private-link/private-endpoint-overview)
 - [Azure Bastion Documentation](https://docs.microsoft.com/azure/bastion/)
+
+---
+
+## Optional: Disabling SSO for AzureML Compute Instances (POBO Pattern)
+
+AzureML compute instances enable SSO (Single Sign-On) by default. To disable SSO by default, use the "create on behalf of" (POBO) pattern, which assigns the compute instance to a user other than the creator at creation time.
+
+### Implementation Steps
+
+1. **Add a Variable for the Assigned User**
+   ```hcl
+   variable "assigned_user_object_id" {
+     description = "Object ID of the user to assign the compute instance to (for POBO/SSO disablement)"
+     type        = string
+   }
+   ```
+
+2. **Update the Compute Instance Resource**
+   ```hcl
+   resource "azapi_resource" "compute_instance_uami" {
+     # ...existing code...
+     body = {
+       # ...existing code...
+       properties = {
+         computeType = "ComputeInstance"
+         properties = {
+           # ...existing code...
+           personalComputeInstanceSettings = {
+             assignedUser = {
+               objectId = var.assigned_user_object_id
+               tenantId = data.azurerm_client_config.current.tenant_id
+             }
+           }
+           # ...existing code...
+         }
+       }
+     }
+   }
+   ```
+
+3. **Pass the Assigned User Object ID**
+   ```hcl
+   module "aml_managed_umi" {
+     # ...existing code...
+     assigned_user_object_id = "<OBJECT_ID_OF_TARGET_USER>"
+   }
+   ```
+
+**Notes:**
+- SSO will be disabled by default for the assigned user. The assigned user can later enable SSO in the AzureML Studio UI if needed.
+- This approach is required because there is no direct property to disable SSO in the ARM/azapi schema.
+
+### Optional: Assigning a Public IP to the Jump Box VM NIC
+
+To allow direct access to your jump box VM, assign a static public IP to its network interface:
+
+1. **Create a Public IP Resource**
+   ```hcl
+   resource "azurerm_public_ip" "prod_vm" {
+     name                = "pip-${var.prefix}-vm-prod-${var.location_code}${var.naming_suffix}"
+     location            = var.location
+     resource_group_name = azurerm_resource_group.prod_vnet_rg.name
+     allocation_method   = "Static"
+     sku                 = "Standard"
+     tags                = merge(var.tags, { environment = "production", purpose = "prod", component = "vm" })
+   }
+   ```
+
+2. **Update the NIC to Use the Public IP**
+   ```hcl
+   resource "azurerm_network_interface" "prod_vm_nic" {
+     name                = "nic-${var.prefix}-vm-prod-${var.location_code}${var.naming_suffix}"
+     location            = var.location
+     resource_group_name = azurerm_resource_group.prod_vnet_rg.name
+
+     ip_configuration {
+       name                          = "ipconfig1"
+       subnet_id                     = azurerm_subnet.prod_vm.id
+       private_ip_address_allocation = "Dynamic"
+       public_ip_address_id          = azurerm_public_ip.prod_vm.id
+     }
+
+     tags = merge(var.tags, { environment = "production", purpose = "prod", component = "vm" })
+   }
+   ```
+
+**Note:** Ensure your NSG allows required inbound traffic (e.g., RDP/SSH) from trusted sources.
 
 ---
 
