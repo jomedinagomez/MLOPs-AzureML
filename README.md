@@ -1,6 +1,12 @@
 # Azure ML Platform & MLOps Workflow
 
-End‑to‑end Azure Machine Learning platform (dev + prod) with an opinionated MLOps workflow: reproducible pipelines, model governance & promotion, private‑only networking, and centralized AML/Core Private DNS. This README now includes all architectural decisions and implementation details; no separate strategy doc is required.
+End‑to‑end Azure Machine Learning platform (dev + prod) with an opinionated MLOps workflow: reproducible pipelines, model governance & promotion, private‑only networking, and centralized AML/Core Private DNS.
+
+## Documentation Guide
+- **This README** - Quick start, MLOps workflow overview, and developer guidance
+- **[DeploymentStrategy.md](DeploymentStrategy.md)** - Comprehensive infrastructure architecture, design decisions, troubleshooting, and operational guidance (108KB)
+- **[integration-ml-cicd-plan.md](integration-ml-cicd-plan.md)** - Detailed CI/CD pipeline implementation and branching strategy
+- **[infra/README.md](infra/README.md)** - Terraform deployment guide with step-by-step instructions
 
 ## Platform Snapshot
 | Aspect | Implementation | Notes |
