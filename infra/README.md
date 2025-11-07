@@ -1150,4 +1150,91 @@ az ml job create --file ..\pipelines\taxi-fare-train-pipeline.yaml \
 
 ---
 
+## Optional: Disabling SSO for AzureML Compute Instances (POBO Pattern)
+
+AzureML compute instances enable SSO (Single Sign-On) by default. To disable SSO by default, use the "create on behalf of" (POBO) pattern, which assigns the compute instance to a user other than the creator at creation time.
+
+### Implementation Steps
+
+1. **Add a Variable for the Assigned User**
+   ```hcl
+   variable "assigned_user_object_id" {
+     description = "Object ID of the user to assign the compute instance to (for POBO/SSO disablement)"
+     type        = string
+   }
+   ```
+
+2. **Update the Compute Instance Resource**
+   ```hcl
+   resource "azapi_resource" "compute_instance_uami" {
+     # ...existing code...
+     body = {
+       # ...existing code...
+       properties = {
+         computeType = "ComputeInstance"
+         properties = {
+           # ...existing code...
+           personalComputeInstanceSettings = {
+             assignedUser = {
+               objectId = var.assigned_user_object_id
+               tenantId = data.azurerm_client_config.current.tenant_id
+             }
+           }
+           # ...existing code...
+         }
+       }
+     }
+   }
+   ```
+
+3. **Pass the Assigned User Object ID**
+   ```hcl
+   module "aml_managed_umi" {
+     # ...existing code...
+     assigned_user_object_id = "<OBJECT_ID_OF_TARGET_USER>"
+   }
+   ```
+
+**Notes:**
+- SSO will be disabled by default for the assigned user. The assigned user can later enable SSO in the AzureML Studio UI if needed.
+- This approach is required because there is no direct property to disable SSO in the ARM/azapi schema.
+
+### Optional: Assigning a Public IP to the Jump Box VM NIC
+
+To allow direct access to your jump box VM, assign a static public IP to its network interface:
+
+1. **Create a Public IP Resource**
+   ```hcl
+   resource "azurerm_public_ip" "prod_vm" {
+     name                = "pip-${var.prefix}-vm-prod-${var.location_code}${var.naming_suffix}"
+     location            = var.location
+     resource_group_name = azurerm_resource_group.prod_vnet_rg.name
+     allocation_method   = "Static"
+     sku                 = "Standard"
+     tags                = merge(var.tags, { environment = "production", purpose = "prod", component = "vm" })
+   }
+   ```
+
+2. **Update the NIC to Use the Public IP**
+   ```hcl
+   resource "azurerm_network_interface" "prod_vm_nic" {
+     name                = "nic-${var.prefix}-vm-prod-${var.location_code}${var.naming_suffix}"
+     location            = var.location
+     resource_group_name = azurerm_resource_group.prod_vnet_rg.name
+
+     ip_configuration {
+       name                          = "ipconfig1"
+       subnet_id                     = azurerm_subnet.prod_vm.id
+       private_ip_address_allocation = "Dynamic"
+       public_ip_address_id          = azurerm_public_ip.prod_vm.id
+     }
+
+     tags = merge(var.tags, { environment = "production", purpose = "prod", component = "vm" })
+   }
+   ```
+
+**Note:** Ensure your NSG allows required inbound traffic (e.g., RDP/SSH) from trusted sources.
+
+---
+
 Last Updated: 2025‑08‑09
