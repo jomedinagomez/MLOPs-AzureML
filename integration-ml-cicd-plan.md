@@ -119,6 +119,10 @@
 
 ## Security Considerations
 - Use a dedicated Azure AD service principal for the GitHub Actions workflows so credentials are scoped and rotated independently of runtime managed identities.
+- Assign the service principal these minimum Azure RBAC roles:
+  - **Dev scope (resource group `rg-aml-ws-dev-cc-01` and registry `mlrdevcc01`)**: Contributor, Storage Blob Data Contributor, AcrPull (or ACR Pull on the registry), Key Vault Secrets User.
+  - **Prod scope (resource group `rg-aml-ws-prod-cc-01`)**: Contributor, Storage Blob Data Reader if pulling data artifacts, AcrPull, Key Vault Secrets User.
+  - Adjust or add data-plane roles (e.g., Reader on workspaces, access policies on linked data stores) only when workflows need them; avoid granting Owner.
 - Scope access narrowly to the Dev workspace and Dev registry for integration runs; the prod release pipeline uses a separate identity limited to the Prod workspace.
 - Keep sensitive configuration values in Key Vault linked to the Dev workspace when needed and mirror prod secrets in prod-controlled vaults only.
 
@@ -129,8 +133,8 @@
 - Prod release pipeline references those tags/run IDs when retrieving the model, creating an auditable chain from code change to production deployment.
 
 ## Prod Release Pipeline Overview
-1. Triggered manually or automatically after integration pipeline success (e.g., when merging `integration` to `main`).
-2. Pulls the vetted model version from the Dev registry based on tags or an approval list.
+1. Triggered automatically on pull requests targeting `main` (to gate the prod merge) and manually via `workflow_dispatch` when operators want to promote on demand.
+2. Pulls the vetted model version from the Dev registry based on tags or an approval list, defaulting to the highest semantic version when no explicit version is provided.
 3. Deploys the model into the Prod workspace using blue/green strategy (30% traffic to the new slot when a prior deployment exists) and runs smoke or health checks that mirror the Dev validation.
 4. Posts deployment status back to source control and records the production run ID for traceability.
 5. If all checks pass, finalizes the merge into `main` (or other prod branch) and updates release notes.
@@ -143,7 +147,7 @@
 
 - `.github/workflows/integration-ml-ci.yml` runs on PRs and pushes targeting `integration` with changes in `src/**` or the integration pipeline definition. Jobs cover unit tests, the `pipelines/integration-compare-pipeline.yaml` submission, and (for pushes) `pipelines/dev-deploy-validation.yaml` to stage, test, and promote the model inside the Dev workspace before the next merge.
 - The same workflow now exposes a `workflow_dispatch` trigger so operators can manually kick off the compare pipeline from feature branches; optional inputs control the artifact suffix and whether to execute the Dev deployment validation stage during the manual run.
-- `.github/workflows/prod-ml-release.yml` is a manual release workflow that submits `pipelines/prod-deploy-pipeline.yaml` to the Prod workspace, pulling the approved model from the Dev registry and orchestrating blue/green traffic updates once validation succeeds.
+- `.github/workflows/prod-ml-release.yml` gates merges into `main` by running on pull requests and remains available for manual `workflow_dispatch` runs; it submits `pipelines/prod-deploy-pipeline.yaml` to the Prod workspace, pulls the approved (or auto-resolved latest) model from the Dev registry, and orchestrates blue/green traffic updates once validation succeeds.
 - Repository secrets required: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (service principal credentials for the CI/CD identity).
 - Repository variables recommended: `AML_DEV_RESOURCE_GROUP`, `AML_DEV_WORKSPACE`, `AML_DEV_COMPUTE`, `AML_DEV_REGISTRY`, `AML_DEV_DEPLOYMENT_NAME`, `AML_DEV_TRAFFIC_PERCENT`, `AML_PROD_RESOURCE_GROUP`, `AML_PROD_WORKSPACE`.
 - New pipeline definitions `pipelines/integration-compare-pipeline.yaml`, `pipelines/dev-deploy-validation.yaml`, and `pipelines/prod-deploy-pipeline.yaml` stage validation, Dev deployment tests, and Prod blue/green rollouts respectively without retraining steps.

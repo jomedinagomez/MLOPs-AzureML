@@ -5,7 +5,8 @@ outputs.txt
 .local_inventory/
 
 # Local credentials / notes
-credentials/
+credentials/**
+!credentials/README.md
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
