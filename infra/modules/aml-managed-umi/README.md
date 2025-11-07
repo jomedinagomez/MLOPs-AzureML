@@ -2,6 +2,49 @@
 
 This Terraform module deploys a complete, production-ready Azure Machine Learning workspace with managed virtual network, supporting services, comprehensive security, and RBAC configuration. This module assumes the resource group already exists and is passed in by the root module. It creates the core ML platform for development and production workloads.
 
+## Table of Contents
+
+### Overview
+- [Module Overview](#module-overview)
+- [Architecture](#architecture)
+
+### Configuration
+- [Required Configuration](#required-configuration)
+  - [Critical Settings to Update](#critical-settings-to-update)
+- [RBAC Configuration](#-rbac-configuration)
+  - [Human User Roles](#human-user-roles)
+  - [Managed Identity Roles](#managed-identity-roles-applied-to-compute-cluster-identity)
+  - [Workspace User-Assigned Identity Roles](#workspace-user-assigned-identity-roles-applied-preprovisioning)
+- [Optional Customizations](#optional-customizations)
+
+### Security
+- [Security Features](#security-features)
+  - [Role Assignments](#role-assignments)
+
+### Deployment
+- [Prerequisites](#prerequisites)
+- [Deployment Steps](#deployment-steps)
+- [Post-Deployment Configuration](#post-deployment-configuration)
+
+### Resources & Outputs
+- [Resources Created](#resources-created)
+- [Outputs](#outputs)
+
+### Troubleshooting & Cleanup
+- [Troubleshooting](#troubleshooting)
+  - [Common Issues](#common-issues)
+  - [Common Deployment Issues](#common-deployment-issues)
+  - [Diagnostic Commands](#diagnostic-commands)
+- [Destroy behavior and verification](#destroy-behavior-and-verification)
+- [Clean Up](#clean-up)
+
+### Integration
+- [Dependencies](#dependencies)
+- [Module Integration](#module-integration)
+- [Module Structure](#module-structure)
+
+---
+
 ## Module Overview
 
 This module creates a secure, enterprise-ready Azure ML workspace featuring:
