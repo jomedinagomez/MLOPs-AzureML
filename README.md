@@ -2,11 +2,19 @@
 
 End‑to‑end Azure Machine Learning platform (dev + prod) with an opinionated MLOps workflow: reproducible pipelines, model governance & promotion, private‑only networking, and centralized AML/Core Private DNS.
 
-## Documentation Guide
-- **This README** - Quick start, MLOps workflow overview, and developer guidance
-- **[DeploymentStrategy.md](DeploymentStrategy.md)** - Comprehensive infrastructure architecture, design decisions, troubleshooting, and operational guidance (108KB)
-- **[integration-ml-cicd-plan.md](integration-ml-cicd-plan.md)** - Detailed CI/CD pipeline implementation and branching strategy
-- **[infra/README.md](infra/README.md)** - Terraform deployment guide with step-by-step instructions
+## Documentation Structure
+
+**This README consolidates all documentation**:
+- Quick start and MLOps workflow overview
+- CI/CD implementation details (from `integration-ml-cicd-plan.md`)
+- Infrastructure architecture summary (from `DeploymentStrategy.md`)
+
+**For detailed infrastructure deployment**, see:
+- **[infra/README.md](infra/README.md)** - Complete Terraform deployment guide with step-by-step instructions
+
+**Historical reference** (full content now in this README):
+- `DeploymentStrategy.md` - 108KB comprehensive architecture document (kept for reference)
+- `integration-ml-cicd-plan.md` - 18KB detailed CI/CD plan (kept for reference)
 
 ## Platform Snapshot
 | Aspect | Implementation | Notes |
@@ -253,6 +261,197 @@ Key recent changes: Key Vault RBAC fix (add Reader + Secrets User), outbound rul
 - Docker environments shared to a registry build an image that lives in the source registry’s ACR; promoting to another workspace reuses the same image URI. The image is not copied to the prod registry ACR.
 - Components are not shareable across workspaces/registries; store their YAML in version control and recreate in the target workspace.
 - Practical guidance and code examples are available in `notebooks/asset_sharing/sharing_assets_registries_workspaces.ipynb`.
+
+---
+
+# CI/CD Implementation Details
+
+## Integration Branch ML CI/CD Plan
+
+### Goals
+- Standardize end-to-end CI/CD for the Azure ML project with explicit integration branch validation
+- Ensure only model improvements (measured by the taxi fare comparison step) move forward to the dev registry and ultimately to production
+- Run unit tests and ML pipeline validation automatically for all changes that touch the `src/` folder
+- Maintain clear separation of environments: Dev workspace (experimentation), Dev external registry (model promotion), Prod workspace (serving)
+
+### Branching Strategy
+| Branch | Purpose | Notes |
+|--------|---------|-------|
+| `feature/*` | Individual feature work | Developers branch from latest `integration` |
+| `integration` | Shared validation branch | All merges land here after validation |
+| `main` | Production-ready | Only updated when prod deployment succeeds using validated artifacts |
+
+### GitHub Configuration Prerequisites
+**Secrets** (service principal authentication):
+- `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`
+
+**Repository Variables**:
+- Dev: `AML_DEV_RESOURCE_GROUP`, `AML_DEV_WORKSPACE`, `AML_DEV_COMPUTE`, `AML_DEV_REGISTRY`, `AML_DEV_DEPLOYMENT_NAME`, `AML_DEV_TRAFFIC_PERCENT`
+- Prod: `AML_PROD_RESOURCE_GROUP`, `AML_PROD_WORKSPACE`
+- Optional: `AML_MODEL_BASE` (defaults to `taxi-class`)
+
+### Security Considerations - Service Principal RBAC
+The GitHub Actions service principal requires these minimum Azure RBAC roles:
+
+**Dev scope** (`rg-aml-ws-dev-cc-01` and registry `mlrdevcc01`):
+- Contributor
+- Storage Blob Data Contributor  
+- AcrPull
+- Key Vault Secrets User
+
+**Prod scope** (`rg-aml-ws-prod-cc-01`):
+- Contributor
+- Storage Blob Data Reader
+- AcrPull
+- Key Vault Secrets User
+
+### Pipeline Stages
+
+**Integration Pipeline** (`.github/workflows/integration-ml-ci.yml`):
+1. **Unit Tests** - pytest suite validation
+2. **Azure Login** - Service principal authentication
+3. **ML Pipeline Execution** - Run `pipelines/integration-compare-pipeline.yaml` through compare stage
+4. **Model Evaluation** - Parse compare_job metrics, fail if no improvement
+5. **Model Promotion** - Register to Dev registry with tags (branch, commit SHA, run ID)
+6. **Dev Deployment** (on push) - Execute `pipelines/dev-deploy-validation.yaml` for endpoint testing
+
+**Prod Release Pipeline** (`.github/workflows/prod-ml-release.yml`):
+1. Triggered on PRs to `main` or manual `workflow_dispatch`
+2. Pull vetted model from Dev registry
+3. Deploy to Prod workspace using blue/green strategy (30% traffic to new slot)
+4. Run smoke/health checks
+5. On success: finalize merge, update release notes
+6. On failure: rollback traffic to previous deployment
+
+### Environment Usage
+| Environment | Purpose | Responsibilities |
+|-------------|---------|------------------|
+| Dev Workspace | Execution sandbox for CI runs | Unit tests, partial pipeline execution, short-lived endpoints |
+| Dev External Registry | Promotion gate for validated models | Receive only models that passed compare stage |
+| Prod Workspace | Production serving environment | Consume vetted models via prod release pipeline |
+
+### Artifact Flow and Traceability
+- Integration pipeline records job run IDs and compare metrics
+- Successful runs promote model to Dev registry with tags: `integration`, commit SHA, pipeline run ID
+- Prod release pipeline references these tags/run IDs for auditable chain from code to production
+
+### Operator Runbook Highlights
+
+**Integration Pipeline – First Run (No Prior Dev Deployment)**:
+- Monitor job submission for `pipelines/dev-deploy-validation.yaml`
+- Confirm endpoint creation and validation
+- Manual cleanup: Remove dev deployment after testing
+
+**Integration Pipeline – Existing Dev Deployment**:
+- Verify `deploy_job` preserved previous traffic (check `deployment_state.json`)
+- Review `traffic_job` logs for configured percentage allocation
+- Manual cleanup: Delete dev deployment slot when testing completes
+
+**Integration Pipeline Failure**:
+- Pull logs: `az ml job download --name <test_job_id> --all`
+- Confirm `rollback_job` restored prior traffic
+- Diagnose data/payload issues from artifacts
+
+**Manual Model Cleanup (Optional)**:
+```bash
+python src/cleanup_models/cleanup_models.py \
+  --model_name <name> \
+  --registry <registry> \
+  --retain_versions 1 \
+  --dry_run
+```
+
+For complete implementation details, see historical `integration-ml-cicd-plan.md` in git history.
+
+---
+
+# Infrastructure & Deployment Strategy
+
+## Architecture Overview
+
+This platform implements a **flat dual-VNet architecture** with Azure Bastion jumpbox access and complete environment isolation. For comprehensive deployment strategy, troubleshooting, and architectural decisions, see **[infra/README.md](infra/README.md)** and historical `DeploymentStrategy.md` in git history.
+
+### Key Architecture Features
+- **Flat Dual VNets**: Independent dev and prod VNets with required VNet peering for admin VM access
+- **Bastion-Only Access**: Browser-based RDP to Windows DSVM jumpbox (no VPN/SSH)
+- **Deterministic Naming**: Names derive from `prefix`, `purpose`, `location_code`, `naming_suffix` (no random postfixes)
+- **Centralized Private DNS**: Shared zones for AML (api, notebooks, instances) and core services (blob, file, queue, table, vaultcore, acr)
+- **Private-Only Posture**: Public network access disabled for all PaaS resources
+- **Per-Environment Log Analytics**: Dedicated dev & prod workspaces for observability isolation
+
+### Service Principal Strategy
+Single service principal created by root `main.tf` manages all resource groups:
+- **Scope**: 7 resource groups (3 dev + 3 prod + 1 shared DNS)
+- **Permissions**: Contributor, User Access Administrator, Network Contributor per RG
+- **CI/CD Ready**: SP credentials available immediately for pipeline configuration
+
+### Network Security & Outbound Rules
+- Workspaces use managed VNet with `AllowOnlyApprovedOutbound` isolation mode
+- User-defined outbound rules to registries require `destination.subresourceTarget = "amlregistry"`
+- Workspace UAMI needs Azure AI Enterprise Network Connection Approver role at registry scope
+- Allow ~90–150s for RBAC propagation before creating outbound rules
+
+### Key Vault Configuration
+Dual roles required for Workspace UAMI:
+- **Key Vault Reader** (management plane) - for resource metadata during provisioning
+- **Key Vault Secrets User** (data plane) - for secret access operations
+
+### Troubleshooting Quick Reference
+| Symptom | Root Cause | Resolution |
+|---------|------------|-----------|
+| 403 `vaults/read` during workspace creation | Missing management-plane role | Add Key Vault Reader to workspace UAMI |
+| 409 `FailedIdentityOperation` after delete | Rapid re-create before cleanup | Wait 150s before re-provisioning |
+| 400 ValidationError outbound rule | Missing `subresourceTarget` | Add `subresourceTarget = "amlregistry"` |
+
+### Centralized Private DNS Strategy
+
+**Shared DNS Zones** (consolidated in single DNS RG):
+- AML: `privatelink.api.azureml.ms`, `privatelink.notebooks.azure.net`, `instances.azureml.ms`
+- Core: `privatelink.blob.core.windows.net`, `privatelink.file.core.windows.net`, `privatelink.queue.core.windows.net`, `privatelink.table.core.windows.net`, `privatelink.vaultcore.azure.net`, `privatelink.azurecr.io`
+
+**Benefits**:
+- Eliminate duplicate zone resources (simpler state, faster plans)
+- Single update point for DNS policy (reduced drift risk)
+- Easier multi-subscription future expansion
+- Faster environment teardown (no contention for global zone names)
+
+**DNS Record Coexistence**: Workspace and registry endpoints include unique environment-specific prefixes (e.g., `mlwdevcc02` vs `mlwprodcc02`), so dev and prod records coexist in the same zone with no collision.
+
+### Verification Commands (from Bastion jumpbox)
+```powershell
+# Registry managed RG pre-authorization
+az rest --method get `
+  --uri "https://management.azure.com/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$DEV_RG_REG/providers/Microsoft.MachineLearningServices/registries/$DEV_REG_NAME?api-version=2025-01-01-preview" `
+  --query "properties.managedResourceGroupSettings.assignedIdentities"
+
+# Outbound rules
+az rest --method get `
+  --uri "https://management.azure.com/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$PROD_RG_WS/providers/Microsoft.MachineLearningServices/workspaces/$PROD_WS_NAME/outboundRules?api-version=2024-10-01-preview"
+
+# Private-only posture checks
+az storage account show -g $DEV_RG_WS --name $STORAGE_NAME `
+  --query "{publicNetworkAccess:publicNetworkAccess, defaultAction:networkRuleSet.defaultAction}"
+```
+
+### Cost Considerations
+- **Dev**: Enable compute auto-shutdown, apply storage lifecycle policies, right-size Bastion/jumpbox
+- **Prod**: Enable Key Vault purge protection, consider reservations for steady compute, monitor private endpoint costs
+
+### Disaster Recovery
+- **State**: Use remote Terraform state with backups, keep IaC under version control
+- **Backups**: Back up model/artifact stores per policy, enforce retention
+- **Recovery**: Rebuild infra via Terraform, restore data and secrets, maintain tested runbooks
+
+### Decision Log Highlights
+- Two registries (dev, prod) for promotion demonstration; single registry viable for most production deployments
+- No VPN gateway; all remote access via Azure Bastion to maintain zero-trust posture
+- VNet peering required for prod jumpbox to reach dev resources for admin tasks
+- Separate Log Analytics per environment for compliance and data segregation
+- Key Vault purge protection disabled by default (sandbox behavior); enable for production
+
+For detailed architecture, implementation plans, validation checklists, and complete troubleshooting guide, see **[DeploymentStrategy.md](DeploymentStrategy.md)** in this repository or the comprehensive guide at **[infra/README.md](infra/README.md)**.
+
+---
 
 ## License
 MIT
