@@ -6,7 +6,7 @@ from io import StringIO
 # Try to import OneLake dependencies (optional)
 try:
     from azure.storage.filedatalake import DataLakeServiceClient
-    from azure.identity import DefaultAzureCredential
+    from azure.identity import ManagedIdentityCredential
     ONELAKE_AVAILABLE = True
 except ImportError:
     ONELAKE_AVAILABLE = False
@@ -92,10 +92,14 @@ else:
         workspace_name = "TechNextWS"
         lakehouse_name = "TechNextLH.Lakehouse"
         
+        # Use ManagedIdentityCredential directly for Azure ML compute
+        # This works better than DefaultAzureCredential in compute clusters
+        credential = ManagedIdentityCredential()
+        
         # Create DataLakeServiceClient
         service_client = DataLakeServiceClient(
             account_url=onelake_endpoint,
-            credential=DefaultAzureCredential()
+            credential=credential
         )
         
         # Get file system and directory client
