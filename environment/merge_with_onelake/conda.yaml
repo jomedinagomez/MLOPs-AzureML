@@ -1,0 +1,11 @@
+name: merge_with_onelake
+channels:
+  - conda-forge
+dependencies:
+  - python=3.8
+  - pip=21.2.4
+  - pip:
+      - pandas>=1.3.0
+      - scikit-learn>=1.0.0
+      - azure-storage-file-datalake>=12.14.0
+      - azure-identity>=1.14.0

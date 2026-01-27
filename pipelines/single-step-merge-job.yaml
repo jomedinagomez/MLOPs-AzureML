@@ -14,5 +14,5 @@ inputs:
     path: ../data/taxi-data/raw/yellowTaxiData.csv
 outputs:
   merged_data:
-environment: azureml:AzureML-sklearn-1.0-ubuntu20.04-py38-cpu@latest
+environment: azureml:merge_with_onelake@latest
 compute: azureml:aml-cluster-prod-cc01
