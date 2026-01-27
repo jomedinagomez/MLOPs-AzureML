@@ -1,0 +1,85 @@
+
+$schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
+type: pipeline
+experiment_name: OneLakeDataOperation-dev
+description: DataOperation
+
+# <inputs_and_outputs>
+inputs:
+  # environment identifier for this pipeline config
+  environment: 'dev'
+  # model name
+  model_base: 'taxi-class'
+  # artifact identifier for naming: 'm' (MLflow now), 'c' (custom later)
+  artifact_id: 'm'
+  deployment_name: 'green'
+  registry: 'mlrdevcc01'  # <-- set to your devuction registry
+  # compute cluster for automl job
+  automl_compute: 'aml-cluster-dev-cc01'  # <-- set to your devuction compute
+  # conda file for the environment to be created
+  conda_file: custom_dev.yaml
+outputs: 
+  pipeline_job_trained_model:
+    type: uri_folder
+    path: azureml://datastores/onelake_example_id/paths/pipeline_outputs/trained_model
+    mode: rw_mount
+  pipeline_job_predictions:
+    type: uri_folder
+    path: azureml://datastores/onelake_example_id/paths/pipeline_outputs/predictions
+    mode: rw_mount
+  pipeline_job_score_report:
+    type: uri_folder
+    path: azureml://datastores/onelake_example_id/paths/pipeline_outputs/score_report
+    mode: rw_mount
+  pipeline_job_comparison:
+    type: uri_folder
+    path: azureml://datastores/onelake_example_id/paths/pipeline_outputs/comparison
+    mode: rw_mount
+
+# </inputs_and_outputs>
+
+settings:
+  # All jobs use this compute unless overridden at the job level. To change, edit this value.
+  default_compute: azureml:aml-cluster-dev-cc01  # <-- set to your devuction compute
+  continue_on_step_failure: false
+
+jobs:
+  merge_job:
+    type: command
+    code: ../../src/merge_data
+    command: >-
+      python merge_data.py
+      --raw_data_green ${{inputs.raw_data_green}}
+      --raw_data_yellow ${{inputs.raw_data_yellow}}
+      --merged_data ${{outputs.merged_data}}
+    inputs:
+      raw_data_green:
+        type: uri_file 
+        path: ../../data/taxi-data/raw/greenTaxiData.csv
+      raw_data_yellow:
+        type: uri_file 
+        path: ../../data/taxi-data/raw/yellowTaxiData.csv
+    outputs:
+      merged_data:
+        type: uri_folder
+        path: azureml://datastores/onelake_example_id/paths/pipeline_outputs/merged_data
+        mode: rw_mount
+    environment: azureml:AzureML-sklearn-1.0-ubuntu20.04-py38-cpu@latest
+
+  transform_job:
+    type: command
+    component: ../../src/components/transform.yaml
+    inputs:
+      test_split_ratio: 0.3
+      clean_data: ${{parent.jobs.merge_job.outputs.merged_data}}
+    outputs:
+      train_data:
+        type: uri_folder
+        path: azureml://datastores/onelake_example_id/paths/pipeline_outputs/train_data
+        mode: rw_mount
+      test_data:
+        type: uri_folder
+        path: azureml://datastores/onelake_example_id/paths/pipeline_outputs/test_data
+        mode: rw_mount 
+
+ 
