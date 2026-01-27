@@ -92,9 +92,18 @@ else:
         workspace_name = "TechNextWS"
         lakehouse_name = "TechNextLH.Lakehouse"
         
-        # Use ManagedIdentityCredential directly for Azure ML compute
-        # This works better than DefaultAzureCredential in compute clusters
-        credential = ManagedIdentityCredential()
+        # Try to get user-assigned managed identity client ID from environment
+        # Azure ML sets MSI_CLIENT_ID for user-assigned identities
+        import os
+        client_id = os.environ.get('DEFAULT_IDENTITY_CLIENT_ID') or os.environ.get('MSI_CLIENT_ID')
+        
+        # Use ManagedIdentityCredential with explicit client_id if available
+        if client_id:
+            print(f"Using user-assigned managed identity: {client_id[:8]}...")
+            credential = ManagedIdentityCredential(client_id=client_id)
+        else:
+            print("Using system-assigned managed identity")
+            credential = ManagedIdentityCredential()
         
         # Create DataLakeServiceClient
         service_client = DataLakeServiceClient(
