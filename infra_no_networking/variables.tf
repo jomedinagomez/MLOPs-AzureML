@@ -221,3 +221,30 @@ variable "vm_admin_password" {
   sensitive   = true
   default     = null
 }
+
+########################################
+# DATA COLLECTION STORAGE SETTINGS
+########################################
+variable "datacollection_storage_public_access" {
+  description = "Enable public network access for data collection storage account"
+  type        = bool
+  default     = true # Set to false for private-only access
+}
+
+variable "datacollection_storage_default_action" {
+  description = "Default network action for data collection storage account"
+  type        = string
+  default     = "Allow" # Change to "Deny" for stricter security
+}
+
+variable "datacollection_storage_allowed_ips" {
+  description = "List of IP addresses allowed to access data collection storage"
+  type        = list(string)
+  default     = []
+}
+
+variable "datacollection_storage_versioning_enabled" {
+  description = "Enable blob versioning for data collection storage (audit trail)"
+  type        = bool
+  default     = false
+}
