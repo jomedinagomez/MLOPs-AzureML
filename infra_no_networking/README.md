@@ -5,6 +5,7 @@
 ### Getting Started
 - [Overview](#overview)
   - [Access via Azure Bastion + Windows DSVM Jumpbox](#access-via-azure-bastion--windows-dsvm-jumpbox)
+  - [**NEW: Data Collection Storage for OneLake Integration**](#data-collection-storage-for-onelake-integration)
 - [Deployment Architecture](#deployment-architecture)
   - [Service Principal Strategy (Updated)](#service-principal-strategy-updated)
 - [Deployment Order](#deployment-order)
@@ -112,6 +113,58 @@ Key characteristics:
 Centralized Private DNS:
 - AML: privatelink.api.azureml.ms, privatelink.notebooks.azure.net, instances.azureml.ms
 - Core services: privatelink.blob.core.windows.net, privatelink.file.core.windows.net, privatelink.queue.core.windows.net, privatelink.table.core.windows.net, privatelink.vaultcore.azure.net, privatelink.azurecr.io
+
+### Data Collection Storage for OneLake Integration
+
+**NEW**: The infrastructure includes a dedicated ADLS Gen2 storage account for collecting model inference data from Azure ML online endpoints, designed for seamless integration with Microsoft Fabric via OneLake Shortcuts.
+
+#### Architecture
+```
+Azure ML Real-time Endpoint
+  └── Model Data Collector
+        └── ADLS Gen2 Storage (datacollection-storage.tf)
+              └── OneLake Shortcut
+                    └── Fabric Lakehouse
+```
+
+#### Key Features
+- **Dedicated ADLS Gen2 Storage**: Separate from workspace storage (`st{prefix}dc{location}{suffix}`)
+- **Hierarchical Namespace**: Enabled for ADLS Gen2 capabilities
+- **Automatic Datastore Registration**: Registered in both dev and prod workspaces as `datacollection_adls`
+- **RBAC Configuration**: Workspace managed identities and human users have Storage Blob Data Contributor access for reading and writing collected data
+- **OneLake Ready**: Supports OneLake Shortcuts for zero-copy data access from Fabric
+- **Lifecycle Management**: 30-day retention policies for cost optimization
+- **Public Access**: Configurable via variables (default: public with IP allowlist)
+
+#### Deployed Resources
+- **Resource Group**: `rg-{prefix}-datacollection-{location}-{suffix}` (shared across environments)
+- **Storage Account**: `st{prefix}dc{location}{suffix}` (ADLS Gen2)
+- **Container**: `datacollection` (with `inputs/` and `outputs/` subdirectories created by DataCollector)
+- **Datastores**: Registered in both dev and prod workspaces
+- **Monitoring**: Log Analytics integration for transaction/capacity metrics
+
+#### Configuration File
+All data collection infrastructure is defined in:
+- **`datacollection-storage.tf`** - Main infrastructure definition
+- **Variables**: See [Data Collection Variables](#data-collection-variables)
+- **Outputs**: `datacollection_storage_account_name`, `datacollection_datastore_name`, `datacollection_abfss_path`
+
+#### Usage
+After deployment, configure your online endpoint deployments to use the datastore:
+```python
+from azure.ai.ml.entities import DataCollector, DeploymentCollection
+
+data_collector = DataCollector(
+    collections={
+        "model_inputs": DeploymentCollection(enabled=True),
+        "model_outputs": DeploymentCollection(enabled=True),
+    },
+    sampling_rate=1.0,
+    destination="azureml://datastores/datacollection_adls/paths/modelDataCollector/"
+)
+```
+
+See [notebooks/deployments/online/custom_scoring_script/DATACOLLECTION_ONELAKE_GUIDE.md](../notebooks/deployments/online/custom_scoring_script/DATACOLLECTION_ONELAKE_GUIDE.md) for complete implementation details.
 
 ## Deployment Architecture
 
@@ -518,6 +571,17 @@ Root Orchestration (main.tf)
 | `vnet_address_space` | `"10.1.0.0/16"` | VNet CIDR block |
 | `subnet_address_prefix` | `"10.1.1.0/24"` | Subnet CIDR block |
 
+#### Data Collection Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `datacollection_storage_public_access` | `true` | Enable public network access for data collection storage |
+| `datacollection_storage_default_action` | `"Allow"` | Default network action (Allow or Deny with IP allowlist) |
+| `datacollection_storage_allowed_ips` | `[]` | List of IP addresses allowed to access storage |
+| `datacollection_storage_versioning_enabled` | `false` | Enable blob versioning for audit trail |
+
+**Note**: For production, consider setting `datacollection_storage_default_action = "Deny"` with specific IPs in `datacollection_storage_allowed_ips`.
+
 ## Outputs
 
 The infrastructure provides comprehensive outputs for integration:
@@ -539,6 +603,14 @@ The infrastructure provides comprehensive outputs for integration:
 - `registry_id` & `registry_name`: Registry details
 - `registry_storage_account_name`: Registry storage
 - `registry_keyvault_name`: Registry Key Vault
+
+### Data Collection Storage Outputs
+- `datacollection_storage_account_name`: ADLS Gen2 storage account name
+- `datacollection_storage_account_id`: Storage account resource ID
+- `datacollection_storage_primary_blob_endpoint`: Blob endpoint URL
+- `datacollection_storage_primary_dfs_endpoint`: DFS (ADLS Gen2) endpoint URL
+- `datacollection_abfss_path`: ABFSS path for OneLake shortcuts
+- `datacollection_datastore_name`: Registered datastore name (`datacollection_adls`)
 
 ### Summary Output
 - `deployment_summary`: High-level deployment overview
@@ -1220,6 +1292,74 @@ terraform apply
 - **Tagging**: Consistent resource tagging
 - **Documentation**: Keep README updated
 - **Testing**: Validate before applying
+
+### Migrating Data Collection Storage to Main Infra Folder
+
+The data collection storage infrastructure (`datacollection-storage.tf`) can be migrated to the main `infra/` folder with private networking support.
+
+#### Files to Migrate
+- **`datacollection-storage.tf`** → Copy to `infra/datacollection-storage.tf`
+- Variables already exist in both `variables.tf` files
+
+#### Changes Required for Private Networking
+
+When migrating to `infra/` with `enable_private_networking = true`:
+
+1. **Add DFS Private DNS Zone** (for ADLS Gen2):
+```hcl
+resource "azurerm_private_dns_zone" "shared_dfs" {
+  count               = local.enable_private_networking ? 1 : 0
+  name                = "privatelink.dfs.core.windows.net"
+  resource_group_name = azurerm_resource_group.shared_dns_rg[0].name
+  tags                = merge(var.tags, { environment = "shared", scope = "dfs" })
+}
+```
+
+2. **Add VNet Links** (dev and prod):
+```hcl
+resource "azurerm_private_dns_zone_virtual_network_link" "shared_dev_dfs" { /* ... */ }
+resource "azurerm_private_dns_zone_virtual_network_link" "shared_prod_dfs" { /* ... */ }
+```
+
+3. **Uncomment Private Endpoints** in `datacollection-storage.tf`:
+   - Uncomment `azurerm_private_endpoint.datacollection_blob`
+   - Uncomment `azurerm_private_endpoint.datacollection_dfs`
+   - Update DNS zone references to use `shared_dfs[0].id`
+
+4. **Update Variables** in `terraform.tfvars`:
+```hcl
+datacollection_storage_public_access = false
+datacollection_storage_default_action = "Deny"
+```
+
+#### Migration Checklist
+- [ ] Copy `datacollection-storage.tf` to `infra/`
+- [ ] Add DFS private DNS zone (if private networking)
+- [ ] Add VNet links for DFS (if private networking)
+- [ ] Uncomment private endpoints (if private networking)
+- [ ] Update `terraform.tfvars` for private access
+- [ ] Test in dev subscription
+- [ ] Verify datastore registration in workspaces
+- [ ] Update notebook `.env` with storage account name
+
+#### Post-Migration Testing
+```bash
+# Verify outputs
+terraform output datacollection_storage_account_name
+terraform output datacollection_datastore_name
+
+# Verify datastore in workspace
+az ml datastore show -n datacollection_adls -g <workspace-rg> -w <workspace-name>
+
+# Test from notebook
+# Run verification cell in CPU-online-endpoints-custom-container.ipynb
+```
+
+#### Reference Documentation
+See [notebooks/deployments/online/custom_scoring_script/DATACOLLECTION_ONELAKE_GUIDE.md](../notebooks/deployments/online/custom_scoring_script/DATACOLLECTION_ONELAKE_GUIDE.md) for:
+- Complete implementation guide
+- OneLake shortcut configuration
+- Fabric integration examples
 
 ## Private Access
 
