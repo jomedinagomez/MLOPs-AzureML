@@ -9,6 +9,8 @@ crash.*.log
 *.tfplan
 plan.out
 *.out
+plan_output.txt
+apply_output.txt
 
 # IDE/editor
 .vscode/
