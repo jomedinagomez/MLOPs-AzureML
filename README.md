@@ -77,6 +77,9 @@ End‑to‑end Azure Machine Learning platform (dev + prod) with an opinionated 
 **For detailed infrastructure deployment**, see:
 - **[infra/README.md](infra/README.md)** - Complete Terraform deployment guide with step-by-step instructions
 
+**For customer workshop execution on an Azure ML compute instance**, see:
+- **[AZUREML_COMPUTE_INSTANCE_GUIDE.md](AZUREML_COMPUTE_INSTANCE_GUIDE.md)** - Compute-instance setup, dependencies, `.env` configuration, pipeline commands, and the H2O notebook run order
+
 ## Platform Snapshot
 | Aspect | Implementation | Notes |
 |--------|----------------|-------|
