@@ -542,6 +542,23 @@ Never commit `.env`, downloaded job outputs, generated model bundles, or tempora
 
 ## 9. Troubleshooting
 
+### `uv` reports `invalid peer certificate: UnknownIssuer`
+
+This usually means a corporate proxy or TLS-inspection service presents a certificate signed by an internal CA. The operating system trusts that CA, but `uv` uses its bundled Mozilla roots by default. Use the operating system certificate store without disabling verification:
+
+```bash
+export UV_SYSTEM_CERTS=true
+uv pip install \
+  --python "$(which python)" \
+  --requirement notebooks/requirements.txt
+```
+
+If `uv pip install --help` shows `--native-tls` instead of `--system-certs`, use `export UV_NATIVE_TLS=true`; it is the name used by older `uv` releases.
+
+If the environment is not activated, replace `$(which python)` with its actual interpreter path. If system certificates still fail, ask the administrator for the approved PEM CA bundle and use `SSL_CERT_FILE=/path/to/company-ca-bundle.pem` or `uv pip install --cert /path/to/company-ca-bundle.pem ...`.
+
+Do not use `--allow-insecure-host` for PyPI; it disables certificate verification.
+
 ### `az ml job create` reports `AuthorizationFailure`
 
 The CLI uploads local code and CSV files to workspace storage before scheduling the job. Check:

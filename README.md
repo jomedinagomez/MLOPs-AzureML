@@ -80,6 +80,9 @@ End‑to‑end Azure Machine Learning platform (dev + prod) with an opinionated 
 **For customer workshop execution on an Azure ML compute instance**, see:
 - **[AZUREML_COMPUTE_INSTANCE_GUIDE.md](AZUREML_COMPUTE_INSTANCE_GUIDE.md)** - Compute-instance setup, dependencies, `.env` configuration, pipeline commands, and the H2O notebook run order
 
+**For local Windows execution with `uv`**, see:
+- **[LOCAL_UV_WORKSHOP_GUIDE.md](LOCAL_UV_WORKSHOP_GUIDE.md)** - Local Python setup with `uv`, Azure connectivity checks, pipeline commands, notebook execution, and output sanitization
+
 ## Platform Snapshot
 | Aspect | Implementation | Notes |
 |--------|----------------|-------|
