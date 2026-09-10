@@ -245,8 +245,10 @@ Recommendation: Promote curated environments into registry for reproducibility (
 
 ---
 ## Notebooks (`notebooks/`)
-The H2O workshop uses Python 3.12, JDK 17, H2O `3.46.0.12`, and the repository
-`.venv`. Create the environment from the repository root:
+When running on an Azure ML compute instance, use the preinstalled Azure ML Conda environment if it passes the dependency checks in [AZUREML_COMPUTE_INSTANCE_GUIDE.md](AZUREML_COMPUTE_INSTANCE_GUIDE.md). The `.venv` instructions below are only the isolated fallback and local-workstation path.
+
+For the isolated fallback, use Python 3.12, JDK 17, H2O `3.46.0.12`, and a
+repository `.venv`. Create it from the repository root:
 
 ```powershell
 # Windows PowerShell

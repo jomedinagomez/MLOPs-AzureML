@@ -4,6 +4,8 @@ This guide explains how to run the Azure ML pipelines and H2O notebooks from an 
 
 The guide uses placeholders and the repository-root `.env` file. Do not place passwords, client secrets, access tokens, storage keys, or connection strings in `.env` or in notebook cells.
 
+The primary workflow uses an existing Python/Conda environment installed on the compute instance. If that environment already provides the Azure ML SDK and CLI support, do not reinstall them. Verify the environment first and install only missing H2O workshop dependencies.
+
 ## What You Will Run
 
 The customer workshop has two independent entry points:
@@ -63,20 +65,28 @@ The workshop expects:
 
 - Git.
 - Azure CLI with the Azure ML v2 `ml` extension.
-- Python 3.12.
+- A Python environment installed on the compute instance.
 - JDK 17 for H2O.
 
 ```bash
 git --version
 az version
-python3.12 --version
+conda env list
 java -version
 ```
 
-Install or update the Azure ML CLI extension:
+The Azure CLI `ml` extension is installed at the Azure CLI level; it is separate from Python packages in a Conda environment. Check it before installing anything:
 
 ```bash
-az extension add --name ml --upgrade --yes
+az extension show --name ml \
+  --query '{name:name,version:version}' \
+  --output table
+```
+
+Only if that command reports that the extension is missing, install it:
+
+```bash
+az extension add --name ml --yes
 ```
 
 If JDK 17 is unavailable and the compute image permits package installation:
@@ -87,20 +97,69 @@ sudo apt-get install -y openjdk-17-jre-headless
 java -version
 ```
 
-If the compute image does not provide Python 3.12 or permit JDK installation, use a compute image that includes these dependencies or ask the workspace administrator to install them.
+If the compute image does not provide a compatible Python environment or permit JDK installation, use a compute image that includes these dependencies or ask the workspace administrator to install them.
 
-## 3. Create the Notebook Environment
+## 3. Activate the Existing Azure ML Environment
 
-Create a repository-local virtual environment. Do not install the workshop packages into the compute instance's base Python environment.
+In this guide, an existing environment means a Conda/Python environment installed on the compute instance and visible in `conda env list` or the notebook kernel picker. An Azure ML environment asset referenced by a job as `azureml:<ENVIRONMENT_NAME>:<VERSION>` runs submitted jobs but cannot be activated in the compute-instance terminal unless it is also installed there.
+
+The activated compute-instance environment controls terminal commands and interactive notebook execution. Submitted pipeline steps run on the target compute cluster with the environments declared by their YAML job or component definitions.
+
+Initialize Conda in the terminal if needed, then activate the existing environment that contains the Azure ML SDK dependencies:
 
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip setuptools wheel
-python -m pip install -r notebooks/requirements.txt
+source "$(conda info --base)/etc/profile.d/conda.sh"
+conda env list
+conda activate <COMPUTE_INSTANCE_ENV_NAME>
+
+which python
+python --version
 ```
 
-The requirements file pins the important runtime packages, including:
+Verify the required Python packages from that activated environment:
+
+```bash
+python - <<'PY'
+from importlib.metadata import PackageNotFoundError, version
+
+packages = (
+  "h2o",
+  "azureml-inference-server-http",
+  "azure-ai-ml",
+  "azure-identity",
+  "azureml-mlflow",
+  "mlflow",
+  "python-dotenv",
+  "pandas",
+  "numpy",
+  "ipykernel",
+)
+
+missing = []
+for package in packages:
+  try:
+    print(f"{package}: {version(package)}")
+  except PackageNotFoundError:
+    missing.append(package)
+
+if missing:
+  raise SystemExit("Missing packages: " + ", ".join(missing))
+
+required_versions = {
+  "h2o": "3.46.0.12",
+  "azureml-inference-server-http": "1.4.1",
+}
+incorrect = [
+  f"{package}=={version(package)} (expected {expected})"
+  for package, expected in required_versions.items()
+  if version(package) != expected
+]
+if incorrect:
+  raise SystemExit("Version mismatch: " + "; ".join(incorrect))
+PY
+```
+
+If this check succeeds, no Python installation is needed. The requirements file documents the complete tested dependency set, including:
 
 - `h2o==3.46.0.12`
 - `azureml-inference-server-http==1.4.1`
@@ -111,23 +170,37 @@ The requirements file pins the important runtime packages, including:
 - `python-dotenv==1.1.1`
 - NumPy, pandas, scikit-learn, PyArrow, JupyterLab, and IPython
 
-Register the virtual environment as a notebook kernel:
+If only the H2O workshop packages are missing, install those packages into the active environment:
 
 ```bash
-python -m ipykernel install --user \
-  --name mlops-azureml-workshop \
-  --display-name "Python (.venv - Azure ML workshop)"
+python -m pip install \
+  h2o==3.46.0.12 \
+  azureml-inference-server-http==1.4.1 \
+  python-dotenv==1.1.1
 ```
 
-Verify key imports and versions:
+If the existing environment is missing most dependencies, either install the complete tested set or use a separate environment rather than modifying a shared environment:
 
 ```bash
-python - <<'PY'
-from importlib.metadata import version
+python -m pip install -r notebooks/requirements.txt
+```
 
-for package in ("h2o", "pandas", "azure-ai-ml", "azure-identity"):
-  print(f"{package}: {version(package)}")
-PY
+The existing environment may already appear in the Azure ML notebook kernel picker. If it does not, register the active environment once:
+
+```bash
+ENV_NAME="$(basename "$CONDA_PREFIX")"
+python -m ipykernel install --user \
+  --name "$ENV_NAME" \
+  --display-name "Python ($ENV_NAME)"
+```
+
+Optional isolation fallback: create a repository-local virtual environment only when no suitable compute-instance environment exists:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -r notebooks/requirements.txt
 ```
 
 ## 4. Configure `.env`
@@ -337,10 +410,10 @@ az ml job list \
 
 ## 7. Run the H2O Notebooks
 
-In Azure ML Studio, browse to `notebooks/h2o_mojo/`, open each notebook, attach the compute instance, and select the kernel:
+In Azure ML Studio, browse to `notebooks/h2o_mojo/`, open each notebook, attach the compute instance, and select the same existing environment activated in the terminal. If you registered it in Section 3, the kernel is displayed as:
 
 ```text
-Python (.venv - Azure ML workshop)
+Python (<COMPUTE_INSTANCE_ENV_NAME>)
 ```
 
 Run the notebooks in order. Do not skip ahead unless the required model and data assets already exist.
@@ -449,7 +522,7 @@ Azure SDK logs, H2O startup logs, and exception messages can contain usernames, 
 Clear all outputs before sharing the notebooks:
 
 ```bash
-source .venv/bin/activate
+# Run from the same activated compute-instance environment used for the notebooks.
 python -m jupyter nbconvert --clear-output --inplace \
   notebooks/h2o_mojo/01_create_reference_mojo.ipynb \
   notebooks/h2o_mojo/02_onboard_customer_mojo.ipynb \
@@ -498,7 +571,6 @@ For the single-step command job, use:
 Binary H2O models are version-specific. Confirm:
 
 ```bash
-source .venv/bin/activate
 python -c 'import h2o; print(h2o.__version__)'
 ```
 
@@ -509,10 +581,12 @@ The expected version is `3.46.0.12`.
 Register it again:
 
 ```bash
-source .venv/bin/activate
+source "$(conda info --base)/etc/profile.d/conda.sh"
+conda activate <COMPUTE_INSTANCE_ENV_NAME>
+ENV_NAME="$(basename "$CONDA_PREFIX")"
 python -m ipykernel install --user \
-  --name mlops-azureml-workshop \
-  --display-name "Python (.venv - Azure ML workshop)"
+  --name "$ENV_NAME" \
+  --display-name "Python ($ENV_NAME)"
 ```
 
 Then refresh the Azure ML Studio browser page and reselect the compute instance and kernel.
@@ -523,11 +597,11 @@ Notebook 03 requires ports `5001` and `54321`. Stop the old process or restart t
 
 ### Package imports fail after installation
 
-Confirm that the notebook is attached to the registered `.venv` kernel rather than a preinstalled Azure ML kernel. In a notebook cell:
+Confirm that the notebook is attached to the same activated compute-instance environment. First run `which python` in the terminal, then run this in a notebook cell:
 
 ```python
 import sys
 print(sys.executable)
 ```
 
-The path should point to this repository's `.venv`.
+The notebook path should identify the same Conda environment shown by the terminal. If it does not, reselect the kernel in Azure ML Studio.
