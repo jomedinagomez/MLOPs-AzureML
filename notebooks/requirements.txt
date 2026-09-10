@@ -8,6 +8,7 @@ scipy==1.16.0
 # Jupyter and notebook support
 jupyterlab
 ipykernel==6.30.0
+ipython==8.37.0
 matplotlib-inline==0.1.7
 
 # Azure Machine Learning packages
@@ -17,6 +18,10 @@ azureml-mlflow==1.60.0.post1
 
 # MLflow
 mlflow==2.22.1
+
+# H2O binary-model save/load workflow
+h2o==3.46.0.12
+azureml-inference-server-http==1.4.1
 
 # Azure ML Data Collection and Monitoring
 azureml-ai-monitoring~=0.1.0b1

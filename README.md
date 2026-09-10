@@ -150,17 +150,81 @@ Design principles: Single responsibility, composable, environment‑agnostic (en
 
 ---
 ## Pipelines (`pipelines/*.yaml`)
-| File | Flow | Notes |
-|------|------|-------|
-| `taxi-fare-train-pipeline.yaml` | transform → train → compare → conditional register | Core training & governance pipeline |
-| `single-step-merge-job.yaml` | Simple component validation | Useful for quick registry tests |
+| File | Purpose | Customer notes |
+|------|---------|----------------|
+| `single-step-merge-job.yaml` | Merge the checked-in green and yellow taxi data | Small command-job smoke test |
+| `integration-compare-pipeline.yaml` | Merge, transform, train, predict, and compare | External registry registration is disabled in the workshop version |
+| `dev-e2e-pipeline.yaml` | Full development workflow | Review and override all dev-specific inputs before submission |
+| `prod-e2e-pipeline.yaml` | Full production workflow | Requires production assets and permissions |
+| `dev-deploy-validation.yaml` | Validate a development deployment | Requires an existing model and endpoint configuration |
+| `prod-deploy-pipeline.yaml` | Deploy and validate a production model | Run only after production approval |
 
-Submit (dev workspace example):
+Install Azure CLI v2 for Machine Learning and authenticate:
+
+```bash
+az extension add --name ml --upgrade
+az login
+```
+
+Run the merge smoke test from the repository root. The compute override keeps the
+YAML reusable across customer workspaces:
+
 ```bash
 az ml job create \
-	--resource-group <rg-dev-ws> \
-	--workspace-name <dev-workspace> \
-	--file pipelines/taxi-fare-train-pipeline.yaml
+  --file pipelines/single-step-merge-job.yaml \
+  --subscription "<SUBSCRIPTION_ID>" \
+  --resource-group "<RESOURCE_GROUP_NAME>" \
+  --workspace-name "<AZURE_ML_WORKSPACE_NAME>" \
+  --set compute="azureml:<COMPUTE_NAME>"
+```
+
+Validate and run the integration pipeline:
+
+```bash
+az ml job validate \
+  --file pipelines/integration-compare-pipeline.yaml \
+  --subscription "<SUBSCRIPTION_ID>" \
+  --resource-group "<RESOURCE_GROUP_NAME>" \
+  --workspace-name "<AZURE_ML_WORKSPACE_NAME>" \
+  --set settings.default_compute="azureml:<COMPUTE_NAME>" \
+  --set inputs.automl_compute="<COMPUTE_NAME>"
+
+az ml job create \
+  --file pipelines/integration-compare-pipeline.yaml \
+  --subscription "<SUBSCRIPTION_ID>" \
+  --resource-group "<RESOURCE_GROUP_NAME>" \
+  --workspace-name "<AZURE_ML_WORKSPACE_NAME>" \
+  --set settings.default_compute="azureml:<COMPUTE_NAME>" \
+  --set inputs.automl_compute="<COMPUTE_NAME>"
+```
+
+The same submission shape works for the other pipeline files after their required
+inputs and Azure assets are configured:
+
+```bash
+az ml job create \
+  --file "pipelines/<PIPELINE_FILE>.yaml" \
+  --subscription "<SUBSCRIPTION_ID>" \
+  --resource-group "<RESOURCE_GROUP_NAME>" \
+  --workspace-name "<AZURE_ML_WORKSPACE_NAME>"
+```
+
+Monitor a submitted job with the name returned by `az ml job create`:
+
+```bash
+az ml job stream \
+  --name "<JOB_NAME>" \
+  --subscription "<SUBSCRIPTION_ID>" \
+  --resource-group "<RESOURCE_GROUP_NAME>" \
+  --workspace-name "<AZURE_ML_WORKSPACE_NAME>"
+
+az ml job show \
+  --name "<JOB_NAME>" \
+  --subscription "<SUBSCRIPTION_ID>" \
+  --resource-group "<RESOURCE_GROUP_NAME>" \
+  --workspace-name "<AZURE_ML_WORKSPACE_NAME>" \
+  --query "{name:name,status:status}" \
+  --output table
 ```
 
 Promotion gating implemented inside `compare.py` (add thresholds / metric logic). Registration only occurs when the compare step signals improvement or policy compliance.
@@ -178,11 +242,58 @@ Recommendation: Promote curated environments into registry for reproducibility (
 
 ---
 ## Notebooks (`notebooks/`)
-* Exploration & debugging (e.g., registry sharing demo)
-* Prototype logic before extracting to component code
-* Use consistent environment spec for reproducibility
+The H2O workshop uses Python 3.12, JDK 17, H2O `3.46.0.12`, and the repository
+`.venv`. Create the environment from the repository root:
 
-Workflow: Prototype → Hardening (src/*) → Component YAML → Pipeline → Registry asset.
+```powershell
+# Windows PowerShell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r notebooks\requirements.txt
+Copy-Item .env.example .env
+```
+
+```bash
+# Bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r notebooks/requirements.txt
+cp .env.example .env
+```
+
+Edit `.env` with identifiers for the target Azure ML environment. Do not put
+passwords, client secrets, tokens, or connection strings in the file. `.env` is
+ignored by Git; `.env.example` is the customer-safe configuration contract.
+Authenticate separately with `az login` or managed identity.
+
+Run the notebooks in order:
+
+| Notebook | Purpose | Azure mutation control |
+|----------|---------|------------------------|
+| `01_create_reference_mojo.ipynb` | Train, save, reload, and verify the H2O binary model | `REGISTER_IN_AZURE=false` keeps it local |
+| `02_onboard_customer_mojo.ipynb` | Validate a customer bundle and optionally register it | Set `REGISTER_IN_AZURE=true` only for registration |
+| `03_test_local_online_endpoint.ipynb` | Test the scoring contract with the local Azure ML inference server | No Azure resources are created |
+| `04_deploy_managed_online_endpoint.ipynb` | Create and validate a managed online endpoint | Controlled by `DEPLOY_TO_AZURE`, `PROMOTE_TRAFFIC_AFTER_VALIDATION`, and `DELETE_ENDPOINT_AFTER_TEST` |
+| `05_build_and_schedule_scoring_pipeline.ipynb` | Build, submit, and optionally schedule the batch scoring pipeline | Controlled by `SUBMIT_TO_AZURE`, `CREATE_TEST_SCHEDULE`, `DISABLE_SCHEDULE_AFTER_TEST`, and `DELETE_SCHEDULE_AFTER_TEST` |
+
+Start Jupyter, select the `.venv` kernel, and use **Run All** for each notebook
+before moving to the next one:
+
+```bash
+python -m jupyter lab
+```
+
+The committed notebooks intentionally contain no saved outputs. Before committing
+or sharing notebooks after a run, use **Clear All Outputs** in VS Code/Jupyter or:
+
+```bash
+python -m jupyter nbconvert --clear-output --inplace notebooks/h2o_mojo/0[1-5]_*.ipynb
+```
+
+This removes local usernames, absolute paths, Azure resource IDs, run URLs, and
+storage URLs that SDK and H2O logs may otherwise persist in notebook output cells.
 
 ---
 ## Asset Promotion Strategy & Cross‑Environment Access
@@ -428,13 +539,13 @@ gitGraph
 ### Security Considerations - Service Principal RBAC
 The GitHub Actions service principal requires these minimum Azure RBAC roles:
 
-**Dev scope** (`rg-aml-ws-dev-cc-01` and registry `mlrdevcc01`):
+**Dev scope** (`<DEV_WORKSPACE_RESOURCE_GROUP>` and registry `<DEV_REGISTRY_NAME>`):
 - Contributor
 - Storage Blob Data Contributor  
 - AcrPull
 - Key Vault Secrets User
 
-**Prod scope** (`rg-aml-ws-prod-cc-01`):
+**Prod scope** (`<PROD_WORKSPACE_RESOURCE_GROUP>`):
 - Contributor
 - Storage Blob Data Reader
 - AcrPull
