@@ -233,6 +233,8 @@ az ml job show \
   --output table
 ```
 
+For the equivalent Python SDK flow, open `notebooks/00_submit_azureml_pipelines.ipynb`. Select the pipeline YAML and enable submission with `AZUREML_PIPELINE_FILE` and `RUN_AZUREML_JOB` in `.env`.
+
 Promotion gating implemented inside `compare.py` (add thresholds / metric logic). Registration only occurs when the compare step signals improvement or policy compliance.
 
 ---

@@ -2,6 +2,7 @@
 
 Sandbox experiments and walkthroughs live here. The folder is organized by scenario:
 
+- `00_submit_azureml_pipelines.ipynb` loads and submits the workshop pipeline YAML through the Azure ML Python SDK using `.env` settings.
 - `asset_sharing/` shows how to distribute assets across workspaces and registries.
 - `deployments/` collects online deployment samples.
 - `evaluations/` contains evaluation pipelines and data splits; the `evaluations_share/` folder mirrors artifacts intended for sharing.
