@@ -21,12 +21,22 @@ locals {
 
 ## Create Application Insights for AML Workspace
 ##
+resource "time_sleep" "wait_log_analytics_workspace" {
+  create_duration = "60s"
+
+  triggers = {
+    workspace_id = var.log_analytics_workspace_id
+  }
+}
+
 resource "azurerm_application_insights" "aml-appins" {
   name                = "${local.app_insights_prefix}${var.purpose}${var.location_code}${local.resolved_suffix}"
   location            = var.location
   resource_group_name = local.rg_name
   workspace_id        = var.log_analytics_workspace_id
   application_type    = "other"
+
+  depends_on = [time_sleep.wait_log_analytics_workspace]
 }
 
 ## Create the Container Registry for the Azure Machine Learning workspace
@@ -61,7 +71,7 @@ module "storage_account_default" {
   tags                = var.tags
 
   # Identity controls
-  key_based_authentication = true
+  key_based_authentication = false
 
   # Networking controls
   allow_blob_public_access = false
@@ -119,15 +129,16 @@ resource "azurerm_user_assigned_identity" "workspace_identity" {
 ## Grant Key Vault access (secrets Officer) to the workspace user-assigned identity BEFORE workspace creation
 ## AML control plane needs to read/write secrets in the KV during workspace provisioning.
 resource "azurerm_role_assignment" "workspace_key_vault_secrets_officer" {
-  scope                = module.keyvault_aml.id
+  scope = module.keyvault_aml.id
   # Key Vault Secrets Officer is required for AML workspace UAMI to set secrets during image builds and job runs.
   # Secrets User is read-only; Officer includes setSecret permission (Microsoft.KeyVault/vaults/secrets/setSecret/action).
   role_definition_name = "Key Vault Secrets Officer"
   principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
+  principal_type       = "ServicePrincipal"
 
   depends_on = [
     module.keyvault_aml,
-    azurerm_user_assigned_identity.workspace_identity
+    time_sleep.wait_workspace_identity
   ]
 }
 
@@ -138,30 +149,48 @@ resource "azurerm_role_assignment" "workspace_key_vault_reader" {
   scope                = module.keyvault_aml.id
   role_definition_name = "Key Vault Reader"
   principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
+  principal_type       = "ServicePrincipal"
   depends_on = [
     module.keyvault_aml,
-    azurerm_user_assigned_identity.workspace_identity
+    time_sleep.wait_workspace_identity
   ]
   name = uuidv5("dns", "${module.keyvault_aml.id}${azurerm_user_assigned_identity.workspace_identity.principal_id}kvreader")
 }
 
 resource "time_sleep" "wait_rbac_role_propagation" {
-  create_duration = "90s"
+  create_duration = "120s"
   depends_on = [
     azurerm_role_assignment.workspace_key_vault_secrets_officer,
     azurerm_role_assignment.workspace_key_vault_reader,
+    azurerm_role_assignment.workspace_key_vault_administrator,
     azurerm_role_assignment.rg_reader,
     azurerm_role_assignment.ai_network_connection_approver,
-    azurerm_role_assignment.ai_administrator
+    azurerm_role_assignment.ai_administrator,
+    azurerm_role_assignment.workspace_storage_blob_contributor,
+    azurerm_role_assignment.workspace_storage_file_privileged_contributor,
+    azurerm_role_assignment.workspace_storage_table_contributor,
+    azurerm_role_assignment.workspace_storage_queue_contributor,
+    azurerm_role_assignment.workspace_storage_blob_private_endpoint_reader,
+    azurerm_role_assignment.workspace_storage_file_private_endpoint_reader
   ]
-}
 
-## Additional buffer to allow any prior failed workspace (soft delete / identity ops) to fully clear before creation
-resource "time_sleep" "wait_workspace_slot" {
-  create_duration = "150s"
-  depends_on = [
-    time_sleep.wait_rbac_role_propagation
-  ]
+  triggers = {
+    principal_id = azurerm_user_assigned_identity.workspace_identity.principal_id
+    role_assignment_ids = sha256(join(",", sort([
+      azurerm_role_assignment.workspace_key_vault_secrets_officer.id,
+      azurerm_role_assignment.workspace_key_vault_reader.id,
+      azurerm_role_assignment.workspace_key_vault_administrator.id,
+      azurerm_role_assignment.rg_reader.id,
+      azurerm_role_assignment.ai_network_connection_approver.id,
+      azurerm_role_assignment.ai_administrator.id,
+      azurerm_role_assignment.workspace_storage_blob_contributor.id,
+      azurerm_role_assignment.workspace_storage_file_privileged_contributor.id,
+      azurerm_role_assignment.workspace_storage_table_contributor.id,
+      azurerm_role_assignment.workspace_storage_queue_contributor.id,
+      azurerm_role_assignment.workspace_storage_blob_private_endpoint_reader.id,
+      azurerm_role_assignment.workspace_storage_file_private_endpoint_reader.id
+    ])))
+  }
 }
 
 ## Create the Azure Machine Learning Workspace in a managed vnet configuration
@@ -179,7 +208,9 @@ resource "azapi_resource" "aml_workspace" {
     azurerm_role_assignment.ai_network_connection_approver,
     azurerm_role_assignment.ai_administrator,
     time_sleep.wait_rbac_role_propagation,
-    time_sleep.wait_workspace_slot
+    azapi_resource.workspace_cmk,
+    time_sleep.wait_cmk_consumer_access,
+    azapi_resource.storage_encryption_scope
   ]
 
   type                      = "Microsoft.MachineLearningServices/workspaces@2025-04-01-preview"
@@ -207,16 +238,28 @@ resource "azapi_resource" "aml_workspace" {
       # The version of the managed network model to use; unsure what v2 is
       managedNetworkKind = "V1"
       # The resources that will be associated with the AML Workspace
-      applicationInsights = azurerm_application_insights.aml-appins.id
-      keyVault            = module.keyvault_aml.id
+      applicationInsights = replace(azurerm_application_insights.aml-appins.id, "Microsoft.Insights", "Microsoft.insights")
+      keyVault            = replace(module.keyvault_aml.id, "Microsoft.KeyVault", "Microsoft.Keyvault")
       storageAccount      = module.storage_account_default.id
       containerRegistry   = module.container_registry.id
+
+      enableServiceSideCMKEncryption = var.workspace_encryption == "cmk"
+      encryption = var.workspace_encryption == "cmk" ? {
+        status = "Enabled"
+        identity = {
+          userAssignedIdentity = lower(azurerm_user_assigned_identity.workspace_identity.id)
+        }
+        keyVaultProperties = {
+          keyVaultArmId = azurerm_key_vault.cmk[0].id
+          keyIdentifier = azapi_resource.workspace_cmk[0].output.properties.keyUriWithVersion
+        }
+      } : null
 
       # For UserAssigned identity workspaces, explicitly set the primary UAI
       primaryUserAssignedIdentity = azurerm_user_assigned_identity.workspace_identity.id
 
       # Block access to the AML Workspace over the public endpoint
-      publicNetworkAccess = "disabled"
+      publicNetworkAccess = "Disabled"
 
       # Configure the AML workspace to use the managed virtual network model
       managedNetwork = {
@@ -392,10 +435,7 @@ resource "azapi_resource" "aml_workspace" {
   }
   # No longer exporting identity.principalId since we're using user-assigned identity
   lifecycle {
-    ignore_changes = [
-      tags["created_date"],
-      tags["created_by"]
-    ]
+    ignore_changes = [tags]
   }
 
   # Destroy-time purge to avoid soft-deleted AML workspace blocking future deployments
@@ -615,7 +655,7 @@ module "private_endpoint_aml_workspace" {
 resource "azurerm_role_assignment" "rg_reader" {
   # Ensure assigned before workspace provisioning so control plane can enumerate RG resources
   depends_on = [
-    azurerm_user_assigned_identity.workspace_identity,
+    time_sleep.wait_workspace_identity,
     module.keyvault_aml,
     module.storage_account_default
   ]
@@ -623,6 +663,7 @@ resource "azurerm_role_assignment" "rg_reader" {
   scope                = local.rg_id
   role_definition_name = "Reader"
   principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
+  principal_type       = "ServicePrincipal"
 }
 
 ## Create role assignments granting Azure AI Enterprise Network Connection Approver role over the resource group to the AML Workspace's
@@ -633,12 +674,13 @@ resource "azurerm_role_assignment" "ai_network_connection_approver" {
     azurerm_role_assignment.rg_reader,
     module.keyvault_aml,
     module.storage_account_default,
-    azurerm_user_assigned_identity.workspace_identity
+    time_sleep.wait_workspace_identity
   ]
   name                 = uuidv5("dns", "${local.rg_name}${azurerm_user_assigned_identity.workspace_identity.principal_id}netapprover")
   scope                = local.rg_id
   role_definition_name = "Azure AI Enterprise Network Connection Approver"
   principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
+  principal_type       = "ServicePrincipal"
 }
 
 ## Create role assignments granting Azure AI Administrator role over the resource group to the AML Workspace's
@@ -649,12 +691,13 @@ resource "azurerm_role_assignment" "ai_administrator" {
     azurerm_role_assignment.ai_network_connection_approver,
     module.keyvault_aml,
     module.storage_account_default,
-    azurerm_user_assigned_identity.workspace_identity
+    time_sleep.wait_workspace_identity
   ]
   name                 = uuidv5("dns", "${local.rg_name}${azurerm_user_assigned_identity.workspace_identity.principal_id}aiadmin")
   scope                = local.rg_id
   role_definition_name = "Azure AI Administrator"
   principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
+  principal_type       = "ServicePrincipal"
 }
 
 ##### Cross-environment RBAC for asset promotion (centralized in parent module)
@@ -679,13 +722,15 @@ locals {
 ##
 resource "azurerm_role_assignment" "compute_ml_data_scientist" {
   depends_on = [
-    azapi_resource.aml_workspace
+    azapi_resource.aml_workspace,
+    time_sleep.wait_compute_cluster_identity
   ]
 
   name                 = uuidv5("dns", "${local.rg_name}${local.compute_cluster_principal_id}mldatascientist")
   scope                = azapi_resource.aml_workspace.id # Individual workspace resource
   role_definition_name = "AzureML Data Scientist"
   principal_id         = local.compute_cluster_principal_id
+  principal_type       = "ServicePrincipal"
 }
 
 ## Assign Key Vault Secrets User role to compute identity for workspace Key Vault
@@ -693,13 +738,15 @@ resource "azurerm_role_assignment" "compute_ml_data_scientist" {
 ##
 resource "azurerm_role_assignment" "compute_keyvault_secrets_user" {
   depends_on = [
-    module.keyvault_aml
+    module.keyvault_aml,
+    time_sleep.wait_compute_cluster_identity
   ]
 
   name                 = uuidv5("dns", "${local.rg_name}${local.compute_cluster_principal_id}${module.keyvault_aml.name}secretsuser")
   scope                = module.keyvault_aml.id # Individual Key Vault resource
   role_definition_name = "Key Vault Secrets User"
   principal_id         = local.compute_cluster_principal_id
+  principal_type       = "ServicePrincipal"
 }
 
 ## Assign Storage Blob Data Contributor role to compute identity for workspace storage
@@ -707,13 +754,15 @@ resource "azurerm_role_assignment" "compute_keyvault_secrets_user" {
 ##
 resource "azurerm_role_assignment" "compute_storage_blob_contributor" {
   depends_on = [
-    module.storage_account_default
+    module.storage_account_default,
+    time_sleep.wait_compute_cluster_identity
   ]
 
   name                 = uuidv5("dns", "${local.rg_name}${local.compute_cluster_principal_id}${module.storage_account_default.name}blobcontrib")
   scope                = module.storage_account_default.id # Individual storage account resource
   role_definition_name = "Storage Blob Data Contributor"
   principal_id         = local.compute_cluster_principal_id
+  principal_type       = "ServicePrincipal"
 }
 
 ## Assign Storage File Data Privileged Contributor role to compute identity for workspace storage
@@ -721,13 +770,15 @@ resource "azurerm_role_assignment" "compute_storage_blob_contributor" {
 ##
 resource "azurerm_role_assignment" "compute_storage_file_privileged_contributor" {
   depends_on = [
-    module.storage_account_default
+    module.storage_account_default,
+    time_sleep.wait_compute_cluster_identity
   ]
 
   name                 = uuidv5("dns", "${local.rg_name}${local.compute_cluster_principal_id}${module.storage_account_default.name}filepriv")
   scope                = module.storage_account_default.id # Individual storage account resource
   role_definition_name = "Storage File Data Privileged Contributor"
   principal_id         = local.compute_cluster_principal_id
+  principal_type       = "ServicePrincipal"
 }
 
 ## Assign AcrPull role to compute identity for workspace container registry
@@ -735,13 +786,15 @@ resource "azurerm_role_assignment" "compute_storage_file_privileged_contributor"
 ##
 resource "azurerm_role_assignment" "compute_acr_pull" {
   depends_on = [
-    module.container_registry
+    module.container_registry,
+    time_sleep.wait_compute_cluster_identity
   ]
 
   name                 = uuidv5("dns", "${local.rg_name}${local.compute_cluster_principal_id}${module.container_registry.name}acrpull")
   scope                = module.container_registry.id # Individual ACR resource
   role_definition_name = "AcrPull"
   principal_id         = local.compute_cluster_principal_id
+  principal_type       = "ServicePrincipal"
 }
 
 ## Assign AcrPush role to compute identity for workspace container registry
@@ -756,6 +809,7 @@ resource "azurerm_role_assignment" "compute_acr_push" {
   scope                = module.container_registry.id # Individual ACR resource
   role_definition_name = "AcrPush"
   principal_id         = local.compute_cluster_principal_id
+  principal_type       = "ServicePrincipal"
 }
 
 ## Assign Contributor role to compute identity for the workspace
@@ -763,13 +817,15 @@ resource "azurerm_role_assignment" "compute_acr_push" {
 ##
 resource "azurerm_role_assignment" "compute_workspace_contributor" {
   depends_on = [
-    azapi_resource.aml_workspace
+    azapi_resource.aml_workspace,
+    time_sleep.wait_compute_cluster_identity
   ]
 
   name                 = uuidv5("dns", "${local.rg_name}${local.compute_cluster_principal_id}${azapi_resource.aml_workspace.name}contributor")
   scope                = azapi_resource.aml_workspace.id # Individual workspace resource
   role_definition_name = "Contributor"
   principal_id         = local.compute_cluster_principal_id
+  principal_type       = "ServicePrincipal"
 }
 
 ## Assign Reader role to compute identity for the resource group
@@ -777,28 +833,15 @@ resource "azurerm_role_assignment" "compute_workspace_contributor" {
 ##
 resource "azurerm_role_assignment" "compute_rg_reader" {
   depends_on = [
-    azapi_resource.aml_workspace
+    azapi_resource.aml_workspace,
+    time_sleep.wait_compute_cluster_identity
   ]
 
   name                 = uuidv5("dns", "${local.rg_name}${local.compute_cluster_principal_id}reader")
   scope                = local.rg_id # Resource group scope
   role_definition_name = "Reader"
   principal_id         = local.compute_cluster_principal_id
-}
-
-## Assign Storage Blob Data Owner role to workspace user-assigned managed identity for workspace storage
-## This allows the workspace to manage data and models in the storage account for registry operations
-##
-resource "azurerm_role_assignment" "workspace_storage_blob_owner" {
-  depends_on = [
-    module.storage_account_default,
-    azurerm_role_assignment.rg_reader
-  ]
-
-  name                 = uuidv5("dns", "${local.rg_name}${azurerm_user_assigned_identity.workspace_identity.principal_id}${module.storage_account_default.name}blobowner")
-  scope                = module.storage_account_default.id # Individual storage account resource
-  role_definition_name = "Storage Blob Data Owner"
-  principal_id         = azurerm_user_assigned_identity.workspace_identity.principal_id
+  principal_type       = "ServicePrincipal"
 }
 
 ##### Diagnostic Settings for Monitoring
@@ -991,15 +1034,7 @@ resource "azapi_resource" "compute_cluster_uami" {
   depends_on = [
     azapi_resource.aml_workspace,
     module.private_endpoint_aml_workspace,
-    # Wait for all local compute role assignments to be created first
-    azurerm_role_assignment.compute_ml_data_scientist,
-    azurerm_role_assignment.compute_keyvault_secrets_user,
-    azurerm_role_assignment.compute_storage_blob_contributor,
-    azurerm_role_assignment.compute_storage_file_privileged_contributor,
-    azurerm_role_assignment.compute_acr_pull,
-    azurerm_role_assignment.compute_acr_push,
-    azurerm_role_assignment.compute_workspace_contributor,
-    azurerm_role_assignment.compute_rg_reader
+    time_sleep.wait_compute_cluster_rbac
   ]
 
   type = "Microsoft.MachineLearningServices/workspaces/computes@2025-01-01-preview"
@@ -1025,7 +1060,7 @@ resource "azapi_resource" "compute_cluster_uami" {
         remoteLoginPortPublicAccess = "Disabled"
         scaleSettings = {
           maxNodeCount                = 4
-          minNodeCount                = 2
+          minNodeCount                = 0
           nodeIdleTimeBeforeScaleDown = "PT2M"
         }
       }
@@ -1053,15 +1088,7 @@ resource "azapi_resource" "compute_instance_uami" {
   depends_on = [
     azapi_resource.aml_workspace,
     module.private_endpoint_aml_workspace,
-    # Wait for all local compute role assignments to be created first
-    azurerm_role_assignment.compute_ml_data_scientist,
-    azurerm_role_assignment.compute_keyvault_secrets_user,
-    azurerm_role_assignment.compute_storage_blob_contributor,
-    azurerm_role_assignment.compute_storage_file_privileged_contributor,
-    azurerm_role_assignment.compute_acr_pull,
-    azurerm_role_assignment.compute_acr_push,
-    azurerm_role_assignment.compute_workspace_contributor,
-    azurerm_role_assignment.compute_rg_reader
+    time_sleep.wait_compute_instance_rbac
   ]
 
   type = "Microsoft.MachineLearningServices/workspaces/computes@2025-01-01-preview"
@@ -1074,7 +1101,7 @@ resource "azapi_resource" "compute_instance_uami" {
     identity = {
       type = "UserAssigned"
       userAssignedIdentities = {
-        "${var.compute_cluster_identity_id}" = {}
+        "${var.compute_instance_identity_id}" = {}
       }
     }
     properties = {
@@ -1092,7 +1119,7 @@ resource "azapi_resource" "compute_instance_uami" {
           sshPublicAccess = "Disabled"
         }
         enableSSO                        = false
-        applicationSharingPolicy         = "Personal"
+        applicationSharingPolicy         = "Shared"
         computeInstanceAuthorizationType = "personal"
       }
       description = "Personal compute instance with user-assigned managed identity for interactive ML development"

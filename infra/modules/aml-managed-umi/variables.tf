@@ -111,6 +111,12 @@ variable "dns_zone_queue_id" {
   default     = null
 }
 
+variable "dns_zone_dfs_id" {
+  description = "ID of the DFS storage DNS zone"
+  type        = string
+  default     = null
+}
+
 variable "dns_zone_keyvault_id" {
   description = "ID of the Key Vault DNS zone"
   type        = string
@@ -151,6 +157,32 @@ variable "compute_cluster_principal_id" {
   type        = string
 }
 
+variable "compute_instance_identity_id" {
+  description = "ID of the compute instance user-assigned managed identity"
+  type        = string
+}
+
+variable "compute_instance_principal_id" {
+  description = "Principal ID of the compute instance user-assigned managed identity"
+  type        = string
+}
+
+variable "online_endpoint_identity_id" {
+  description = "Resource ID of the managed online endpoint user-assigned managed identity"
+  type        = string
+}
+
+variable "online_endpoint_principal_id" {
+  description = "Principal ID of the managed online endpoint user-assigned managed identity"
+  type        = string
+}
+
+variable "online_endpoint_deployer_principal_ids" {
+  description = "Object IDs allowed to attach the online endpoint user-assigned managed identity"
+  type        = set(string)
+  default     = []
+}
+
 variable "compute_cluster_name" {
   description = "Optional explicit name for the AML compute cluster (overrides generated)."
   type        = string
@@ -172,6 +204,35 @@ variable "key_vault_purge_protection_enabled" {
   description = "Enable purge protection on the Key Vault created for the AML workspace"
   type        = bool
   default     = false
+}
+
+variable "provision_cmk_prerequisites" {
+  description = "Provision CMK resources independently from enabling CMK on the AML workspace"
+  type        = bool
+  default     = false
+}
+
+variable "workspace_encryption" {
+  description = "Encryption mode for the AML workspace"
+  type        = string
+  default     = "pmk"
+
+  validation {
+    condition     = contains(["pmk", "cmk"], var.workspace_encryption)
+    error_message = "workspace_encryption must be either pmk or cmk."
+  }
+}
+
+variable "key_vault_cmk_rbac_enabled" {
+  description = "Use Azure RBAC instead of access policies for CMK authorization"
+  type        = bool
+  default     = true
+}
+
+variable "cmk_key_name" {
+  description = "Name of the customer-managed key"
+  type        = string
+  default     = "cmkamlws"
 }
 
 // Cross-environment RBAC inputs removed; RBAC is centralized in infra/main.tf.

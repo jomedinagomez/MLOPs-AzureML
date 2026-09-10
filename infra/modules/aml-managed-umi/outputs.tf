@@ -96,6 +96,53 @@ output "compute_uami_principal_id" {
   value       = var.compute_cluster_principal_id
 }
 
+output "compute_cluster_identity_id" {
+  description = "Resource ID of the compute cluster user-assigned managed identity"
+  value       = var.compute_cluster_identity_id
+}
+
+output "compute_instance_identity_id" {
+  description = "Resource ID of the compute instance user-assigned managed identity"
+  value       = var.compute_instance_identity_id
+}
+
+output "compute_instance_principal_id" {
+  description = "Principal ID of the compute instance user-assigned managed identity"
+  value       = var.compute_instance_principal_id
+}
+
+output "online_endpoint_identity_id" {
+  description = "Resource ID of the managed online endpoint user-assigned managed identity"
+  value       = var.online_endpoint_identity_id
+  depends_on  = [time_sleep.wait_online_endpoint_rbac]
+}
+
+output "online_endpoint_principal_id" {
+  description = "Principal ID of the managed online endpoint user-assigned managed identity"
+  value       = var.online_endpoint_principal_id
+  depends_on  = [time_sleep.wait_online_endpoint_rbac]
+}
+
+output "cmk_key_vault_id" {
+  description = "Resource ID of the CMK Key Vault when CMK prerequisites are provisioned"
+  value       = try(azurerm_key_vault.cmk[0].id, null)
+}
+
+output "cmk_key_id" {
+  description = "Resource ID of the customer-managed key when provisioned"
+  value       = try(azapi_resource.workspace_cmk[0].id, null)
+}
+
+output "cmk_key_uri" {
+  description = "Versioned URI of the customer-managed key when provisioned"
+  value       = try(azapi_resource.workspace_cmk[0].output.properties.keyUriWithVersion, null)
+}
+
+output "storage_encryption_scope_id" {
+  description = "Resource ID of the default storage CMK encryption scope when provisioned"
+  value       = try(azapi_resource.storage_encryption_scope[0].id, null)
+}
+
 # Private endpoint IP for the AML workspace (used for DNS validation / nslookup checks)
 output "workspace_private_endpoint_ip" {
   description = "Private IP address of the AML workspace private endpoint"

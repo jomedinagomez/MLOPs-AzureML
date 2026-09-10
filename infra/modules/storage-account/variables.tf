@@ -111,7 +111,7 @@ variable "storage_account_kind" {
 variable "storage_account_replication_type" {
   description = "The replication type to apply to the storage account"
   type        = string
-  default     = "LRS"
+  default     = "GRS"
 }
 
 variable "storage_account_tier" {

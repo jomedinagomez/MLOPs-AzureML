@@ -3,6 +3,8 @@ locals {
 }
 
 resource "azurerm_key_vault" "kv" {
+  #checkov:skip=CKV2_AZURE_32: The parent AML workspace module creates the vault private endpoint and DNS association.
+
   name                = "${local.kv_name}${var.purpose}${var.location_code}${local.resolved_suffix}"
   location            = var.location
   resource_group_name = var.resource_group_name

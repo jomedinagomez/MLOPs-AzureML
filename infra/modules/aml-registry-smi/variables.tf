@@ -113,9 +113,10 @@ variable "log_analytics_workspace_id" {
 
 // RBAC-related inputs removed; RBAC is centralized in infra/main.tf
 
-// Principal to assign to the registry's managed resource group so it inherits Azure AI admin capabilities
-// Use the object ID of the service principal provisioning the resources
-variable "managed_rg_assigned_principal_id" {
-  description = "Object ID of the principal to assign in the registry managed resource group (assignedIdentities.principalId)"
-  type        = string
+// Principals assigned to the registry managed resource group are exempted from its deny assignment.
+// Include only identities with a proven need to operate on registry-managed resources.
+variable "managed_rg_assigned_principal_ids" {
+  description = "Object IDs to assign in the registry managed resource group (assignedIdentities.principalId)"
+  type        = set(string)
+  default     = []
 }

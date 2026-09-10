@@ -3,13 +3,20 @@ locals {
 }
 
 resource "azurerm_container_registry" "acr" {
+  #checkov:skip=CKV_AZURE_164: ACR Docker Content Trust does not provide an AML-compatible signing enforcement path for managed environment images.
+  #checkov:skip=CKV_AZURE_165: The workshop is intentionally single-region in Canada Central; add geo-replication with a multi-region serving design.
+  #checkov:skip=CKV_AZURE_166: Quarantine requires an external scanner/approval service and would block AML-built images; add it with that service, not standalone.
+
   name                = "${local.acr_name}${var.purpose}${var.location_code}${local.resolved_suffix}"
   resource_group_name = var.resource_group_name
   location            = var.location
 
-  sku                    = local.sku_name
-  admin_enabled          = local.local_admin_enabled
-  anonymous_pull_enabled = local.anonymous_pull_enabled
+  sku                      = local.sku_name
+  admin_enabled            = local.local_admin_enabled
+  anonymous_pull_enabled   = local.anonymous_pull_enabled
+  data_endpoint_enabled    = true
+  retention_policy_in_days = 30
+  zone_redundancy_enabled  = true
 
   identity {
     type = "SystemAssigned"

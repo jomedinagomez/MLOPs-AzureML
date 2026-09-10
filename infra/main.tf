@@ -13,10 +13,6 @@ terraform {
       source  = "azure/azapi"
       version = "~> 2.0"
     }
-    azuread = {
-      source  = "hashicorp/azuread"
-      version = "~> 3.0"
-    }
     null = {
       source  = "hashicorp/null"
       version = "~> 3.2"
@@ -30,13 +26,14 @@ terraform {
 
 # Azure Resource Manager provider
 provider "azurerm" {
-  subscription_id = var.subscription_id
+  subscription_id     = var.subscription_id
+  storage_use_azuread = true
   features {
     resource_group {
       prevent_deletion_if_contains_resources = false
     }
     key_vault {
-      purge_soft_delete_on_destroy    = true
+      purge_soft_delete_on_destroy    = false
       recover_soft_deleted_key_vaults = true
     }
   }
@@ -46,9 +43,6 @@ provider "azurerm" {
 provider "azapi" {
   subscription_id = var.subscription_id
 }
-
-# Azure Active Directory provider
-provider "azuread" {}
 
 # Get current client configuration
 data "azurerm_client_config" "current" {}
@@ -64,45 +58,7 @@ locals {
 }
 
 # ===============================
-# STEP 1: SERVICE PRINCIPAL
-# ===============================
-
-# Create Azure AD Application for deployment service principal
-resource "azuread_application" "deployment_sp_app" {
-  display_name     = "sp-aml-deployment-platform"
-  description      = "Service Principal for Azure ML platform deployment automation (all environments)"
-  sign_in_audience = "AzureADMyOrg"
-  owners           = [data.azurerm_client_config.current.object_id]
-
-  tags = [
-    "ManagedBy:Terraform",
-    "Purpose:MLOps-Deployment",
-    "Scope:AllEnvironments"
-  ]
-}
-
-# Create Service Principal from the application
-resource "azuread_service_principal" "deployment_sp" {
-  client_id                    = azuread_application.deployment_sp_app.client_id
-  app_role_assignment_required = false
-  owners                       = [data.azurerm_client_config.current.object_id]
-  description                  = "Service Principal for Azure ML platform deployment via Terraform (all environments)"
-
-  tags = [
-    "ManagedBy:Terraform",
-    "Purpose:MLOps-Deployment",
-    "Scope:AllEnvironments"
-  ]
-}
-
-# Create client secret for the service principal
-resource "azuread_application_password" "deployment_sp_secret" {
-  application_id = azuread_application.deployment_sp_app.id
-  display_name   = "Terraform Deployment Secret - Platform"
-}
-
-# ===============================
-# STEP 2: CREATE ALL RESOURCE GROUPS
+# STEP 1: CREATE ALL RESOURCE GROUPS
 # ===============================
 
 # Development Environment Resource Groups
@@ -169,161 +125,10 @@ resource "azurerm_resource_group" "prod_registry_rg" {
 
 
 # ===============================
-# STEP 3: SERVICE PRINCIPAL RBAC
-# ===============================
-
-# Development Environment Service Principal Permissions
-resource "azurerm_role_assignment" "sp_dev_vnet_contributor" {
-  scope                = azurerm_resource_group.dev_vnet_rg.id
-  role_definition_name = "Contributor"
-  principal_id         = azuread_service_principal.deployment_sp.object_id
-
-  depends_on = [azurerm_resource_group.dev_vnet_rg]
-}
-
-resource "azurerm_role_assignment" "sp_dev_vnet_user_access_admin" {
-  scope                = azurerm_resource_group.dev_vnet_rg.id
-  role_definition_name = "User Access Administrator"
-  principal_id         = azuread_service_principal.deployment_sp.object_id
-
-  depends_on = [azurerm_resource_group.dev_vnet_rg]
-}
-
-resource "azurerm_role_assignment" "sp_dev_vnet_network_contributor" {
-  scope                = azurerm_resource_group.dev_vnet_rg.id
-  role_definition_name = "Network Contributor"
-  principal_id         = azuread_service_principal.deployment_sp.object_id
-
-  depends_on = [azurerm_resource_group.dev_vnet_rg]
-}
-
-resource "azurerm_role_assignment" "sp_dev_workspace_contributor" {
-  scope                = azurerm_resource_group.dev_workspace_rg.id
-  role_definition_name = "Contributor"
-  principal_id         = azuread_service_principal.deployment_sp.object_id
-
-  depends_on = [azurerm_resource_group.dev_workspace_rg]
-}
-
-resource "azurerm_role_assignment" "sp_dev_workspace_user_access_admin" {
-  scope                = azurerm_resource_group.dev_workspace_rg.id
-  role_definition_name = "User Access Administrator"
-  principal_id         = azuread_service_principal.deployment_sp.object_id
-
-  depends_on = [azurerm_resource_group.dev_workspace_rg]
-}
-
-resource "azurerm_role_assignment" "sp_dev_workspace_network_contributor" {
-  scope                = azurerm_resource_group.dev_workspace_rg.id
-  role_definition_name = "Network Contributor"
-  principal_id         = azuread_service_principal.deployment_sp.object_id
-
-  depends_on = [azurerm_resource_group.dev_workspace_rg]
-}
-
-resource "azurerm_role_assignment" "sp_dev_registry_contributor" {
-  scope                = azurerm_resource_group.dev_registry_rg.id
-  role_definition_name = "Contributor"
-  principal_id         = azuread_service_principal.deployment_sp.object_id
-
-  depends_on = [azurerm_resource_group.dev_registry_rg]
-}
-
-resource "azurerm_role_assignment" "sp_dev_registry_user_access_admin" {
-  scope                = azurerm_resource_group.dev_registry_rg.id
-  role_definition_name = "User Access Administrator"
-  principal_id         = azuread_service_principal.deployment_sp.object_id
-
-  depends_on = [azurerm_resource_group.dev_registry_rg]
-}
-
-resource "azurerm_role_assignment" "sp_dev_registry_network_contributor" {
-  scope                = azurerm_resource_group.dev_registry_rg.id
-  role_definition_name = "Network Contributor"
-  principal_id         = azuread_service_principal.deployment_sp.object_id
-
-  depends_on = [azurerm_resource_group.dev_registry_rg]
-}
-
-# Production Environment Service Principal Permissions
-resource "azurerm_role_assignment" "sp_prod_vnet_contributor" {
-  scope                = azurerm_resource_group.prod_vnet_rg.id
-  role_definition_name = "Contributor"
-  principal_id         = azuread_service_principal.deployment_sp.object_id
-
-  depends_on = [azurerm_resource_group.prod_vnet_rg]
-}
-
-resource "azurerm_role_assignment" "sp_prod_vnet_user_access_admin" {
-  scope                = azurerm_resource_group.prod_vnet_rg.id
-  role_definition_name = "User Access Administrator"
-  principal_id         = azuread_service_principal.deployment_sp.object_id
-
-  depends_on = [azurerm_resource_group.prod_vnet_rg]
-}
-
-resource "azurerm_role_assignment" "sp_prod_vnet_network_contributor" {
-  scope                = azurerm_resource_group.prod_vnet_rg.id
-  role_definition_name = "Network Contributor"
-  principal_id         = azuread_service_principal.deployment_sp.object_id
-
-  depends_on = [azurerm_resource_group.prod_vnet_rg]
-}
-
-resource "azurerm_role_assignment" "sp_prod_workspace_contributor" {
-  scope                = azurerm_resource_group.prod_workspace_rg.id
-  role_definition_name = "Contributor"
-  principal_id         = azuread_service_principal.deployment_sp.object_id
-
-  depends_on = [azurerm_resource_group.prod_workspace_rg]
-}
-
-resource "azurerm_role_assignment" "sp_prod_workspace_user_access_admin" {
-  scope                = azurerm_resource_group.prod_workspace_rg.id
-  role_definition_name = "User Access Administrator"
-  principal_id         = azuread_service_principal.deployment_sp.object_id
-
-  depends_on = [azurerm_resource_group.prod_workspace_rg]
-}
-
-resource "azurerm_role_assignment" "sp_prod_workspace_network_contributor" {
-  scope                = azurerm_resource_group.prod_workspace_rg.id
-  role_definition_name = "Network Contributor"
-  principal_id         = azuread_service_principal.deployment_sp.object_id
-
-  depends_on = [azurerm_resource_group.prod_workspace_rg]
-}
-
-resource "azurerm_role_assignment" "sp_prod_registry_contributor" {
-  scope                = azurerm_resource_group.prod_registry_rg.id
-  role_definition_name = "Contributor"
-  principal_id         = azuread_service_principal.deployment_sp.object_id
-
-  depends_on = [azurerm_resource_group.prod_registry_rg]
-}
-
-resource "azurerm_role_assignment" "sp_prod_registry_user_access_admin" {
-  scope                = azurerm_resource_group.prod_registry_rg.id
-  role_definition_name = "User Access Administrator"
-  principal_id         = azuread_service_principal.deployment_sp.object_id
-
-  depends_on = [azurerm_resource_group.prod_registry_rg]
-}
-
-resource "azurerm_role_assignment" "sp_prod_registry_network_contributor" {
-  scope                = azurerm_resource_group.prod_registry_rg.id
-  role_definition_name = "Network Contributor"
-  principal_id         = azuread_service_principal.deployment_sp.object_id
-
-  depends_on = [azurerm_resource_group.prod_registry_rg]
-}
-
-
-# ===============================
 # FLAT NETWORK REFACTOR INTRO (no hub) - new shared DNS RG + direct VNets
 # ===============================
 resource "azurerm_resource_group" "shared_dns_rg" {
-  name     = "rg-${var.prefix}-dns-shared-${var.location_code}-${var.naming_suffix}"
+  name     = coalesce(var.shared_aml_dns_rg_name, "rg-${var.prefix}-dns-shared-${var.location_code}-${var.naming_suffix}")
   location = var.location
   tags = merge(var.tags, {
     environment = "shared"
@@ -344,11 +149,6 @@ resource "azurerm_virtual_network" "dev_vnet" {
   resource_group_name = azurerm_resource_group.dev_vnet_rg.name
   dns_servers         = var.dns_servers
   tags                = merge(var.tags, { environment = "development", purpose = "dev", component = "vnet" })
-  depends_on = [
-    azurerm_role_assignment.sp_dev_vnet_contributor,
-    azurerm_role_assignment.sp_dev_vnet_user_access_admin,
-    azurerm_role_assignment.sp_dev_vnet_network_contributor
-  ]
 }
 
 resource "azurerm_subnet" "dev_pe" {
@@ -356,6 +156,20 @@ resource "azurerm_subnet" "dev_pe" {
   resource_group_name  = azurerm_resource_group.dev_vnet_rg.name
   virtual_network_name = azurerm_virtual_network.dev_vnet.name
   address_prefixes     = [var.dev_pe_subnet_prefix]
+
+  private_endpoint_network_policies = "Enabled"
+}
+
+resource "azurerm_network_security_group" "dev_pe" {
+  name                = "nsg-${var.prefix}-pe-dev-${var.location_code}${var.naming_suffix}"
+  location            = var.location
+  resource_group_name = azurerm_resource_group.dev_vnet_rg.name
+  tags                = merge(var.tags, { environment = "development", purpose = "private-endpoints" })
+}
+
+resource "azurerm_subnet_network_security_group_association" "dev_pe" {
+  subnet_id                 = azurerm_subnet.dev_pe.id
+  network_security_group_id = azurerm_network_security_group.dev_pe.id
 }
 
 # Shared Log Analytics & compute identities (flat network)
@@ -391,6 +205,62 @@ resource "azurerm_user_assigned_identity" "prod_cc" {
   tags                = merge(var.tags, { environment = "production", purpose = "prod", component = "compute-mi" })
 }
 
+resource "azurerm_user_assigned_identity" "dev_ci" {
+  name                = "dev-mi-compute-instance"
+  location            = var.location
+  resource_group_name = azurerm_resource_group.dev_workspace_rg.name
+  tags                = merge(var.tags, { environment = "development", purpose = "dev", component = "compute-instance-mi" })
+}
+
+resource "azurerm_user_assigned_identity" "prod_ci" {
+  name                = "prod-mi-compute-instance"
+  location            = var.location
+  resource_group_name = azurerm_resource_group.prod_workspace_rg.name
+  tags                = merge(var.tags, { environment = "production", purpose = "prod", component = "compute-instance-mi" })
+}
+
+resource "azurerm_user_assigned_identity" "dev_online_endpoint" {
+  name                = "dev-mi-online-endpoint"
+  location            = var.location
+  resource_group_name = azurerm_resource_group.dev_workspace_rg.name
+  tags                = merge(var.tags, { environment = "development", purpose = "dev", component = "online-endpoint-mi" })
+}
+
+resource "azurerm_user_assigned_identity" "prod_online_endpoint" {
+  name                = "prod-mi-online-endpoint"
+  location            = var.location
+  resource_group_name = azurerm_resource_group.prod_workspace_rg.name
+  tags                = merge(var.tags, { environment = "production", purpose = "prod", component = "online-endpoint-mi" })
+}
+
+resource "terraform_data" "validate_dev_cmk_configuration" {
+  input = {
+    provision_prerequisites = var.dev_provision_cmk_prerequisites
+    workspace_encryption    = var.dev_workspace_encryption
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.dev_workspace_encryption != "cmk" || var.dev_provision_cmk_prerequisites
+      error_message = "dev_workspace_encryption can be cmk only when dev_provision_cmk_prerequisites is true."
+    }
+  }
+}
+
+resource "terraform_data" "validate_prod_cmk_configuration" {
+  input = {
+    provision_prerequisites = var.prod_provision_cmk_prerequisites
+    workspace_encryption    = var.prod_workspace_encryption
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.prod_workspace_encryption != "cmk" || var.prod_provision_cmk_prerequisites
+      error_message = "prod_workspace_encryption can be cmk only when prod_provision_cmk_prerequisites is true."
+    }
+  }
+}
+
 # Dev Managed Identity Module
 module "dev_managed_umi" {
   source = "./modules/aml-managed-umi"
@@ -408,23 +278,34 @@ module "dev_managed_umi" {
   key_vault_purge_protection_enabled = var.key_vault_purge_protection_enabled
   sub_id                             = var.subscription_id
 
-  # Network configuration
   vnet_address_space          = "10.1.0.0/16"
   subnet_address_prefix       = "10.1.1.0/24"
   workload_vnet_location      = var.location
   workload_vnet_location_code = var.location_code
-  # Use shared DNS resource group for AML private DNS zones
-  resource_group_name_dns = azurerm_resource_group.shared_dns_rg.name
+  resource_group_name_dns     = azurerm_resource_group.shared_dns_rg.name
 
-
-  # Use shared AML DNS zones (per-env AML zones disabled in dev_vnet)
   dns_zone_aml_api_id       = azurerm_private_dns_zone.shared_aml_api.id
   dns_zone_aml_notebooks_id = azurerm_private_dns_zone.shared_aml_notebooks.id
   dns_zone_aml_instances_id = azurerm_private_dns_zone.shared_aml_instances.id
+  dns_zone_blob_id          = azurerm_private_dns_zone.shared_blob.id
+  dns_zone_file_id          = azurerm_private_dns_zone.shared_file.id
+  dns_zone_table_id         = azurerm_private_dns_zone.shared_table.id
+  dns_zone_queue_id         = azurerm_private_dns_zone.shared_queue.id
+  dns_zone_dfs_id           = azurerm_private_dns_zone.shared_dfs.id
+  dns_zone_keyvault_id      = azurerm_private_dns_zone.shared_vault.id
+  dns_zone_acr_id           = azurerm_private_dns_zone.shared_acr.id
 
-  # Pass compute cluster identity from VNet module
-  compute_cluster_identity_id  = azurerm_user_assigned_identity.dev_cc.id
-  compute_cluster_principal_id = azurerm_user_assigned_identity.dev_cc.principal_id
+  compute_cluster_identity_id            = azurerm_user_assigned_identity.dev_cc.id
+  compute_cluster_principal_id           = azurerm_user_assigned_identity.dev_cc.principal_id
+  compute_instance_identity_id           = azurerm_user_assigned_identity.dev_ci.id
+  compute_instance_principal_id          = azurerm_user_assigned_identity.dev_ci.principal_id
+  online_endpoint_identity_id            = azurerm_user_assigned_identity.dev_online_endpoint.id
+  online_endpoint_principal_id           = azurerm_user_assigned_identity.dev_online_endpoint.principal_id
+  online_endpoint_deployer_principal_ids = var.online_endpoint_deployer_principal_ids
+
+  provision_cmk_prerequisites = var.dev_provision_cmk_prerequisites
+  workspace_encryption        = var.dev_workspace_encryption
+  key_vault_cmk_rbac_enabled  = var.key_vault_cmk_rbac_enabled
 
   tags = merge(var.tags, {
     environment = "development"
@@ -432,17 +313,15 @@ module "dev_managed_umi" {
   })
 
   depends_on = [
-    azurerm_role_assignment.sp_dev_workspace_contributor,
-    azurerm_role_assignment.sp_dev_workspace_user_access_admin,
-    azurerm_role_assignment.sp_dev_workspace_network_contributor,
     azurerm_virtual_network.dev_vnet,
     azurerm_log_analytics_workspace.dev_logs,
-    azurerm_user_assigned_identity.dev_cc
+    azurerm_user_assigned_identity.dev_cc,
+    azurerm_user_assigned_identity.dev_ci,
+    azurerm_user_assigned_identity.dev_online_endpoint,
+    terraform_data.validate_dev_cmk_configuration
   ]
 }
 
-
-# Dev Registry Module
 module "dev_registry" {
   source = "./modules/aml-registry-smi"
 
@@ -454,28 +333,21 @@ module "dev_registry" {
   resource_prefixes   = local.resource_prefixes
   resource_group_name = azurerm_resource_group.dev_registry_rg.name
 
-  # Additional required variables
-  workload_vnet_location           = var.location
-  workload_vnet_location_code      = var.location_code
-  resource_group_name_dns          = azurerm_resource_group.shared_dns_rg.name
-  subnet_id                        = azurerm_subnet.dev_pe.id
-  sub_id                           = var.subscription_id
-  log_analytics_workspace_id       = azurerm_log_analytics_workspace.dev_logs.id
-  managed_rg_assigned_principal_id = azuread_service_principal.deployment_sp.object_id
-  # Provide shared AML API private DNS zone id for registry private endpoint
-  dns_zone_aml_api_id = azurerm_private_dns_zone.shared_aml_api.id
-
+  workload_vnet_location            = var.location
+  workload_vnet_location_code       = var.location_code
+  resource_group_name_dns           = azurerm_resource_group.shared_dns_rg.name
+  subnet_id                         = azurerm_subnet.dev_pe.id
+  sub_id                            = var.subscription_id
+  log_analytics_workspace_id        = azurerm_log_analytics_workspace.dev_logs.id
+  managed_rg_assigned_principal_ids = var.registry_managed_rg_assigned_principal_ids
+  dns_zone_aml_api_id               = azurerm_private_dns_zone.shared_aml_api.id
+  dns_zone_blob_id                  = azurerm_private_dns_zone.shared_blob.id
+  dns_zone_acr_id                   = azurerm_private_dns_zone.shared_acr.id
 
   tags = merge(var.tags, {
     environment = "development"
     purpose     = "dev"
   })
-
-  depends_on = [
-    azurerm_role_assignment.sp_dev_registry_contributor,
-    azurerm_role_assignment.sp_dev_registry_user_access_admin,
-    azurerm_role_assignment.sp_dev_registry_network_contributor
-  ]
 }
 
 # ===============================
@@ -489,160 +361,6 @@ resource "azurerm_virtual_network" "prod_vnet" {
   resource_group_name = azurerm_resource_group.prod_vnet_rg.name
   dns_servers         = var.dns_servers
   tags                = merge(var.tags, { environment = "production", purpose = "prod", component = "vnet" })
-  depends_on = [
-    azurerm_role_assignment.sp_prod_vnet_contributor,
-    azurerm_role_assignment.sp_prod_vnet_user_access_admin,
-    azurerm_role_assignment.sp_prod_vnet_network_contributor
-  ]
-}
-
-resource "azurerm_subnet" "prod_bastion" {
-  name                 = "AzureBastionSubnet"
-  resource_group_name  = azurerm_resource_group.prod_vnet_rg.name
-  virtual_network_name = azurerm_virtual_network.prod_vnet.name
-  address_prefixes     = [var.bastion_subnet_prefix]
-}
-
-# ===============================
-# Remote access is provided exclusively via Azure Bastion to a Windows DSVM jumpbox.
-# No VPN gateway is deployed.
-# ===============================
-resource "azurerm_subnet" "prod_vm" {
-  name                 = "snet-${var.prefix}-vm-prod-${var.location_code}${var.naming_suffix}"
-  resource_group_name  = azurerm_resource_group.prod_vnet_rg.name
-  virtual_network_name = azurerm_virtual_network.prod_vnet.name
-  address_prefixes     = [var.vm_subnet_prefix]
-}
-
-resource "azurerm_network_security_group" "prod_vm_nsg" {
-  name                = "nsg-${var.prefix}-vm-prod-${var.location_code}${var.naming_suffix}"
-  location            = var.location
-  resource_group_name = azurerm_resource_group.prod_vnet_rg.name
-  tags                = merge(var.tags, { environment = "production", purpose = "prod", component = "vm" })
-
-  # Allow Bastion host to RDP into VMs in this subnet
-  security_rule {
-    name                       = "allow-bastion-rdp"
-    priority                   = 200
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "3389"
-    source_address_prefix      = azurerm_subnet.prod_bastion.address_prefixes[0]
-    destination_address_prefix = "*"
-  }
-
-  security_rule {
-    name                       = "deny-inbound-all"
-    priority                   = 4096
-    direction                  = "Inbound"
-    access                     = "Deny"
-    protocol                   = "*"
-    source_port_range          = "*"
-    destination_port_range     = "*"
-    source_address_prefix      = "*"
-    destination_address_prefix = "*"
-  }
-
-  security_rule {
-    name                       = "allow-outbound-internet"
-    priority                   = 100
-    direction                  = "Outbound"
-    access                     = "Allow"
-    protocol                   = "*"
-    source_port_range          = "*"
-    destination_port_range     = "*"
-    source_address_prefix      = "*"
-    destination_address_prefix = "Internet"
-  }
-}
-
-resource "azurerm_subnet_network_security_group_association" "prod_vm_nsg_assoc" {
-  subnet_id                 = azurerm_subnet.prod_vm.id
-  network_security_group_id = azurerm_network_security_group.prod_vm_nsg.id
-}
-
-resource "azurerm_public_ip" "bastion_pip" {
-  name                = "pip-${var.prefix}-bastion-prod-${var.location_code}${var.naming_suffix}"
-  location            = var.location
-  resource_group_name = azurerm_resource_group.prod_vnet_rg.name
-  allocation_method   = "Static"
-  sku                 = "Standard"
-  tags                = merge(var.tags, { environment = "production", purpose = "prod", component = "bastion" })
-}
-
-# Optional: Assign a public IP to the jumpbox NIC (prod)
-resource "azurerm_public_ip" "prod_vm" {
-  name                = "pip-${var.prefix}-vm-prod-${var.location_code}${var.naming_suffix}"
-  location            = var.location
-  resource_group_name = azurerm_resource_group.prod_vnet_rg.name
-  allocation_method   = "Static"
-  sku                 = "Standard"
-  tags                = merge(var.tags, { environment = "production", purpose = "prod", component = "vm" })
-}
-
-resource "azurerm_bastion_host" "prod" {
-  name                = "bas-${var.prefix}-prod-${var.location_code}${var.naming_suffix}"
-  location            = var.location
-  resource_group_name = azurerm_resource_group.prod_vnet_rg.name
-
-  ip_configuration {
-    name                 = "configuration"
-    subnet_id            = azurerm_subnet.prod_bastion.id
-    public_ip_address_id = azurerm_public_ip.bastion_pip.id
-  }
-
-  sku = "Standard"
-
-  tags = merge(var.tags, { environment = "production", purpose = "prod", component = "bastion" })
-}
-
-resource "azurerm_network_interface" "prod_vm_nic" {
-  name                = "nic-${var.prefix}-vm-prod-${var.location_code}${var.naming_suffix}"
-  location            = var.location
-  resource_group_name = azurerm_resource_group.prod_vnet_rg.name
-
-  ip_configuration {
-    name                          = "ipconfig1"
-    subnet_id                     = azurerm_subnet.prod_vm.id
-    private_ip_address_allocation = "Dynamic"
-    public_ip_address_id          = azurerm_public_ip.prod_vm.id
-  }
-
-  tags = merge(var.tags, { environment = "production", purpose = "prod", component = "vm" })
-}
-
-resource "azurerm_windows_virtual_machine" "jumpbox" {
-  name                = "vm-${var.prefix}-jumpbox-prod-${var.location_code}${var.naming_suffix}"
-  location            = var.location
-  resource_group_name = azurerm_resource_group.prod_vnet_rg.name
-  size                = "Standard_DS4_v2"
-  admin_username      = var.vm_admin_username
-  admin_password      = var.vm_admin_password
-  # Set a short NetBIOS computer name (<= 15 chars) to satisfy Windows naming limits
-  computer_name = "jumpbox"
-  network_interface_ids = [
-    azurerm_network_interface.prod_vm_nic.id
-  ]
-
-  os_disk {
-    caching              = "ReadWrite"
-    storage_account_type = "Premium_LRS"
-  }
-
-  source_image_reference {
-    publisher = "microsoft-dsvm"
-    offer     = "dsvm-win-2022"
-    sku       = "winserver-2022"
-    version   = "latest"
-  }
-
-  boot_diagnostics {
-    storage_account_uri = null
-  }
-
-  tags = merge(var.tags, { environment = "production", purpose = "prod", component = "vm" })
 }
 
 resource "azurerm_subnet" "prod_pe" {
@@ -650,6 +368,20 @@ resource "azurerm_subnet" "prod_pe" {
   resource_group_name  = azurerm_resource_group.prod_vnet_rg.name
   virtual_network_name = azurerm_virtual_network.prod_vnet.name
   address_prefixes     = [var.prod_pe_subnet_prefix]
+
+  private_endpoint_network_policies = "Enabled"
+}
+
+resource "azurerm_network_security_group" "prod_pe" {
+  name                = "nsg-${var.prefix}-pe-prod-${var.location_code}${var.naming_suffix}"
+  location            = var.location
+  resource_group_name = azurerm_resource_group.prod_vnet_rg.name
+  tags                = merge(var.tags, { environment = "production", purpose = "private-endpoints" })
+}
+
+resource "azurerm_subnet_network_security_group_association" "prod_pe" {
+  subnet_id                 = azurerm_subnet.prod_pe.id
+  network_security_group_id = azurerm_network_security_group.prod_pe.id
 }
 
 # Optional VNet peering between environments for admin VM access
@@ -718,10 +450,26 @@ module "prod_managed_umi" {
   dns_zone_aml_api_id       = azurerm_private_dns_zone.shared_aml_api.id
   dns_zone_aml_notebooks_id = azurerm_private_dns_zone.shared_aml_notebooks.id
   dns_zone_aml_instances_id = azurerm_private_dns_zone.shared_aml_instances.id
+  dns_zone_blob_id          = azurerm_private_dns_zone.shared_blob.id
+  dns_zone_file_id          = azurerm_private_dns_zone.shared_file.id
+  dns_zone_table_id         = azurerm_private_dns_zone.shared_table.id
+  dns_zone_queue_id         = azurerm_private_dns_zone.shared_queue.id
+  dns_zone_dfs_id           = azurerm_private_dns_zone.shared_dfs.id
+  dns_zone_keyvault_id      = azurerm_private_dns_zone.shared_vault.id
+  dns_zone_acr_id           = azurerm_private_dns_zone.shared_acr.id
 
   # Pass compute cluster identity (flat architecture)
-  compute_cluster_identity_id  = azurerm_user_assigned_identity.prod_cc.id
-  compute_cluster_principal_id = azurerm_user_assigned_identity.prod_cc.principal_id
+  compute_cluster_identity_id            = azurerm_user_assigned_identity.prod_cc.id
+  compute_cluster_principal_id           = azurerm_user_assigned_identity.prod_cc.principal_id
+  compute_instance_identity_id           = azurerm_user_assigned_identity.prod_ci.id
+  compute_instance_principal_id          = azurerm_user_assigned_identity.prod_ci.principal_id
+  online_endpoint_identity_id            = azurerm_user_assigned_identity.prod_online_endpoint.id
+  online_endpoint_principal_id           = azurerm_user_assigned_identity.prod_online_endpoint.principal_id
+  online_endpoint_deployer_principal_ids = var.online_endpoint_deployer_principal_ids
+
+  provision_cmk_prerequisites = var.prod_provision_cmk_prerequisites
+  workspace_encryption        = var.prod_workspace_encryption
+  key_vault_cmk_rbac_enabled  = var.key_vault_cmk_rbac_enabled
 
   # Cross-environment configuration for asset promotion (will be applied after dev registry is created)
   # (Removed unused cross-env inputs; RBAC is centralized in this file and no module-level cross-env is used.)
@@ -732,12 +480,12 @@ module "prod_managed_umi" {
   })
 
   depends_on = [
-    azurerm_role_assignment.sp_prod_workspace_contributor,
-    azurerm_role_assignment.sp_prod_workspace_user_access_admin,
-    azurerm_role_assignment.sp_prod_workspace_network_contributor,
     module.dev_registry,
     azurerm_log_analytics_workspace.prod_logs,
-    azurerm_user_assigned_identity.prod_cc
+    azurerm_user_assigned_identity.prod_cc,
+    azurerm_user_assigned_identity.prod_ci,
+    azurerm_user_assigned_identity.prod_online_endpoint,
+    terraform_data.validate_prod_cmk_configuration
   ]
 }
 
@@ -755,15 +503,17 @@ module "prod_registry" {
   resource_group_name = azurerm_resource_group.prod_registry_rg.name
 
   # Additional required variables
-  workload_vnet_location           = var.location
-  workload_vnet_location_code      = var.location_code
-  resource_group_name_dns          = azurerm_resource_group.shared_dns_rg.name
-  subnet_id                        = azurerm_subnet.prod_pe.id
-  sub_id                           = var.subscription_id
-  log_analytics_workspace_id       = azurerm_log_analytics_workspace.prod_logs.id
-  managed_rg_assigned_principal_id = azuread_service_principal.deployment_sp.object_id
+  workload_vnet_location            = var.location
+  workload_vnet_location_code       = var.location_code
+  resource_group_name_dns           = azurerm_resource_group.shared_dns_rg.name
+  subnet_id                         = azurerm_subnet.prod_pe.id
+  sub_id                            = var.subscription_id
+  log_analytics_workspace_id        = azurerm_log_analytics_workspace.prod_logs.id
+  managed_rg_assigned_principal_ids = var.registry_managed_rg_assigned_principal_ids
   # Provide shared AML API private DNS zone id for registry private endpoint
   dns_zone_aml_api_id = azurerm_private_dns_zone.shared_aml_api.id
+  dns_zone_blob_id    = azurerm_private_dns_zone.shared_blob.id
+  dns_zone_acr_id     = azurerm_private_dns_zone.shared_acr.id
 
 
   tags = merge(var.tags, {
@@ -771,11 +521,6 @@ module "prod_registry" {
     purpose     = "prod"
   })
 
-  depends_on = [
-    azurerm_role_assignment.sp_prod_registry_contributor,
-    azurerm_role_assignment.sp_prod_registry_user_access_admin,
-    azurerm_role_assignment.sp_prod_registry_network_contributor
-  ]
 }
 
 # ===============================
@@ -1007,6 +752,12 @@ resource "azurerm_private_dns_zone" "shared_table" {
   tags                = merge(var.tags, { environment = "shared", scope = "table" })
 }
 
+resource "azurerm_private_dns_zone" "shared_dfs" {
+  name                = var.private_dns_zone_names.dfs
+  resource_group_name = azurerm_resource_group.shared_dns_rg.name
+  tags                = merge(var.tags, { environment = "shared", scope = "dfs" })
+}
+
 resource "azurerm_private_dns_zone" "shared_vault" {
   name                = var.private_dns_zone_names.vault
   resource_group_name = azurerm_resource_group.shared_dns_rg.name
@@ -1056,6 +807,15 @@ resource "azurerm_private_dns_zone_virtual_network_link" "shared_dev_table" {
   virtual_network_id    = azurerm_virtual_network.dev_vnet.id
   registration_enabled  = false
   tags                  = merge(var.tags, { environment = "development", scope = "dev-table-shared" })
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "shared_dev_dfs" {
+  name                  = "dev-shared-dfs"
+  resource_group_name   = azurerm_resource_group.shared_dns_rg.name
+  private_dns_zone_name = azurerm_private_dns_zone.shared_dfs.name
+  virtual_network_id    = azurerm_virtual_network.dev_vnet.id
+  registration_enabled  = false
+  tags                  = merge(var.tags, { environment = "development", scope = "dev-dfs-shared" })
 }
 
 resource "azurerm_private_dns_zone_virtual_network_link" "shared_dev_vault" {
@@ -1111,6 +871,15 @@ resource "azurerm_private_dns_zone_virtual_network_link" "shared_prod_table" {
   virtual_network_id    = azurerm_virtual_network.prod_vnet.id
   registration_enabled  = false
   tags                  = merge(var.tags, { environment = "production", scope = "prod-table-shared" })
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "shared_prod_dfs" {
+  name                  = "prod-shared-dfs"
+  resource_group_name   = azurerm_resource_group.shared_dns_rg.name
+  private_dns_zone_name = azurerm_private_dns_zone.shared_dfs.name
+  virtual_network_id    = azurerm_virtual_network.prod_vnet.id
+  registration_enabled  = false
+  tags                  = merge(var.tags, { environment = "production", scope = "prod-dfs-shared" })
 }
 
 resource "azurerm_private_dns_zone_virtual_network_link" "shared_prod_vault" {
@@ -1224,12 +993,6 @@ resource "null_resource" "deployment_complete" {
     azurerm_virtual_network.dev_vnet,
     azurerm_subnet.dev_pe,
     azurerm_virtual_network.prod_vnet,
-    azurerm_subnet.prod_bastion,
-    azurerm_subnet.prod_vm,
-    azurerm_public_ip.bastion_pip,
-    azurerm_bastion_host.prod,
-    azurerm_network_interface.prod_vm_nic,
-    azurerm_windows_virtual_machine.jumpbox,
     azurerm_subnet.prod_pe,
 
     # Shared AML private DNS zones and links
@@ -1303,6 +1066,22 @@ resource "azurerm_role_assignment" "user_dev_storage_file_privileged_contributor
   depends_on           = [null_resource.deployment_complete]
 }
 
+resource "azurerm_role_assignment" "user_dev_storage_table_contributor" {
+  count                = local._user_role_enable && local.create_direct_user_ws_sa_roles ? 1 : 0
+  scope                = module.dev_managed_umi.storage_account_id
+  role_definition_name = "Storage Table Data Contributor"
+  principal_id         = data.azurerm_client_config.current.object_id
+  depends_on           = [null_resource.deployment_complete]
+}
+
+resource "azurerm_role_assignment" "user_dev_storage_queue_contributor" {
+  count                = local._user_role_enable && local.create_direct_user_ws_sa_roles ? 1 : 0
+  scope                = module.dev_managed_umi.storage_account_id
+  role_definition_name = "Storage Queue Data Contributor"
+  principal_id         = data.azurerm_client_config.current.object_id
+  depends_on           = [null_resource.deployment_complete]
+}
+
 resource "azurerm_role_assignment" "user_dev_registry_user" {
   count                = local._user_role_enable ? 1 : 0
   scope                = module.dev_registry.registry_id
@@ -1364,6 +1143,22 @@ resource "azurerm_role_assignment" "user_prod_storage_file_privileged_contributo
   count                = local._user_role_enable && local.create_direct_user_ws_sa_roles ? 1 : 0
   scope                = module.prod_managed_umi.storage_account_id
   role_definition_name = "Storage File Data Privileged Contributor"
+  principal_id         = data.azurerm_client_config.current.object_id
+  depends_on           = [null_resource.deployment_complete]
+}
+
+resource "azurerm_role_assignment" "user_prod_storage_table_contributor" {
+  count                = local._user_role_enable && local.create_direct_user_ws_sa_roles ? 1 : 0
+  scope                = module.prod_managed_umi.storage_account_id
+  role_definition_name = "Storage Table Data Contributor"
+  principal_id         = data.azurerm_client_config.current.object_id
+  depends_on           = [null_resource.deployment_complete]
+}
+
+resource "azurerm_role_assignment" "user_prod_storage_queue_contributor" {
+  count                = local._user_role_enable && local.create_direct_user_ws_sa_roles ? 1 : 0
+  scope                = module.prod_managed_umi.storage_account_id
+  role_definition_name = "Storage Queue Data Contributor"
   principal_id         = data.azurerm_client_config.current.object_id
   depends_on           = [null_resource.deployment_complete]
 }

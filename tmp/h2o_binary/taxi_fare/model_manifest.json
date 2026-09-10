@@ -1,0 +1,24 @@
+{
+  "model_name": "taxi-fare-h2o-binary",
+  "model_version": "1",
+  "model_format": "h2o_binary",
+  "h2o_version": "3.46.0.12",
+  "model_file": "taxi-fare-gbm",
+  "target": "fareAmount",
+  "features": [
+    "vendorID",
+    "passengerCount",
+    "tripDistance",
+    "paymentType",
+    "pickupHour"
+  ],
+  "categorical_features": [
+    "vendorID",
+    "paymentType"
+  ],
+  "files": {
+    "taxi-fare-gbm": "faa4cf0cdb5cf18091c0b7b2cd846d9b02a42d6c1f7ce0d6bcbd0dfdb672247f",
+    "golden_input.csv": "8c44d35212bd127d08a689e536840cb80e80ccdf1ef9b2cff022ffd04ed203fd",
+    "golden_expected.csv": "4832dae196d92885c9ed0af739ace089aaf286cb375e8263956d955e2548dbf3"
+  }
+}

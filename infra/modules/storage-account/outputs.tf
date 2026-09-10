@@ -8,6 +8,11 @@ output "id" {
   description = "The resource id of the storage account"
 }
 
+output "principal_id" {
+  value       = azurerm_storage_account.storage_account.identity[0].principal_id
+  description = "The principal ID of the storage account system-assigned managed identity"
+}
+
 output "endpoint_blob" {
   value       = azurerm_storage_account.storage_account.primary_blob_endpoint
   description = "The endpoint URL for blob storage"

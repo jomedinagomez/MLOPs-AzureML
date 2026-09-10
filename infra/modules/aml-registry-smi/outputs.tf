@@ -21,5 +21,15 @@ output "resource_group_id" {
   value       = local.rg_id
 }
 
+output "managed_storage_account_id" {
+  description = "ID of the storage account managed by the Azure ML registry"
+  value       = local.managed_storage_account_id
+}
+
+output "managed_container_registry_id" {
+  description = "ID of the container registry managed by the Azure ML registry"
+  value       = local.managed_container_registry_id
+}
+
 ##### Microsoft-Managed Resources Outputs
 #####

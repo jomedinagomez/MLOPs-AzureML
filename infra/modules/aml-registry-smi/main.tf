@@ -5,6 +5,9 @@ locals {
   rg_name         = var.resource_group_name
   rg_id           = "/subscriptions/${data.azurerm_client_config.identity_config.subscription_id}/resourceGroups/${local.rg_name}"
   resolved_suffix = coalesce(var.naming_suffix, "")
+
+  managed_storage_account_id    = try(azapi_resource.registry.output.properties.regionDetails[0].storageAccountDetails[0].systemCreatedStorageAccount.armResourceId.resourceId, null)
+  managed_container_registry_id = try(azapi_resource.registry.output.properties.regionDetails[0].acrDetails[0].systemCreatedAcrAccount.armResourceId.resourceId, null)
 }
 
 ## Resource group is expected to be created by the root module
@@ -49,8 +52,8 @@ resource "azapi_resource" "registry" {
       ]
       managedResourceGroupSettings = {
         assignedIdentities = [
-          {
-            principalId = var.managed_rg_assigned_principal_id
+          for principal_id in sort(tolist(var.managed_rg_assigned_principal_ids)) : {
+            principalId = principal_id
           }
         ]
       }
@@ -61,14 +64,12 @@ resource "azapi_resource" "registry" {
   }
 
   response_export_values = [
-    "identity.principalId"
+    "identity.principalId",
+    "properties.regionDetails"
   ]
 
   lifecycle {
-    ignore_changes = [
-      tags["created_date"],
-      tags["created_by"]
-    ]
+    ignore_changes = [tags]
   }
 }
 
@@ -80,6 +81,11 @@ resource "time_sleep" "wait_registry_identity" {
     azapi_resource.registry
   ]
   create_duration = "10s"
+
+  triggers = {
+    principal_id = azapi_resource.registry.output.identity.principalId
+    registry_id  = azapi_resource.registry.id
+  }
 }
 
 ##### Create the Private Endpoints for the registry
@@ -105,6 +111,44 @@ module "private_endpoint_aml_registry" {
   private_dns_zone_ids = [local.dns_zone_aml_api_id]
 }
 
+module "private_endpoint_registry_storage_blob" {
+  source = "../private-endpoint"
+
+  naming_suffix       = local.resolved_suffix
+  location            = var.workload_vnet_location
+  location_code       = var.workload_vnet_location_code
+  resource_group_name = local.rg_name
+  tags                = var.tags
+
+  resource_name    = basename(local.managed_storage_account_id)
+  resource_id      = local.managed_storage_account_id
+  subresource_name = "blob"
+
+  subnet_id            = var.subnet_id
+  private_dns_zone_ids = [local.dns_zone_blob_id]
+
+  depends_on = [time_sleep.wait_registry_identity]
+}
+
+module "private_endpoint_registry_acr" {
+  source = "../private-endpoint"
+
+  naming_suffix       = local.resolved_suffix
+  location            = var.workload_vnet_location
+  location_code       = var.workload_vnet_location_code
+  resource_group_name = local.rg_name
+  tags                = var.tags
+
+  resource_name    = basename(local.managed_container_registry_id)
+  resource_id      = local.managed_container_registry_id
+  subresource_name = "registry"
+
+  subnet_id            = var.subnet_id
+  private_dns_zone_ids = [local.dns_zone_acr_id]
+
+  depends_on = [module.private_endpoint_registry_storage_blob]
+}
+
 // RBAC assignments removed — centralized in infra/main.tf
 
 ##### Diagnostic Settings for Monitoring
@@ -126,154 +170,110 @@ resource "azurerm_monitor_diagnostic_setting" "registry_diagnostics" {
   }
 }
 
-##### Diagnostic Settings for Microsoft-Managed Registry Resources
-#####
+resource "azurerm_monitor_diagnostic_setting" "managed_storage" {
+  name                       = "managed-storage-diagnostics"
+  target_resource_id         = local.managed_storage_account_id
+  log_analytics_workspace_id = var.log_analytics_workspace_id
 
-# Note: Registry managed resources are created by Azure and their resource IDs
-# are not immediately available through the azapi_resource output.
-# We use null_resource with Azure CLI to configure diagnostic settings after
-# the registry and its managed resources are fully provisioned.
-
-# Configure diagnostic settings for Microsoft-managed registry resources
-resource "null_resource" "registry_managed_resources_diagnostics" {
-  depends_on = [
-    azapi_resource.registry,
-    time_sleep.wait_registry_identity
-  ]
-
-  # Configure diagnostics when the resource is created/updated
-  provisioner "local-exec" {
-    command = <<-EOT
-      $registryName = "${azapi_resource.registry.name}"
-  $resourceGroup = "${local.rg_name}"
-      $workspaceId = "${var.log_analytics_workspace_id}"
-      
-      Write-Host "Configuring diagnostic settings for registry managed resources: $registryName"
-      
-      # Retry until all resources are configured (max 10 minutes)
-      $maxAttempts = 20
-      $attempt = 1
-      $storageAccountConfigured = $false
-      $blobConfigured = $false
-      $fileConfigured = $false
-      $queueConfigured = $false
-      $tableConfigured = $false
-      $acrConfigured = $false
-      
-      while (($attempt -le $maxAttempts) -and (-not ($storageAccountConfigured -and $blobConfigured -and $fileConfigured -and $queueConfigured -and $tableConfigured -and $acrConfigured))) {
-        Write-Host "Attempt $attempt/$maxAttempts - Checking for managed resources..."
-        
-        # Configure storage account diagnostics (metrics only)
-        if (-not $storageAccountConfigured) {
-          # Look for managed resource group following pattern: azureml-rg-{registryName}_{guid}
-          $managedRgPattern = "azureml-rg-$registryName"
-          $managedRgs = az group list --query "[?starts_with(name, '$managedRgPattern')].name" --output tsv 2>$null
-          
-          foreach ($rg in $managedRgs) {
-            if ($rg) {
-              Write-Host "Checking managed resource group: $rg"
-              $storage = az storage account list --resource-group $rg --query "[0].id" --output tsv 2>$null
-              if ($storage) {
-                Write-Host "Found managed storage account: $storage"
-                # Storage account only supports metrics, not logs
-                az monitor diagnostic-settings create --name "managed-storage-account-diagnostics" --resource $storage --workspace $workspaceId --metrics '[{"category":"Transaction","enabled":true},{"category":"Capacity","enabled":true}]' 2>$null
-                if ($LASTEXITCODE -eq 0) { 
-                  $storageAccountConfigured = $true
-                  Write-Host "✓ Storage account diagnostics configured"
-                }
-                
-                # Configure blob service diagnostics (logs and metrics)
-                if (-not $blobConfigured) {
-                  $blobService = "$storage/blobServices/default"
-                  az monitor diagnostic-settings create --name "managed-blob-diagnostics" --resource $blobService --workspace $workspaceId --logs '[{"category":"StorageRead","enabled":true},{"category":"StorageWrite","enabled":true},{"category":"StorageDelete","enabled":true}]' --metrics '[{"category":"Transaction","enabled":true},{"category":"Capacity","enabled":true}]' 2>$null
-                  if ($LASTEXITCODE -eq 0) { 
-                    $blobConfigured = $true
-                    Write-Host "✓ Blob service diagnostics configured"
-                  }
-                }
-                
-                # Configure file service diagnostics (logs and metrics)
-                if (-not $fileConfigured) {
-                  $fileService = "$storage/fileServices/default"
-                  az monitor diagnostic-settings create --name "managed-file-diagnostics" --resource $fileService --workspace $workspaceId --logs '[{"category":"StorageRead","enabled":true},{"category":"StorageWrite","enabled":true},{"category":"StorageDelete","enabled":true}]' --metrics '[{"category":"Transaction","enabled":true},{"category":"Capacity","enabled":true}]' 2>$null
-                  if ($LASTEXITCODE -eq 0) { 
-                    $fileConfigured = $true
-                    Write-Host "✓ File service diagnostics configured"
-                  }
-                }
-                
-                # Configure queue service diagnostics (logs and metrics)
-                if (-not $queueConfigured) {
-                  $queueService = "$storage/queueServices/default"
-                  az monitor diagnostic-settings create --name "managed-queue-diagnostics" --resource $queueService --workspace $workspaceId --logs '[{"category":"StorageRead","enabled":true},{"category":"StorageWrite","enabled":true},{"category":"StorageDelete","enabled":true}]' --metrics '[{"category":"Transaction","enabled":true},{"category":"Capacity","enabled":true}]' 2>$null
-                  if ($LASTEXITCODE -eq 0) { 
-                    $queueConfigured = $true
-                    Write-Host "✓ Queue service diagnostics configured"
-                  }
-                }
-                
-                # Configure table service diagnostics (logs and metrics)
-                if (-not $tableConfigured) {
-                  $tableService = "$storage/tableServices/default"
-                  az monitor diagnostic-settings create --name "managed-table-diagnostics" --resource $tableService --workspace $workspaceId --logs '[{"category":"StorageRead","enabled":true},{"category":"StorageWrite","enabled":true},{"category":"StorageDelete","enabled":true}]' --metrics '[{"category":"Transaction","enabled":true},{"category":"Capacity","enabled":true}]' 2>$null
-                  if ($LASTEXITCODE -eq 0) { 
-                    $tableConfigured = $true
-                    Write-Host "✓ Table service diagnostics configured"
-                  }
-                }
-                
-                break
-              }
-            }
-          }
-        }
-        
-        # Configure ACR diagnostics  
-        if (-not $acrConfigured) {
-          # Look for managed resource group following pattern: azureml-rg-{registryName}_{guid}
-          $managedRgPattern = "azureml-rg-$registryName"
-          $managedRgs = az group list --query "[?starts_with(name, '$managedRgPattern')].name" --output tsv 2>$null
-          
-          foreach ($rg in $managedRgs) {
-            if ($rg) {
-              $acr = az acr list --resource-group $rg --query "[0].id" --output tsv 2>$null
-              if ($acr) {
-                Write-Host "Found managed ACR: $acr"
-                az monitor diagnostic-settings create --name "managed-acr-diagnostics" --resource $acr --workspace $workspaceId --logs '[{"category":"ContainerRegistryRepositoryEvents","enabled":true},{"category":"ContainerRegistryLoginEvents","enabled":true}]' --metrics '[{"category":"AllMetrics","enabled":true}]' 2>$null
-                if ($LASTEXITCODE -eq 0) { 
-                  $acrConfigured = $true
-                  Write-Host "✓ ACR diagnostics configured"
-                  break
-                }
-              }
-            }
-          }
-        }
-        
-        if ($storageAccountConfigured -and $blobConfigured -and $fileConfigured -and $queueConfigured -and $tableConfigured -and $acrConfigured) {
-          Write-Host "✓ All diagnostics configured successfully"
-          break
-        }
-        
-        $attempt++
-        if ($attempt -le $maxAttempts) {
-          Start-Sleep -Seconds 30
-        }
-      }
-      
-      if (-not ($storageAccountConfigured -and $blobConfigured -and $fileConfigured -and $queueConfigured -and $tableConfigured -and $acrConfigured)) {
-        Write-Host "⚠ Timeout: Not all diagnostics could be configured"
-        exit 1
-      }
-    EOT
-
-    interpreter = ["PowerShell", "-Command"]
+  enabled_metric {
+    category = "Transaction"
   }
 
-  triggers = {
-    registry_id  = azapi_resource.registry.id
-    workspace_id = var.log_analytics_workspace_id
+  enabled_metric {
+    category = "Capacity"
   }
+
+  depends_on = [time_sleep.wait_registry_identity]
+}
+
+resource "azurerm_monitor_diagnostic_setting" "managed_storage_blob" {
+  name                       = "managed-blob-diagnostics"
+  target_resource_id         = "${local.managed_storage_account_id}/blobServices/default"
+  log_analytics_workspace_id = var.log_analytics_workspace_id
+
+  enabled_log {
+    category = "StorageRead"
+  }
+  enabled_log {
+    category = "StorageWrite"
+  }
+  enabled_log {
+    category = "StorageDelete"
+  }
+
+  depends_on = [azurerm_monitor_diagnostic_setting.managed_storage]
+}
+
+resource "azurerm_monitor_diagnostic_setting" "managed_storage_file" {
+  name                       = "managed-file-diagnostics"
+  target_resource_id         = "${local.managed_storage_account_id}/fileServices/default"
+  log_analytics_workspace_id = var.log_analytics_workspace_id
+
+  enabled_log {
+    category = "StorageRead"
+  }
+  enabled_log {
+    category = "StorageWrite"
+  }
+  enabled_log {
+    category = "StorageDelete"
+  }
+
+  depends_on = [azurerm_monitor_diagnostic_setting.managed_storage_blob]
+}
+
+resource "azurerm_monitor_diagnostic_setting" "managed_storage_queue" {
+  name                       = "managed-queue-diagnostics"
+  target_resource_id         = "${local.managed_storage_account_id}/queueServices/default"
+  log_analytics_workspace_id = var.log_analytics_workspace_id
+
+  enabled_log {
+    category = "StorageRead"
+  }
+  enabled_log {
+    category = "StorageWrite"
+  }
+  enabled_log {
+    category = "StorageDelete"
+  }
+
+  depends_on = [azurerm_monitor_diagnostic_setting.managed_storage_file]
+}
+
+resource "azurerm_monitor_diagnostic_setting" "managed_storage_table" {
+  name                       = "managed-table-diagnostics"
+  target_resource_id         = "${local.managed_storage_account_id}/tableServices/default"
+  log_analytics_workspace_id = var.log_analytics_workspace_id
+
+  enabled_log {
+    category = "StorageRead"
+  }
+  enabled_log {
+    category = "StorageWrite"
+  }
+  enabled_log {
+    category = "StorageDelete"
+  }
+
+  depends_on = [azurerm_monitor_diagnostic_setting.managed_storage_queue]
+}
+
+resource "azurerm_monitor_diagnostic_setting" "managed_acr" {
+  name                       = "managed-acr-diagnostics"
+  target_resource_id         = local.managed_container_registry_id
+  log_analytics_workspace_id = var.log_analytics_workspace_id
+
+  enabled_log {
+    category = "ContainerRegistryRepositoryEvents"
+  }
+  enabled_log {
+    category = "ContainerRegistryLoginEvents"
+  }
+  enabled_metric {
+    category = "AllMetrics"
+  }
+
+  depends_on = [time_sleep.wait_registry_identity]
 }
 
 

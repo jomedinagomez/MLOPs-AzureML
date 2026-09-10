@@ -8,6 +8,8 @@ locals {
 
   dns_zone_queue_id = var.dns_zone_queue_id != null ? var.dns_zone_queue_id : "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.queue.core.windows.net"
 
+  dns_zone_dfs_id = var.dns_zone_dfs_id != null ? var.dns_zone_dfs_id : "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.dfs.core.windows.net"
+
   dns_zone_keyvault_id = var.dns_zone_keyvault_id != null ? var.dns_zone_keyvault_id : "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net"
 
   dns_zone_acr_id = var.dns_zone_acr_id != null ? var.dns_zone_acr_id : "/subscriptions/${var.sub_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.azurecr.io"

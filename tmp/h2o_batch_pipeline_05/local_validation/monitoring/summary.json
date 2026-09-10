@@ -1,0 +1,23 @@
+{
+  "aml_run_id": "local",
+  "correlation_id": "notebook-05-local-golden",
+  "source_file": "golden_input.csv",
+  "model_name": "taxi-fare-h2o-binary",
+  "model_version": "1",
+  "model_sha256": "6e65a7d9ac23e9fdb0316eff017758a8c3ff584429711281a2ea27ed1509368b",
+  "h2o_version": "3.46.0.12",
+  "input_rows": 20,
+  "scored_rows": 20,
+  "rejected_rows": 0,
+  "reject_rate": 0.0,
+  "duration_seconds": 18.337461700008134,
+  "jvm_startup_seconds": 16.906900200003292,
+  "scoring_seconds": 1.282779200002551,
+  "rows_per_second": 1.0906634913375786,
+  "prediction_mean": 11.10223695505855,
+  "prediction_std": 6.749326873217339,
+  "prediction_min": 4.858547708382034,
+  "prediction_max": 34.823667359202304,
+  "quality_gate": "passed",
+  "mlflow_status": "skipped_local"
+}

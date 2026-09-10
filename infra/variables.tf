@@ -33,10 +33,9 @@ variable "tags" {
   description = "Default tags to apply to all resources"
   type        = map(string)
   default = {
-    project         = "ml-platform"
-    created_by      = "terraform"
-    owner           = "ml-team"
-    SecurityControl = "Ignore"
+    project    = "ml-platform"
+    created_by = "terraform"
+    owner      = "ml-team"
   }
 }
 
@@ -104,8 +103,6 @@ variable "prod_vnet_address_space" {
   default     = ["10.2.0.0/16"]
 }
 
-// Gateway subnet is not used; Bastion provides access.
-
 variable "prod_pe_subnet_prefix" {
   description = "CIDR prefix for the production private endpoints subnet"
   type        = string
@@ -113,9 +110,9 @@ variable "prod_pe_subnet_prefix" {
 }
 
 variable "dns_servers" {
-  description = "List of custom DNS servers to apply to both VNets (defaults to Azure-provided wire server)."
+  description = "List of custom DNS servers to apply to both VNets. Empty uses Azure-provided DNS."
   type        = list(string)
-  default     = ["168.63.129.16"]
+  default     = []
 }
 
 #############################
@@ -139,10 +136,72 @@ variable "log_analytics_retention_days" {
 variable "enable_auto_purge" {
   description = "Enable auto purge for AML resources where supported"
   type        = bool
+  default     = false
+}
+
+variable "dev_provision_cmk_prerequisites" {
+  description = "Provision development CMK resources while allowing the workspace to remain on PMK"
+  type        = bool
+  default     = false
+}
+
+variable "prod_provision_cmk_prerequisites" {
+  description = "Provision production CMK resources while allowing the workspace to remain on PMK"
+  type        = bool
+  default     = false
+}
+
+variable "dev_workspace_encryption" {
+  description = "Encryption mode for the development AML workspace"
+  type        = string
+  default     = "pmk"
+
+  validation {
+    condition     = contains(["pmk", "cmk"], var.dev_workspace_encryption)
+    error_message = "dev_workspace_encryption must be either pmk or cmk."
+  }
+}
+
+variable "prod_workspace_encryption" {
+  description = "Encryption mode for the production AML workspace"
+  type        = string
+  default     = "pmk"
+
+  validation {
+    condition     = contains(["pmk", "cmk"], var.prod_workspace_encryption)
+    error_message = "prod_workspace_encryption must be either pmk or cmk."
+  }
+}
+
+variable "key_vault_cmk_rbac_enabled" {
+  description = "Use Azure RBAC instead of access policies for CMK authorization"
+  type        = bool
   default     = true
 }
 
-// No VPN gateway variables; design is Bastion-only.
+variable "online_endpoint_deployer_principal_ids" {
+  description = "Object IDs allowed to attach the environment-specific online endpoint UMI"
+  type        = set(string)
+  default     = []
+}
+
+variable "registry_managed_rg_assigned_principal_ids" {
+  description = "Additional principal IDs granted access inside each AML registry managed resource group"
+  type        = set(string)
+  default     = []
+}
+
+variable "enable_data_collection_storage" {
+  description = "Provision private ADLS Gen2 storage and AML datastores for managed online endpoint data collection"
+  type        = bool
+  default     = true
+}
+
+variable "data_collection_storage_replication_type" {
+  description = "Replication type for the shared data-collection storage account"
+  type        = string
+  default     = "GRS"
+}
 
 ########################################
 # PRIVATE DNS ZONE NAMES (PARAMETERIZED)
@@ -157,6 +216,7 @@ variable "private_dns_zone_names" {
     file          = string
     queue         = string
     table         = string
+    dfs           = string
     vault         = string
     acr           = string
   })
@@ -168,6 +228,7 @@ variable "private_dns_zone_names" {
     file          = "privatelink.file.core.windows.net"
     queue         = "privatelink.queue.core.windows.net"
     table         = "privatelink.table.core.windows.net"
+    dfs           = "privatelink.dfs.core.windows.net"
     vault         = "privatelink.vaultcore.azure.net"
     acr           = "privatelink.azurecr.io"
   }
@@ -183,37 +244,9 @@ variable "aml_instances_wildcard_ttl" {
 # KEY VAULT SECURITY
 #############################
 variable "key_vault_purge_protection_enabled" {
-  description = "Enable Key Vault purge protection (should be true in production to prevent immediate purge). For sandbox/dev keep false so soft-deleted vaults can be purged automatically."
+  description = "Enable purge protection on workspace Key Vaults."
   type        = bool
-  default     = false
+  default     = true
 }
+# End of root input variables.
 
-########################################
-# BASTION + JUMPBOX VM SETTINGS
-########################################
-variable "bastion_subnet_prefix" {
-  description = "CIDR for AzureBastionSubnet (must be /26 or larger)."
-  type        = string
-  default     = "10.2.2.0/26"
-}
-
-variable "vm_subnet_prefix" {
-  description = "CIDR for the jumpbox VM subnet"
-  type        = string
-  default     = "10.2.3.0/24"
-}
-
-variable "vm_admin_username" {
-  description = "Admin username for the jumpbox VM"
-  type        = string
-}
-
-variable "vm_admin_password" {
-  description = "Admin password for the jumpbox VM (12-72 chars; include upper, lower, number, special)."
-  type        = string
-  sensitive   = true
-  validation {
-    condition     = length(var.vm_admin_password) >= 12 && length(var.vm_admin_password) <= 72
-    error_message = "vm_admin_password must be between 12 and 72 characters."
-  }
-}

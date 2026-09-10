@@ -11,6 +11,7 @@ def init():
     You can write the logic here to perform init operations like caching the model in memory
     """
     global model
+    deployment_label = os.getenv("DEPLOYMENT_LABEL", "not-set")
     # AZUREML_MODEL_DIR is an environment variable created during deployment.
     # It is the path to the model folder (./azureml-models/$MODEL_NAME/$VERSION)
     model_path = os.path.join(
@@ -18,7 +19,7 @@ def init():
     )
     # deserialize the model file back into a sklearn model
     model = joblib.load(model_path)
-    logging.info("Init complete")
+    logging.info("Init complete for deployment label: %s", deployment_label)
 
 
 def run(raw_data):

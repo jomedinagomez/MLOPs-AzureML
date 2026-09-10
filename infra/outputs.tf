@@ -2,25 +2,6 @@
 # Clean, purpose-driven outputs for easy troubleshooting and implementation
 
 # ===============================
-# SERVICE PRINCIPAL OUTPUTS
-# ===============================
-
-output "service_principal_application_id" {
-  description = "Application ID of the deployment service principal"
-  value       = azuread_application.deployment_sp_app.client_id
-}
-
-output "service_principal_object_id" {
-  description = "Object ID of the deployment service principal"
-  value       = azuread_service_principal.deployment_sp.object_id
-}
-
-output "service_principal_display_name" {
-  description = "Display name of the deployment service principal"
-  value       = azuread_application.deployment_sp_app.display_name
-}
-
-# ===============================
 # DEVELOPMENT ENVIRONMENT OUTPUTS
 # ===============================
 
@@ -57,6 +38,61 @@ output "dev_key_vault_name" {
 output "dev_storage_account_name" {
   description = "Name of the development storage account"
   value       = module.dev_managed_umi.storage_account_name
+}
+
+output "dev_workspace_identity_id" {
+  description = "Resource ID of the development workspace UMI"
+  value       = module.dev_managed_umi.workspace_identity_id
+}
+
+output "dev_workspace_identity_principal_id" {
+  description = "Principal ID of the development workspace UMI"
+  value       = module.dev_managed_umi.workspace_uami_principal_id
+}
+
+output "dev_compute_cluster_identity" {
+  description = "Development compute cluster UMI identifiers"
+  value = {
+    resource_id  = azurerm_user_assigned_identity.dev_cc.id
+    client_id    = azurerm_user_assigned_identity.dev_cc.client_id
+    principal_id = azurerm_user_assigned_identity.dev_cc.principal_id
+  }
+}
+
+output "dev_compute_instance_identity" {
+  description = "Development compute instance UMI identifiers"
+  value = {
+    resource_id  = azurerm_user_assigned_identity.dev_ci.id
+    client_id    = azurerm_user_assigned_identity.dev_ci.client_id
+    principal_id = azurerm_user_assigned_identity.dev_ci.principal_id
+  }
+}
+
+output "dev_online_endpoint_identity" {
+  description = "Development managed online endpoint UMI identifiers"
+  value = {
+    resource_id  = module.dev_managed_umi.online_endpoint_identity_id
+    client_id    = azurerm_user_assigned_identity.dev_online_endpoint.client_id
+    principal_id = module.dev_managed_umi.online_endpoint_principal_id
+  }
+}
+
+output "dev_cmk" {
+  description = "Development workspace CMK resources when provisioned"
+  value = {
+    key_vault_id                = module.dev_managed_umi.cmk_key_vault_id
+    key_id                      = module.dev_managed_umi.cmk_key_id
+    key_uri                     = module.dev_managed_umi.cmk_key_uri
+    storage_encryption_scope_id = module.dev_managed_umi.storage_encryption_scope_id
+  }
+}
+
+output "dev_registry_managed_resources" {
+  description = "Development registry managed storage and ACR resource IDs"
+  value = {
+    storage_account_id    = module.dev_registry.managed_storage_account_id
+    container_registry_id = module.dev_registry.managed_container_registry_id
+  }
 }
 
 output "dev_vnet_id" {
@@ -113,6 +149,61 @@ output "prod_storage_account_name" {
   value       = module.prod_managed_umi.storage_account_name
 }
 
+output "prod_workspace_identity_id" {
+  description = "Resource ID of the production workspace UMI"
+  value       = module.prod_managed_umi.workspace_identity_id
+}
+
+output "prod_workspace_identity_principal_id" {
+  description = "Principal ID of the production workspace UMI"
+  value       = module.prod_managed_umi.workspace_uami_principal_id
+}
+
+output "prod_compute_cluster_identity" {
+  description = "Production compute cluster UMI identifiers"
+  value = {
+    resource_id  = azurerm_user_assigned_identity.prod_cc.id
+    client_id    = azurerm_user_assigned_identity.prod_cc.client_id
+    principal_id = azurerm_user_assigned_identity.prod_cc.principal_id
+  }
+}
+
+output "prod_compute_instance_identity" {
+  description = "Production compute instance UMI identifiers"
+  value = {
+    resource_id  = azurerm_user_assigned_identity.prod_ci.id
+    client_id    = azurerm_user_assigned_identity.prod_ci.client_id
+    principal_id = azurerm_user_assigned_identity.prod_ci.principal_id
+  }
+}
+
+output "prod_online_endpoint_identity" {
+  description = "Production managed online endpoint UMI identifiers"
+  value = {
+    resource_id  = module.prod_managed_umi.online_endpoint_identity_id
+    client_id    = azurerm_user_assigned_identity.prod_online_endpoint.client_id
+    principal_id = module.prod_managed_umi.online_endpoint_principal_id
+  }
+}
+
+output "prod_cmk" {
+  description = "Production workspace CMK resources when provisioned"
+  value = {
+    key_vault_id                = module.prod_managed_umi.cmk_key_vault_id
+    key_id                      = module.prod_managed_umi.cmk_key_id
+    key_uri                     = module.prod_managed_umi.cmk_key_uri
+    storage_encryption_scope_id = module.prod_managed_umi.storage_encryption_scope_id
+  }
+}
+
+output "prod_registry_managed_resources" {
+  description = "Production registry managed storage and ACR resource IDs"
+  value = {
+    storage_account_id    = module.prod_registry.managed_storage_account_id
+    container_registry_id = module.prod_registry.managed_container_registry_id
+  }
+}
+
 output "prod_vnet_id" {
   description = "ID of the production virtual network"
   value       = azurerm_virtual_network.prod_vnet.id
@@ -154,17 +245,11 @@ output "cross_environment_connectivity" {
 output "platform_deployment_summary" {
   description = "Complete platform deployment summary with all key information"
   value = {
-    deployment_timestamp = timestamp()
-    terraform_version    = "~> 1.0"
-    region               = var.location
-    region_code          = var.location_code
+    terraform_version = "~> 1.0"
+    region            = var.location
+    region_code       = var.location_code
 
     environments_deployed = ["development", "production"]
-
-    service_principal = {
-      name           = azuread_application.deployment_sp_app.display_name
-      application_id = azuread_application.deployment_sp_app.client_id
-    }
 
     environment_config = {
       development = {
@@ -246,7 +331,7 @@ output "key_vault_purge_protection_enabled" {
   value       = var.key_vault_purge_protection_enabled
 }
 
-## No hub/VPN outputs (flat VNet with Bastion access)
+## No hub/VPN outputs; private access is supplied by the customer's network path.
 
 # ===============================
 # AML PRIVATE ENDPOINT FQDNS (Smoke Test Helpers)

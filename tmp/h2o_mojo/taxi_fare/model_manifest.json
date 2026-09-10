@@ -1,0 +1,23 @@
+{
+  "model_name": "taxi-fare-h2o-mojo",
+  "model_version": "1",
+  "h2o_version": "3.46.0.8",
+  "target": "fareAmount",
+  "features": [
+    "vendorID",
+    "passengerCount",
+    "tripDistance",
+    "paymentType",
+    "pickupHour"
+  ],
+  "categorical_features": [
+    "vendorID",
+    "paymentType"
+  ],
+  "files": {
+    "taxi_fare_gbm.zip": "f98c98995451594278dfe00273617d66a80ce321aff762b97d3f5518cf41a304",
+    "h2o-genmodel.jar": "c6b75f6b59041413d6875ac8abc6ec508e491dcd7fadb9d4f8b00729a967a995",
+    "golden_input.csv": "8c44d35212bd127d08a689e536840cb80e80ccdf1ef9b2cff022ffd04ed203fd",
+    "golden_expected.csv": "4832dae196d92885c9ed0af739ace089aaf286cb375e8263956d955e2548dbf3"
+  }
+}

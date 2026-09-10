@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "created_utc": "2026-09-10T04:00:50.132169+00:00",
+  "input": {
+    "source_file": "golden_input.csv",
+    "rows": 20
+  },
+  "model": {
+    "name": "taxi-fare-h2o-binary",
+    "version": "1",
+    "format": "h2o_binary",
+    "sha256": "6e65a7d9ac23e9fdb0316eff017758a8c3ff584429711281a2ea27ed1509368b",
+    "h2o_version": "3.46.0.12"
+  },
+  "execution": {
+    "aml_run_id": "local",
+    "correlation_id": "notebook-05-local-golden",
+    "fail_on_rejects": false
+  },
+  "outputs": {
+    "predictions": "predictions.csv",
+    "rejects": "rejects.csv",
+    "monitoring_data": "monitoring_data.csv",
+    "feature_statistics": "feature_statistics.csv"
+  }
+}

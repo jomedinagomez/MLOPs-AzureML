@@ -4,16 +4,30 @@ locals {
 
 # Create a storage account
 resource "azurerm_storage_account" "storage_account" {
+  #checkov:skip=CKV_AZURE_43: The resolved names use the validated st{purpose}{region}{suffix} pattern and pass Azure naming checks.
+  #checkov:skip=CKV_AZURE_33: Queue logging is configured by azurerm_storage_account_queue_properties.logging below.
+  #checkov:skip=CKV2_AZURE_33: Private endpoints are declared by the parent AML workspace module for each required subresource.
+  #checkov:skip=CKV2_AZURE_1: The parent AML workspace module creates the customer-managed encryption scope and workspace CMK binding.
+
   name                = "${local.storage_account_name}${var.purpose}${var.location_code}${local.resolved_suffix}"
   resource_group_name = var.resource_group_name
   location            = var.location
   tags                = var.tags
 
-  account_kind                    = var.storage_account_kind
-  account_tier                    = var.storage_account_tier
-  account_replication_type        = var.storage_account_replication_type
-  shared_access_key_enabled       = var.key_based_authentication
-  allow_nested_items_to_be_public = var.allow_blob_public_access
+  account_kind                      = var.storage_account_kind
+  account_tier                      = var.storage_account_tier
+  account_replication_type          = var.storage_account_replication_type
+  shared_access_key_enabled         = var.key_based_authentication
+  allow_nested_items_to_be_public   = var.allow_blob_public_access
+  default_to_oauth_authentication   = true
+  https_traffic_only_enabled        = true
+  infrastructure_encryption_enabled = true
+  local_user_enabled                = false
+  min_tls_version                   = "TLS1_2"
+
+  identity {
+    type = "SystemAssigned"
+  }
 
   # Enforce private-only by default
   public_network_access_enabled = var.public_network_access_enabled
@@ -34,6 +48,16 @@ resource "azurerm_storage_account" "storage_account" {
   }
 
   blob_properties {
+    versioning_enabled = true
+
+    delete_retention_policy {
+      days = 30
+    }
+
+    container_delete_retention_policy {
+      days = 30
+    }
+
     dynamic "cors_rule" {
       for_each = var.cors_rules != null ? var.cors_rules : []
       content {
@@ -51,6 +75,18 @@ resource "azurerm_storage_account" "storage_account" {
       tags["created_date"],
       tags["created_by"]
     ]
+  }
+}
+
+resource "azurerm_storage_account_queue_properties" "logging" {
+  storage_account_id = azurerm_storage_account.storage_account.id
+
+  logging {
+    delete                = true
+    read                  = true
+    version               = "1.0"
+    write                 = true
+    retention_policy_days = 30
   }
 }
 
