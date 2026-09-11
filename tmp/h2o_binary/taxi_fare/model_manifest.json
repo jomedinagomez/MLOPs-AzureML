@@ -17,7 +17,7 @@
     "paymentType"
   ],
   "files": {
-    "taxi-fare-gbm": "faa4cf0cdb5cf18091c0b7b2cd846d9b02a42d6c1f7ce0d6bcbd0dfdb672247f",
+    "taxi-fare-gbm": "995303cdb3e1462cae499693cca47ffc3d23b63a43ea35c6897b6d566124f0a3",
     "golden_input.csv": "8c44d35212bd127d08a689e536840cb80e80ccdf1ef9b2cff022ffd04ed203fd",
     "golden_expected.csv": "4832dae196d92885c9ed0af739ace089aaf286cb375e8263956d955e2548dbf3"
   }
