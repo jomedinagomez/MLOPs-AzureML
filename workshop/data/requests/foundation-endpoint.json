@@ -1,0 +1,12 @@
+{
+  "input_data": {
+    "columns": [
+      "tripDistance",
+      "passengerCount"
+    ],
+    "data": [
+      [2.5, 1],
+      [7.0, 2]
+    ]
+  }
+}

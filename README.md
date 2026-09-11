@@ -78,6 +78,7 @@ End‑to‑end Azure Machine Learning platform (dev + prod) with an opinionated 
 - **[infra/README.md](infra/README.md)** - Complete Terraform deployment guide with step-by-step instructions
 
 **For customer workshop execution on an Azure ML compute instance**, see:
+- **[workshop/README.md](workshop/README.md)** - Curated two-day Azure ML and H2O workshop with one `.env`, notebooks, pipeline YAML, source attribution, and Airflow handoff
 - **[AZUREML_COMPUTE_INSTANCE_GUIDE.md](AZUREML_COMPUTE_INSTANCE_GUIDE.md)** - Compute-instance setup, dependencies, `.env` configuration, pipeline commands, and the H2O notebook run order
 
 **For local Windows execution with `uv`**, see:
@@ -122,6 +123,7 @@ src/                  Component source code (Python)
 pipelines/            Pipeline job YAML definitions
 environment/          Conda / requirements for train + score
 notebooks/            Exploration & asset sharing demos
+workshop/             Customer-facing two-day workshop package
 data/                 Sample taxi CSV + metadata YAML
 infra/                Architecture, security, DNS, RBAC (consolidated here)
 ```

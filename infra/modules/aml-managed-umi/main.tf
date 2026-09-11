@@ -270,6 +270,24 @@ resource "azapi_resource" "aml_workspace" {
 
         # Create a series of outbound rules to allow access to other private endpoints and FQDNs on the Internet
         outboundRules = {
+          # Required for batch endpoints, ParallelRunStep, and parallel pipeline components
+          AllowTableDefaultStorage = {
+            type     = "PrivateEndpoint"
+            category = "UserDefined"
+            destination = {
+              serviceResourceId = module.storage_account_default.id
+              subresourceTarget = "table"
+            }
+          }
+          AllowQueueDefaultStorage = {
+            type     = "PrivateEndpoint"
+            category = "UserDefined"
+            destination = {
+              serviceResourceId = module.storage_account_default.id
+              subresourceTarget = "queue"
+            }
+          }
+
           # Create required FQDN rules to support usage of Python package managers such as pip and conda
           AllowPypi = {
             type        = "FQDN"
@@ -329,6 +347,26 @@ resource "azapi_resource" "aml_workspace" {
             destination = "cdn-lfs.huggingface.co"
             category    = "UserDefined"
           }
+          AllowHuggingFaceCo = {
+            type        = "FQDN"
+            destination = "huggingface.co"
+            category    = "UserDefined"
+          }
+          AllowHuggingFaceCoWildcard = {
+            type        = "FQDN"
+            destination = "*.huggingface.co"
+            category    = "UserDefined"
+          }
+          AllowXetHubHfCo = {
+            type        = "FQDN"
+            destination = "xethub.hf.co"
+            category    = "UserDefined"
+          }
+          AllowXetHubHfCoWildcard = {
+            type        = "FQDN"
+            destination = "*.xethub.hf.co"
+            category    = "UserDefined"
+          }
 
           # Create fqdn rules to support usage of SSH to compute instances in a managed virtual network from Visual Studio Code
           AllowVsCodeDevWildcard = {
@@ -349,6 +387,51 @@ resource "azapi_resource" "aml_workspace" {
           AllowRawGithub = {
             type        = "FQDN"
             destination = "raw.githubusercontent.com"
+            category    = "UserDefined"
+          }
+          AllowGithub = {
+            type        = "FQDN"
+            destination = "github.com"
+            category    = "UserDefined"
+          }
+          AllowGithubApi = {
+            type        = "FQDN"
+            destination = "api.github.com"
+            category    = "UserDefined"
+          }
+          AllowGithubAssets = {
+            type        = "FQDN"
+            destination = "github.githubassets.com"
+            category    = "UserDefined"
+          }
+          AllowGithubAvatars = {
+            type        = "FQDN"
+            destination = "avatars.githubusercontent.com"
+            category    = "UserDefined"
+          }
+          AllowGithubCollector = {
+            type        = "FQDN"
+            destination = "collector.github.com"
+            category    = "UserDefined"
+          }
+          AllowGithubCopilotWildcard = {
+            type        = "FQDN"
+            destination = "*.githubcopilot.com"
+            category    = "UserDefined"
+          }
+          AllowGithubCopilotProxy = {
+            type        = "FQDN"
+            destination = "copilot-proxy.githubusercontent.com"
+            category    = "UserDefined"
+          }
+          AllowGithubCopilotOriginTracker = {
+            type        = "FQDN"
+            destination = "origin-tracker.githubusercontent.com"
+            category    = "UserDefined"
+          }
+          AllowGithubCopilotTelemetry = {
+            type        = "FQDN"
+            destination = "copilot-telemetry.githubusercontent.com"
             category    = "UserDefined"
           }
           AllowVsCodeUnpkWildcard = {

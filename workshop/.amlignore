@@ -1,0 +1,11 @@
+.env
+.venv/
+**/.ipynb_checkpoints/
+**/__pycache__/
+**/*.pyc
+notebooks/
+outputs/
+data/h2o/customer_bundle/model
+data/h2o/customer_bundle/*.csv
+licenses/
+docs/

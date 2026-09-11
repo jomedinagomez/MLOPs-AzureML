@@ -1,0 +1,13 @@
+{
+  "model_name": "taxi-distance-baseline",
+  "model_version": "1",
+  "features": [
+    "tripDistance",
+    "passengerCount"
+  ],
+  "intercept": 3.0,
+  "coefficients": [
+    2.4,
+    0.2
+  ]
+}

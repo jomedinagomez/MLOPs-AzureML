@@ -11,6 +11,13 @@ credentials/**
 # Internal workshop materials
 /AzureML MLOps workshop/
 
+# Customer-facing workshop generated and private inputs
+/workshop/.env
+/workshop/outputs/*
+!/workshop/outputs/.gitkeep
+/workshop/data/h2o/customer_bundle/*
+!/workshop/data/h2o/customer_bundle/README.md
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

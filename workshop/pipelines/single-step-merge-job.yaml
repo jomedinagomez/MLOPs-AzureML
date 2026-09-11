@@ -1,0 +1,20 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+command: >-
+  python merge_data.py 
+  --raw_data_green ${{inputs.raw_data_green}}
+  --raw_data_yellow ${{inputs.raw_data_yellow}}
+  --merged_data ${{outputs.merged_data}}
+code: ../src/merge_data
+inputs:
+  raw_data_green:
+    type: uri_file
+    path: ../data/taxi/raw/greenTaxiData.csv
+  raw_data_yellow:
+    type: uri_file
+    path: ../data/taxi/raw/yellowTaxiData.csv
+outputs:
+  merged_data:
+    type: uri_folder
+environment: azureml:AzureML-sklearn-1.0-ubuntu20.04-py38-cpu@latest
+# The submission notebook replaces this value with AZUREML_COMPUTE_NAME from workshop/.env.
+compute: azureml:workshop-compute
