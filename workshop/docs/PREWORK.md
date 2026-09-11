@@ -14,15 +14,17 @@ Complete this checklist before the workshop. Durable infrastructure should be de
 
 ## Identity and Permissions
 
-The customer operator needs enough access to:
+Complete the administrator assignments in [RBAC.md](RBAC.md) before the workshop. The compute instance, compute cluster, and managed online endpoint use separate managed identities with separate scopes.
 
-- Read the workspace and its assets.
-- Create/update data, model, environment, job, and endpoint resources used by the workshop.
-- Use the selected compute cluster.
-- Read/write the workspace datastore used for inputs and outputs.
-- Assign the configured endpoint UMI when `AZUREML_ONLINE_ENDPOINT_IDENTITY_ID` is set.
+Confirm that:
 
-Use organization-approved roles and least-privilege custom roles where available. Do not place credentials in `.env`.
+- The compute-instance UMI can read and change workshop assets in the Azure ML workspace.
+- The compute-instance UMI can upload to and download from workspace storage.
+- The compute-cluster UMI can run jobs, pull images, read inputs, and write outputs.
+- The managed-online-endpoint UMI can pull serving images and read model artifacts.
+- The compute-instance UMI has `Managed Identity Operator` on the endpoint UMI when `AZUREML_ONLINE_ENDPOINT_IDENTITY_ID` is set.
+
+Apply role assignments from a separate administrator session. The workshop managed identities must not be allowed to grant roles to themselves. Use organization-approved roles and least-privilege custom roles where available. Do not place credentials in `.env`.
 
 ## Compute Instance
 
