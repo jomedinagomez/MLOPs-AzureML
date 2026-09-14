@@ -22,6 +22,10 @@ The customer operator needs enough access to:
 - Read/write the workspace datastore used for inputs and outputs.
 - Assign the configured endpoint UMI when `AZUREML_ONLINE_ENDPOINT_IDENTITY_ID` is set.
 
+When notebooks authenticate as the compute-instance UMI, grant that UMI `AzureML Data Scientist` on the workspace and the required Blob/File data roles on the default storage account. Grant the same caller `Managed Identity Operator` on the endpoint UMI so it can create or update an endpoint linked to that identity.
+
+The endpoint UMI has a separate runtime role set. It needs `AcrPull` on the workspace registry, `Storage Blob Data Reader` on the workspace storage account, and `AzureML Metrics Writer` on the workspace. Do not substitute endpoint runtime permissions for the caller's `Managed Identity Operator` permission.
+
 Use organization-approved roles and least-privilege custom roles where available. Do not place credentials in `.env`.
 
 ## Compute Instance
