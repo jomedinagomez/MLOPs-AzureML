@@ -14,19 +14,17 @@ Complete this checklist before the workshop. Durable infrastructure should be de
 
 ## Identity and Permissions
 
-The customer operator needs enough access to:
+Complete the administrator assignments in [RBAC.md](RBAC.md) before the workshop. The compute instance, compute cluster, and managed online endpoint use separate managed identities with separate scopes.
 
-- Read the workspace and its assets.
-- Create/update data, model, environment, job, and endpoint resources used by the workshop.
-- Use the selected compute cluster.
-- Read/write the workspace datastore used for inputs and outputs.
-- Assign the configured endpoint UMI when `AZUREML_ONLINE_ENDPOINT_IDENTITY_ID` is set.
+Confirm that:
 
-When notebooks authenticate as the compute-instance UMI, grant that UMI `AzureML Data Scientist` on the workspace and the required Blob/File data roles on the default storage account. Grant the same caller `Managed Identity Operator` on the endpoint UMI so it can create or update an endpoint linked to that identity.
+- The compute-instance UMI can read and change workshop assets in the Azure ML workspace.
+- The compute-instance UMI can upload to and download from workspace storage.
+- The compute-cluster UMI can run jobs, pull images, read inputs, and write outputs.
+- The managed-online-endpoint UMI can pull serving images and read model artifacts.
+- The compute-instance UMI has `Managed Identity Operator` on the endpoint UMI when `AZUREML_ONLINE_ENDPOINT_IDENTITY_ID` is set.
 
-The endpoint UMI has a separate runtime role set. It needs `AcrPull` on the workspace registry, `Storage Blob Data Reader` on the workspace storage account, and `AzureML Metrics Writer` on the workspace. Do not substitute endpoint runtime permissions for the caller's `Managed Identity Operator` permission.
-
-Use organization-approved roles and least-privilege custom roles where available. Do not place credentials in `.env`.
+Apply role assignments from a separate administrator session. The workshop managed identities must not be allowed to grant roles to themselves. Use organization-approved roles and least-privilege custom roles where available. Do not place credentials in `.env`.
 
 ## Compute Instance
 
