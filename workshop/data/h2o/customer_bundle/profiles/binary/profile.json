@@ -1,0 +1,30 @@
+{
+  "model_name": "workshop-h2o-customer-binary",
+  "environment_name": "workshop-h2o-customer-binary-environment",
+  "endpoint_name": "h2o-customer-binary-endpoint",
+  "deployment_name": "blue",
+  "input_data_name": "workshop-h2o-customer-binary-input",
+  "experiment_name": "workshop-h2o-customer-binary-scoring",
+  "model_version": "1",
+  "model_h2o_version": "3.46.0.12",
+  "runtime_h2o_version": "3.46.0.12",
+  "h2o_pip_spec": "h2o==3.46.0.12",
+  "python_version": "3.12",
+  "java_version": "17",
+  "features": [
+    "vendorID",
+    "passengerCount",
+    "tripDistance",
+    "paymentType",
+    "pickupHour"
+  ],
+  "categorical_features": [
+    "vendorID",
+    "paymentType"
+  ],
+  "target": "fareAmount",
+  "source": {
+    "description": "Workshop-generated reference H2O binary model",
+    "notebook": "notebooks/03_h2o_reference/01_create_reference_binary_model.ipynb"
+  }
+}

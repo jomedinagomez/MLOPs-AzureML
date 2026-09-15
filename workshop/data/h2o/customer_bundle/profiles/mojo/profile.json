@@ -1,0 +1,20 @@
+{
+  "model_name": "workshop-h2o-customer-mojo",
+  "environment_name": "workshop-h2o-customer-mojo-environment",
+  "endpoint_name": "h2o-customer-mojo-endpoint",
+  "deployment_name": "blue",
+  "input_data_name": "workshop-h2o-customer-mojo-input",
+  "experiment_name": "workshop-h2o-customer-mojo-scoring",
+  "model_version": "1",
+  "runtime_h2o_version": "3.46.0.12",
+  "h2o_pip_spec": "h2o==3.46.0.12",
+  "python_version": "3.12",
+  "java_version": "17",
+  "categorical_features": [],
+  "source": {
+    "repository": "https://github.com/h2oai/h2o-3",
+    "revision": "ce08492c71e6f2fe9ce902cd82b1e7828ca3b1f6",
+    "path": "h2o-genmodel/src/test/resources/hex/genmodel/algos/gbm/gbm_variable_importance.zip",
+    "license": "Apache-2.0"
+  }
+}
