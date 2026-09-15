@@ -18,6 +18,12 @@ credentials/**
 !/workshop/outputs/.gitkeep
 /workshop/data/h2o/customer_bundle/*
 !/workshop/data/h2o/customer_bundle/README.md
+!/workshop/data/h2o/customer_bundle/demo/
+/workshop/data/h2o/customer_bundle/demo/*
+!/workshop/data/h2o/customer_bundle/demo/prostate-gbm.mojo.zip
+!/workshop/data/h2o/customer_bundle/demo/golden_input.csv
+!/workshop/data/h2o/customer_bundle/demo/golden_expected.csv
+!/workshop/data/h2o/customer_bundle/demo/model_manifest.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

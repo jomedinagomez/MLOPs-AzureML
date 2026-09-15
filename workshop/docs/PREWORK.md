@@ -40,7 +40,7 @@ uv --version
 Required runtime:
 
 - Python 3.12 for the workshop virtual environment.
-- OpenJDK 17 for H2O binary models.
+- OpenJDK 17 for the native H2O reference flow and generated customer H2O runtime.
 - Azure CLI with the current `ml` extension.
 - Network access to package repositories, Azure control-plane endpoints, and any optional GitHub/Copilot services used during the call.
 

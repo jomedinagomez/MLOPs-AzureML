@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+/workshop/data/h2o/customer_bundle/demo/*.csv text eol=lf
+/workshop/data/h2o/customer_bundle/demo/*.json text eol=lf
+/workshop/data/h2o/customer_bundle/demo/*.zip binary

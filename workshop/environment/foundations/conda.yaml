@@ -1,9 +1,0 @@
-name: azureml-workshop-foundations
-channels:
-  - conda-forge
-dependencies:
-  - python=3.10
-  - pip
-  - pip:
-      - azureml-inference-server-http==1.4.1
-      - pandas==2.2.3

@@ -13,17 +13,17 @@
 9. Submit the integration compare pipeline from a notebook and inspect its child jobs and outputs.
 10. Review lineage, reproducibility, immutable versions, managed identities, logs, and Day 2 prerequisites.
 
-## Day 2: H2O Binary Models and Customer Onboarding
+## Day 2: H2O Models and Customer BYOM Onboarding
 
-1. H2O binary-model compatibility, OpenJDK 17, manifests, checksums, and golden tests.
+1. Contrast native H2O binaries with portable MOJO artifacts; review OpenJDK 17, manifests, checksums, and golden tests.
 2. Create and validate the reference H2O binary-model bundle.
 3. Test the reference model with the local Azure ML inference server.
 4. Deploy and invoke the reference model on a managed online endpoint.
 5. Submit the reference offline-scoring pipeline.
-6. Add and validate a customer-provided H2O binary model and representative input data.
-7. Register the validated customer bundle as an immutable custom model.
-8. Create and register the version-pinned H2O environment.
-9. Deploy the customer model at zero traffic, inspect logs, test directly, and optionally promote traffic.
-10. Submit the static customer-scoring pipeline YAML.
+6. Package a customer-provided native H2O binary or MOJO without changing the local notebook environment; golden data is optional.
+7. Register the packaged customer bundle as an immutable custom model.
+8. Create and register the customer-specific, version-pinned H2O environment.
+9. Deploy the customer model at zero traffic, run optional prediction parity, and optionally promote traffic.
+10. Generate and submit the customer-scoring pipeline YAML.
 11. Discuss the Airflow submission contract and why Airflow remains the production scheduler.
 12. Review Dev/Prod promotion, monitoring, governance, rollout, rollback, cost, and guarded cleanup.

@@ -1,8 +1,8 @@
 # Azure Machine Learning and H2O Workshop
 
-This folder is a portable two-day workshop for one customer operator and team using their own Azure Machine Learning workspace and compute instance. It covers Azure ML assets, jobs, pipelines, managed online endpoints, H2O binary-model onboarding, and a CMK-compatible offline-scoring pipeline suitable for Airflow orchestration.
+This folder is a portable two-day workshop for one customer operator and team using their own Azure Machine Learning workspace and compute instance. It covers Azure ML assets, jobs, pipelines, managed online endpoints, H2O model onboarding, and a CMK-compatible offline-scoring pipeline suitable for Airflow orchestration.
 
-> The H2O exercises use version-specific H2O binary models created with `h2o.save_model()` and loaded with `h2o.load_model()`. They are not portable MOJO zip artifacts.
+> The reference exercise uses a native H2O binary model. The customer BYOM exercise accepts either a native H2O binary or a portable H2O-3 MOJO ZIP.
 
 ## Start Here
 
@@ -40,6 +40,18 @@ Every notebook reads `workshop/.env` with `python-dotenv`. The file contains ide
 
 All mutation switches default to `false`. Enable only the operation currently being demonstrated, then return it to `false` when appropriate.
 
+## Notebook-Generated Runtime Files
+
+Foundation and H2O notebooks generate their own command scripts, scoring functions, Conda files, H2O component/pipeline YAML, and request fixtures under:
+
+```text
+outputs/generated/<workflow>/
+```
+
+The notebook displays and validates these files before it submits anything to Azure. Generated runtime files are ignored by Git and can be deleted and recreated by rerunning the owning notebook. Checked-in files under `data/` are immutable teaching inputs, not executable deployment definitions.
+
+The two notebooks in `notebooks/02_jobs_and_pipelines/` intentionally remain YAML-first. They submit the checked-in job, component, pipeline, code, and environment files as originally designed.
+
 ## Notebook Order
 
 ### Setup and Foundations
@@ -67,6 +79,8 @@ All mutation switches default to `false`. Enable only the operation currently be
 
 ### Customer H2O Flow
 
+The checked-in [customer bundle demo](data/h2o/customer_bundle/README.md) uses an Apache-licensed prostate GBM MOJO published by H2O-3, so it is independent of the locally trained taxi reference model. For the real exercise, the customer may supply a native binary or MOJO ZIP plus its producer and target-runtime contract. Golden fixtures are optional. Put proprietary artifacts under the ignored `data/h2o/customer_bundle/private/<bundle-id>/` path and replace the complete `H2O_CUSTOMER_*` contract in `.env`.
+
 1. `notebooks/04_h2o_customer/01_package_and_validate_model.ipynb`
 2. `notebooks/04_h2o_customer/02_register_model.ipynb`
 3. `notebooks/04_h2o_customer/03_create_environment.ipynb`
@@ -77,24 +91,25 @@ All mutation switches default to `false`. Enable only the operation currently be
 
 1. `notebooks/99_cleanup/cleanup_workshop_assets.ipynb`
 
-## Pipelines
+## Jobs and Pipelines
 
-- `pipelines/single-step-merge-job.yaml`: one command job that merges green and yellow taxi files.
-- `pipelines/integration-compare-pipeline.yaml`: merge, transform, train, predict, and compare.
-- `pipelines/h2o-customer-scoring-pipeline.yaml`: CMK-compatible command pipeline for offline H2O scoring.
+- `pipelines/single-step-merge-job.yaml` remains the source-controlled command-job definition.
+- `pipelines/integration-compare-pipeline.yaml` and `src/components/*.yaml` remain the source-controlled five-stage integration definition.
+- Each H2O online-deployment notebook generates its own scoring script and request.
+- Each H2O offline-scoring notebook generates its own scorer, component YAML, environment binding, and pipeline YAML.
 
-Airflow should submit the static H2O pipeline and remain the only production scheduler. See [AIRFLOW.md](docs/AIRFLOW.md).
+Airflow should consume an approved copy of the notebook-generated H2O pipeline and remain the only production scheduler. See [AIRFLOW.md](docs/AIRFLOW.md).
 
 ## Safety and Cleanup
 
 - Workshop notebooks never delete infrastructure.
 - Endpoint traffic promotion requires an explicit switch.
 - Cleanup requires `CLEANUP_WORKSHOP_ASSETS=true`, deletes only the configured endpoints, and archives only the configured asset versions.
-- Customer model files and generated outputs are ignored by Git.
+- Private customer model files and generated outputs are ignored by Git; only the safe bundled demo is tracked.
 
 ## Sources
 
-Workshop code is adapted from this repository, [AzureML-deep-dive-L200](https://github.com/jomedinagomez/AzureML-deep-dive-L200), and [Azure/azureml-examples](https://github.com/Azure/azureml-examples). See [SOURCES.md](SOURCES.md) for exact paths, revisions, adaptations, and retained MIT notices.
+Workshop code is adapted from this repository, [AzureML-deep-dive-L200](https://github.com/jomedinagomez/AzureML-deep-dive-L200), and [Azure/azureml-examples](https://github.com/Azure/azureml-examples). The bundled customer MOJO comes from [H2O-3](https://github.com/h2oai/h2o-3) under Apache-2.0. See [SOURCES.md](SOURCES.md) for exact paths, revisions, adaptations, and retained notices.
 
 ## Folder Map
 
@@ -103,11 +118,12 @@ workshop/
   docs/                 Prework, Airflow, and next steps
   licenses/              Retained source licenses
   notebooks/             Ordered hands-on exercises
-  pipelines/             Static Azure ML job definitions
-  src/                   Job components and scoring code
-  environment/           Version-pinned runtimes
+  pipelines/             Checked-in YAML for notebooks/02_jobs_and_pipelines
+  src/                   YAML-first job code/components and bundle validation
+  environment/train/     Checked-in environment used only by the YAML-first pipeline
+  scripts/               Notebook validation utilities
   data/                  Safe samples and customer intake contract
-  outputs/               Ignored generated artifacts
+  outputs/generated/     Ignored notebook-generated runtime artifacts
   .env.example           Single configuration template
   requirements.txt       Compute-instance notebook dependencies
 ```
