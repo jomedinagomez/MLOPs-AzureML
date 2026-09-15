@@ -17,6 +17,17 @@ Verified on September 11, 2026:
 
 The preinstalled environments did not meet the full workshop contract. They used Python 3.10 or 3.13, did not contain the pinned H2O package, and the host provided Java 11. A dedicated Conda environment was selected as the reproducible baseline.
 
+## Update an Existing Clone
+
+From the repository root, update the local `workshop` branch with a fast-forward-only pull:
+
+```bash
+cd /home/azureuser/cloudfiles/code/MLOPs-AzureML
+git pull --ff-only origin workshop
+```
+
+`--ff-only` prevents Git from creating an unintended merge commit. The ignored `workshop/.env` file and generated files under `workshop/outputs/` remain local. If Git reports tracked local changes, commit or stash them before pulling.
+
 ## Create the Environment
 
 From the cloned repository:
@@ -121,6 +132,12 @@ H2O_VERSION=3.46.0.12
 
 Keep every mutation switch `false` while running notebook `00`. The file must contain identifiers and switches only, never passwords, keys, secrets, or access tokens.
 
+### Asset versions
+
+Registration notebooks omit the Azure ML asset version. The SDK assigns the next version when `create_or_update()` runs, and the notebook uses the returned concrete version for immediate verification or deployment.
+
+Later notebooks resolve named assets with `label="latest"` or `azureml:<asset-name>@latest`. Azure ML resolves that label to an immutable concrete version when the deployment or job is submitted. The `H2O_MODEL_VERSION` and `H2O_CUSTOMER_MODEL_VERSION` settings are bundle-manifest metadata used by the scoring contract; they do not select Azure ML asset versions.
+
 ## Notebook 00: Validate the Workshop
 
 Notebook:
@@ -180,13 +197,7 @@ mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04:latest
 
 Its MCR manifest returned HTTP `200`. Cell 3 now checks that manifest before registration and verifies the image recorded on the returned environment asset.
 
-Environment image and Conda properties are immutable. Because version `1` already contained the invalid image in the tested workspace, `.env` was advanced to:
-
-```dotenv
-WORKSHOP_ENVIRONMENT_VERSION=2
-```
-
-Fresh workspaces can register the corrected definition as version `1`.
+Environment image and Conda properties are immutable. Because version `1` already contained the invalid image in the tested workspace, Azure ML assigned version `2` to the corrected registration. A fresh workspace receives version `1`.
 
 ### Verified Result
 
@@ -195,7 +206,7 @@ Verified base image manifest: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04
 Registered environment asset: workshop-taxi-environment:2
 ```
 
-The registered asset was independently retrieved through `MLClient`, and its image matched the corrected MCR reference. Azure ML builds the final serving image lazily when the environment is first used. Notebook `06` is therefore the final environment-build validation.
+The registered asset was independently retrieved through `MLClient`, and its image matched the corrected MCR reference. Environment registration requests image materialization asynchronously, so `create_or_update()` and successful asset retrieval do not prove that the image build completed. Monitor the environment build status and logs in Azure ML Studio. Notebook `06` validates that a completed image can start the deployment and serve requests; it is not described as the image-build trigger.
 
 After registration, set `REGISTER_FOUNDATION_ENVIRONMENT=false`.
 
@@ -229,6 +240,27 @@ az account set --subscription "$AZURE_SUBSCRIPTION_ID"
 Then rerun Cells 2-3. Endpoint identity is immutable after creation, so verify `AZUREML_ONLINE_ENDPOINT_IDENTITY_ID` before rerunning.
 
 Notebook `06` is not yet marked successful. The endpoint was not created during the failed attempt.
+
+## Foundation Notebook 07: Deploy with Model Data Collection
+
+Notebook:
+
+```text
+notebooks/01_foundations/07_deploy_model_data_collection.ipynb
+```
+
+Notebook `07` leaves notebook `06` unchanged and creates a separate deployment and Azure ML environment for model data collection. The monitoring environment adds `azureml-ai-monitoring~=0.1.0b1`; its scoring script records the approved numeric feature frame as `model_inputs` and the correlated prediction frame as `model_outputs`.
+
+The notebook reuses the infrastructure in `infra/data-collection.tf`:
+
+- Azure ML datastore: `datacollection_adls`
+- ADLS Gen2 filesystem: `datacollection`
+- Base path: `modelDataCollector/<endpoint>/<deployment>/`
+- Endpoint and workspace managed-identity storage RBAC
+
+Before deploying, confirm that `enable_data_collection_storage=true` was applied and that the read-only datastore preflight succeeds. Set `DEPLOY_FOUNDATION_DATA_COLLECTION=true` only when creating or updating the separate collector deployment. Set `PROMOTE_FOUNDATION_DATA_COLLECTION_TRAFFIC=true` only when that deployment should receive all endpoint traffic. The notebook does not change either switch.
+
+Collected JSONL files are written asynchronously and may take several minutes to appear beneath the `model_inputs` and `model_outputs` paths printed by the notebook.
 
 ## Foundation Notebook 05: Submit a Command Job
 

@@ -18,7 +18,7 @@
   ],
   "files": {
     "taxi-fare-gbm": "995303cdb3e1462cae499693cca47ffc3d23b63a43ea35c6897b6d566124f0a3",
-    "golden_input.csv": "8c44d35212bd127d08a689e536840cb80e80ccdf1ef9b2cff022ffd04ed203fd",
-    "golden_expected.csv": "4832dae196d92885c9ed0af739ace089aaf286cb375e8263956d955e2548dbf3"
+    "golden_input.csv": "a0f4f80234d7877b17c7169ac82b5ed34286d04d2caa877aa6e316c5060e15ef",
+    "golden_expected.csv": "928ffb70ee430f6b406bb7f42e72ca4ca0a4a1ffa1c06493372e16fa987be70d"
   }
 }

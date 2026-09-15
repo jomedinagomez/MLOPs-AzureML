@@ -152,15 +152,36 @@ All data collection infrastructure is defined in:
 #### Usage
 After deployment, configure your online endpoint deployments to use the datastore:
 ```python
-from azure.ai.ml.entities import DataCollector, DeploymentCollection
+from azure.ai.ml.constants import AssetTypes
+from azure.ai.ml.entities import Data, DataCollector, DeploymentCollection
 
 data_collector = DataCollector(
     collections={
-        "model_inputs": DeploymentCollection(enabled=True),
-        "model_outputs": DeploymentCollection(enabled=True),
+    "model_inputs": DeploymentCollection(
+      enabled="true",
+      data=Data(
+        name=f"{endpoint_name}-{deployment_name}-model-inputs",
+        type=AssetTypes.URI_FOLDER,
+        path=(
+          "azureml://datastores/datacollection_adls/paths/"
+          f"modelDataCollector/{endpoint_name}/{deployment_name}/model_inputs/"
+        ),
+      ),
+    ),
+    "model_outputs": DeploymentCollection(
+      enabled="true",
+      data=Data(
+        name=f"{endpoint_name}-{deployment_name}-model-outputs",
+        type=AssetTypes.URI_FOLDER,
+        path=(
+          "azureml://datastores/datacollection_adls/paths/"
+          f"modelDataCollector/{endpoint_name}/{deployment_name}/model_outputs/"
+        ),
+      ),
+    ),
     },
     sampling_rate=1.0,
-    destination="azureml://datastores/datacollection_adls/paths/modelDataCollector/"
+  rolling_rate="hour",
 )
 ```
 

@@ -203,8 +203,8 @@ print(f"Existing traffic configuration: {previous_traffic}")
 
 ###Creating Deployment
 collections = {
-    "model_inputs": DeploymentCollection(enabled=True),
-    "model_outputs": DeploymentCollection(enabled=True),
+    "model_inputs": DeploymentCollection(enabled="true"),
+    "model_outputs": DeploymentCollection(enabled="true"),
 }
 
 data_collector = DataCollector(collections=collections, sampling_rate=1.0)

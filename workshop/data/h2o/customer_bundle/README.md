@@ -84,10 +84,10 @@ H2O_CUSTOMER_FEATURES=<ordered,comma-separated-features>
 H2O_CUSTOMER_CATEGORICAL_FEATURES=<comma-separated-categorical-features>
 H2O_CUSTOMER_TARGET=<response-column>
 
-H2O_CUSTOMER_MODEL_NAME=<immutable-model-name>
-H2O_CUSTOMER_MODEL_VERSION=<new-version>
+H2O_CUSTOMER_MODEL_NAME=<model-name>
+# Bundle-manifest metadata only; Azure ML assigns the asset version.
+H2O_CUSTOMER_MODEL_VERSION=<bundle-version>
 H2O_CUSTOMER_ENVIRONMENT_NAME=<environment-name>
-H2O_CUSTOMER_ENVIRONMENT_VERSION=<new-version>
 ```
 
 Leave `H2O_CUSTOMER_PIP_SPEC` blank when `h2o==H2O_CUSTOMER_RUNTIME_VERSION` is available from PyPI. Otherwise, use an approved immutable requirement or wheel URL.
