@@ -87,6 +87,12 @@ The checked-in [customer bundle demo](data/h2o/customer_bundle/README.md) uses a
 4. `notebooks/04_h2o_customer/04_deploy_online_endpoint.ipynb`
 5. `notebooks/04_h2o_customer/05_submit_scoring_pipeline.ipynb`
 
+### Custom Joblib Model
+
+1. `notebooks/05_custom_model/01_deploy_joblib_model.ipynb`
+
+This self-contained example loads `model/customer_model.joblib`, scores `input.csv` locally, and can deploy the same model and rows to a managed online endpoint. It does not use the workshop `.env` file.
+
 ### Cleanup
 
 1. `notebooks/99_cleanup/cleanup_workshop_assets.ipynb`
