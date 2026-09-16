@@ -1,0 +1,36 @@
+# Install this file inside the Python 3.10 customjoblib Conda environment:
+# conda activate customjoblib
+# python -m pip install --requirement requirements-customjoblib.txt
+# python -m ipykernel install --user --name customjoblib --display-name "Custom Joblib"
+
+# Serialization and compression.
+cloudpickle==3.1.1
+dill==0.3.8
+joblib==1.5.1
+lz4==4.4.4
+zstandard==0.22.0
+
+# Numerical and tabular runtime.
+numpy==1.26.4
+pandas==2.3.1
+python-dateutil==2.9.0.post0
+pytz==2024.2
+scipy==1.15.3
+tzdata==2025.2
+
+# Model libraries present in the customer source environment.
+catboost==1.2.7
+lightgbm==4.5.0
+patsy==1.0.1
+scikit-learn==1.5.2
+statsmodels==0.14.5
+threadpoolctl==3.6.0
+xgboost==2.1.3
+
+# Azure ML SDK used by the deployment notebook.
+azure-ai-ml==1.28.1
+azure-identity==1.24.0b1
+ipykernel==6.29.5
+
+# Endpoint-only Azure packages are defined in:
+# notebooks/05_custom_model/environment/conda.yaml
