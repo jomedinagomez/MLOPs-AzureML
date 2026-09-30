@@ -1,18 +1,23 @@
 # Destroy Azure ML Infrastructure
 # This script safely destroys the Terraform-managed Azure ML platform
-# Location: infra_no_networking/
+
+[CmdletBinding()]
+param(
+    [Parameter()]
+    [ValidateSet("mlops", "non-networking", "single-workspace", "spark-workspace")]
+    [string]$Stack = "non-networking"
+)
 
 # Exit on error
 $ErrorActionPreference = "Stop"
 
 Write-Host "================================================" -ForegroundColor Cyan
-Write-Host "Azure ML Infrastructure Destruction Script" -ForegroundColor Cyan
+Write-Host "Azure ML Infrastructure Destruction Script: $Stack" -ForegroundColor Cyan
 Write-Host "================================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Change to the infra_no_networking directory
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$infraDir = Join-Path $scriptDir "infra_no_networking"
+$infraDir = Join-Path $scriptDir "infra\$Stack"
 
 Write-Host "Checking infrastructure directory..." -ForegroundColor Yellow
 if (-not (Test-Path $infraDir)) {
@@ -34,20 +39,46 @@ if (-not (Test-Path "terraform.tfstate")) {
     }
 }
 
-# Read naming suffix from terraform.tfvars
+# Read required deployment variables from terraform.tfvars
 Write-Host "Reading configuration..." -ForegroundColor Yellow
-$namingSuffix = ""
-if (Test-Path "terraform.tfvars") {
-    $tfvarsContent = Get-Content "terraform.tfvars" -Raw
-    if ($tfvarsContent -match 'naming_suffix\s*=\s*"([^"]+)"') {
-        $namingSuffix = $matches[1]
-        Write-Host "✓ Found naming suffix: $namingSuffix" -ForegroundColor Green
-    }
+if (-not (Test-Path "terraform.tfvars")) {
+    Write-Error "terraform.tfvars is required to destroy '$Stack' because Terraform must receive the same deployment inputs."
+    exit 1
 }
 
-if ([string]::IsNullOrEmpty($namingSuffix)) {
-    Write-Warning "Could not determine naming suffix from terraform.tfvars"
-    $namingSuffix = Read-Host "Enter your naming suffix (e.g., '01')"
+$tfvarsContent = Get-Content "terraform.tfvars" -Raw
+$namingSuffix = ""
+$deploymentLocation = "canadacentral"
+$subscriptionId = az account show --query id -o tsv
+if ($tfvarsContent -match 'naming_suffix\s*=\s*"([^"]+)"') {
+    $namingSuffix = $matches[1]
+    Write-Host "✓ Found naming suffix: $namingSuffix" -ForegroundColor Green
+}
+if ($tfvarsContent -match 'location\s*=\s*"([^"]+)"') {
+    $deploymentLocation = $matches[1]
+}
+if ($tfvarsContent -match 'subscription_id\s*=\s*"([^"]+)"') {
+    $subscriptionId = $matches[1]
+}
+
+if ([string]::IsNullOrWhiteSpace($namingSuffix)) {
+    Write-Error "terraform.tfvars must contain a non-empty naming_suffix."
+    exit 1
+}
+
+$workspaceKeyVaultName = $null
+$cmkKeyVaultName = $null
+if ($Stack -in @("single-workspace", "spark-workspace")) {
+    try {
+        $linkedResources = terraform output -json linked_resources 2>$null | ConvertFrom-Json
+        $workspaceKeyVaultName = $linkedResources.key_vault_name
+        $cmkResources = terraform output -json cmk 2>$null | ConvertFrom-Json
+        if ($cmkResources.key_vault_id) {
+            $cmkKeyVaultName = Split-Path -Leaf $cmkResources.key_vault_id
+        }
+    } catch {
+        Write-Warning "Unable to resolve Key Vault output names before destroy."
+    }
 }
 
 Write-Host ""
@@ -58,12 +89,12 @@ Write-Host ""
 Write-Host "This will PERMANENTLY DELETE all resources with suffix: $namingSuffix" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Resources to be destroyed include:" -ForegroundColor Yellow
-Write-Host "  - Azure ML Workspaces (dev, integration, prod)" -ForegroundColor Yellow
+Write-Host "  - Azure ML workspace resources managed by '$Stack'" -ForegroundColor Yellow
 Write-Host "  - Storage Accounts" -ForegroundColor Yellow
 Write-Host "  - Container Registries" -ForegroundColor Yellow
 Write-Host "  - Key Vaults" -ForegroundColor Yellow
-Write-Host "  - Service Principals" -ForegroundColor Yellow
-Write-Host "  - Virtual Networks (if deployed)" -ForegroundColor Yellow
+Write-Host "  - Identities and role assignments" -ForegroundColor Yellow
+Write-Host "  - Networking resources managed by the selected stack, if any" -ForegroundColor Yellow
 Write-Host "  - All associated resource groups" -ForegroundColor Yellow
 Write-Host ""
 
@@ -125,6 +156,32 @@ Write-Host ""
 if ($destroyExitCode -eq 0) {
     Write-Host "✓ Infrastructure destroyed successfully!" -ForegroundColor Green
     Write-Host ""
+
+    if ($Stack -in @("single-workspace", "spark-workspace") -and $workspaceKeyVaultName) {
+        Write-Host "Purging unprotected workspace Key Vault: $workspaceKeyVaultName" -ForegroundColor Yellow
+        $workspaceVaultPurged = $false
+        for ($attempt = 1; $attempt -le 12; $attempt++) {
+            az keyvault purge `
+                --name $workspaceKeyVaultName `
+                --location $deploymentLocation `
+                --subscription $subscriptionId `
+                --only-show-errors 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                $workspaceVaultPurged = $true
+                break
+            }
+            Start-Sleep -Seconds 10
+        }
+        if ($workspaceVaultPurged) {
+            Write-Host "✓ Workspace Key Vault purged" -ForegroundColor Green
+        } else {
+            Write-Warning "Workspace Key Vault could not be purged automatically: $workspaceKeyVaultName"
+        }
+    }
+
+    if ($Stack -in @("single-workspace", "spark-workspace") -and $cmkKeyVaultName) {
+        Write-Warning "Azure-required purge protection keeps CMK vault '$cmkKeyVaultName' recoverable until its retention period ends."
+    }
     
     # Verify resource groups are gone
     Write-Host "Verifying cleanup..." -ForegroundColor Yellow
@@ -155,8 +212,8 @@ if ($destroyExitCode -eq 0) {
     Write-Host "1. Review Azure Portal to confirm all resources are removed" -ForegroundColor White
     Write-Host "2. Check for any orphaned managed resource groups" -ForegroundColor White
     Write-Host "3. If you plan to redeploy:" -ForegroundColor White
-    Write-Host "   - You can use the same naming suffix now" -ForegroundColor White
-    Write-Host "   - Key Vaults should be purged (auto-purge enabled by default)" -ForegroundColor White
+    Write-Host "   - Confirm soft-deleted names are reusable before using the same suffix" -ForegroundColor White
+    Write-Host "   - Key Vaults with purge protection enabled can delay permanent deletion and name reuse" -ForegroundColor White
     Write-Host "   - Workspaces should be permanently deleted" -ForegroundColor White
     
 } else {

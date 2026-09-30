@@ -1,0 +1,45 @@
+$schema: https://azuremlschemas.azureedge.net/latest/sparkJob.schema.json
+type: spark
+
+experiment_name: workshop-serverless-spark
+display_name: Workshop Titanic serverless Spark
+description: Managed-identity serverless Spark job submitted from the workshop notebook.
+tags:
+  workshop: azureml-h2o
+  operation: serverless-spark
+  source_revision: 86d53a35d2ecc33ff40c669cc1389b06899e5a4b
+  SecurityControl: Ignore
+
+code: ./src
+entry:
+  file: titanic.py
+
+conf:
+  spark.driver.cores: 1
+  spark.driver.memory: 2g
+  spark.executor.cores: 2
+  spark.executor.memory: 2g
+  spark.executor.instances: 2
+
+inputs:
+  titanic_data:
+    type: uri_file
+    path: ./data/titanic.csv
+    mode: direct
+
+outputs:
+  wrangled_data:
+    type: uri_folder
+    path: azureml://datastores/workspaceblobstore/paths/workshop/serverless-spark/titanic/
+    mode: direct
+
+args: >-
+  --titanic_data ${{inputs.titanic_data}}
+  --wrangled_data ${{outputs.wrangled_data}}
+
+identity:
+  type: managed
+
+resources:
+  instance_type: Standard_E4S_V3
+  runtime_version: "3.4"

@@ -1,7 +1,7 @@
 # Destroy Azure ML Infrastructure - Quick Guide
 
 ## Overview
-This guide helps you safely destroy the Terraform-managed Azure ML infrastructure in the `infra_no_networking` folder.
+This guide helps you safely destroy one Terraform-managed Azure ML stack under `infra/`.
 
 ## ⚠️ Important Warnings
 
@@ -26,13 +26,16 @@ This guide helps you safely destroy the Terraform-managed Azure ML infrastructur
 
 3. **Permissions**: You need Owner or Contributor role on the subscription
 
+4. **Configuration**: The selected stack must have its original ignored
+   `terraform.tfvars`; destroy uses the same required inputs as deployment.
+
 ## Method 1: Automated Script (Recommended)
 
 Run the automated destruction script from the repository root:
 
 ```powershell
 cd c:\Users\jomedin\Documents\MLOPs-AzureML
-.\destroy_infrastructure.ps1
+.\destroy_infrastructure.ps1 -Stack non-networking
 ```
 
 The script will:
@@ -52,7 +55,7 @@ The script will:
 
 1. **Navigate to infrastructure folder**
    ```powershell
-   cd c:\Users\jomedin\Documents\MLOPs-AzureML\infra_no_networking
+   cd c:\Users\jomedin\Documents\MLOPs-AzureML\infra\non-networking
    ```
 
 2. **Initialize Terraform (if needed)**
@@ -249,15 +252,15 @@ If you plan to deploy again with the same naming suffix:
 
 4. **Re-run terraform init**
    ```powershell
-   cd infra_no_networking
+   cd infra\non-networking
    terraform init -reconfigure
    ```
 
 ## Support & Documentation
 
-- **Terraform State**: Located at `infra_no_networking/terraform.tfstate`
-- **Configuration**: `infra_no_networking/terraform.tfvars`
-- **Full Documentation**: `infra_no_networking/README.md`
+- **Terraform State**: Located in the selected stack directory, such as `infra/non-networking/terraform.tfstate`
+- **Configuration**: Located in the selected stack directory, such as `infra/non-networking/terraform.tfvars`
+- **Stack Documentation**: Start at `infra/README.md`
 - **Your Naming Suffix**: `01` (from terraform.tfvars)
 - **Subscription**: `5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25`
 - **Location**: `canadacentral`
@@ -266,7 +269,7 @@ If you plan to deploy again with the same naming suffix:
 
 ```powershell
 # From repository root
-cd c:\Users\jomedin\Documents\MLOPs-AzureML\infra_no_networking
+cd c:\Users\jomedin\Documents\MLOPs-AzureML\infra\non-networking
 
 # Show current infrastructure
 terraform show

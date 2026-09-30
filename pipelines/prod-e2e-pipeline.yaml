@@ -30,7 +30,7 @@ description: Train Classification model based on nyc taxi dataset for the produc
 # - Workspace names follow the pattern: '<workspace_prefix>-<env>-<location_code>-<naming_suffix>'
 #   - Example (dev):   mlw-dev-cc-01
 #   - Example (prod):  mlw-prod-cc-01
-# - The <prefix>, <workspace_prefix>, <location_code>, and <naming_suffix> are set in Terraform variables (see infra/variables.tf).
+# - The <prefix>, <workspace_prefix>, <location_code>, and <naming_suffix> are set in Terraform variables (see infra/mlops/variables.tf).
 # - This ensures strict separation of dev and prod environments, with no resource overlap., 
 # - When running the pipeline, always use the correct workspace for the target environment.
 

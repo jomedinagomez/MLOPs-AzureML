@@ -74,8 +74,11 @@ End‑to‑end Azure Machine Learning platform (dev + prod) with an opinionated 
 - CI/CD implementation details
 - Infrastructure architecture summary
 
-**For detailed infrastructure deployment**, see:
-- **[infra/README.md](infra/README.md)** - Complete Terraform deployment guide with step-by-step instructions
+**For infrastructure deployment**, see:
+- **[infra/README.md](infra/README.md)** - Index of independently deployed Terraform stacks
+- **[infra/mlops/README.md](infra/mlops/README.md)** - Existing private two-workspace/two-registry platform
+- **[infra/single-workspace/README.md](infra/single-workspace/README.md)** - CMK-enabled single-workspace platform
+- **[infra/spark-workspace/README.md](infra/spark-workspace/README.md)** - Spark-ready replacement workspace with independent Terraform state
 
 **For customer workshop execution on an Azure ML compute instance**, see:
 - **[workshop/README.md](workshop/README.md)** - Curated two-day Azure ML and H2O workshop with one `.env`, notebooks, pipeline YAML, source attribution, and Airflow handoff
@@ -93,24 +96,28 @@ End‑to‑end Azure Machine Learning platform (dev + prod) with an opinionated 
 | Registries | Dev & Prod (for promotion demo; single registry viable) | System‑assigned MI; private‑only
 | Identities | UAMI per workspace + UAMI per compute | Workspace UAMI for connectivity; compute UAMI for data/registry
 | Security | RBAC + private endpoints (no public ingress) | Least privilege; management‑ vs data‑plane separation
-| IaC | Terraform modules (`infra/`) | Single service principal orchestrates
+| IaC | Independent Terraform roots under `infra/` | Select the stack before planning or applying
 | Data | Sample taxi dataset (`data/`) | Expandable pattern
 
 Deterministic naming: names derive from `prefix`, `purpose`, `location_code`, `naming_suffix`; no random postfixes. Last Updated: 2025‑08‑09.
 
 ## Quick Infrastructure Deploy
 ```bash
-cd infra
+cd infra/mlops
 terraform init
 terraform plan
 terraform apply
 ```
-Configure `infra/terraform.tfvars` (purpose, location, address spaces, tags). See “Architecture & Security” below for full details.
+Configure `infra/mlops/terraform.tfvars` (purpose, location, address spaces, tags). See “Architecture & Security” below for full details.
 
 ---
 ## Repository Layout (High-Level)
 ```
-infra/                Terraform root & modules
+infra/                Terraform stack index
+  mlops/              Existing private dev/prod workspaces and registries
+  non-networking/     Existing public-network variant
+  single-workspace/   One CMK-enabled workspace with selected-IP access
+  spark-workspace/    Spark-ready replacement with Terraform-native AzAPI provisioning
 src/                  Component source code (Python)
 	transform/          Feature engineering
 	train/              Model training
@@ -125,7 +132,7 @@ environment/          Conda / requirements for train + score
 notebooks/            Exploration & asset sharing demos
 workshop/             Customer-facing two-day workshop package
 data/                 Sample taxi CSV + metadata YAML
-infra/                Architecture, security, DNS, RBAC (consolidated here)
+infra/mlops/          Architecture, security, DNS, RBAC for the existing platform
 ```
 
 ---
@@ -403,7 +410,7 @@ nslookup <dev-workspace>.<region>.notebooks.azure.net
 - Required shape (azapi): destination.serviceResourceId = registry ID and destination.subresourceTarget = "amlregistry".
 - Create rules after assigning the Workspace UAMI the Azure AI Enterprise Network Connection Approver at the target registry scope; wait ~90–150s for RBAC propagation.
 
-Note on registry pre‑authorization workaround: To prevent permission errors when Azure ML creates the managed private endpoint to a registry in private‑only setups, the registry is configured with `properties.managedResourceGroupSettings.assignedIdentities` to include the deployment principal’s objectId. This effectively grants Azure AI Administrator permissions over the registry’s Microsoft‑managed resource group so the platform can read needed metadata. See `infra/README.md` for verification commands.
+Note on registry pre‑authorization workaround: To prevent permission errors when Azure ML creates the managed private endpoint to a registry in private‑only setups, the registry is configured with `properties.managedResourceGroupSettings.assignedIdentities` to include the deployment principal’s objectId. This effectively grants Azure AI Administrator permissions over the registry’s Microsoft‑managed resource group so the platform can read needed metadata. See `infra/mlops/README.md` for verification commands.
 
 Troubleshooting summary:
 - 403 vaults/read during workspace create → add Key Vault Reader to Workspace UAMI.
@@ -417,7 +424,7 @@ PowerShell examples (Windows Bastion jumpbox). Expect:
 3) Managed private endpoints exist in workspace managed RGs targeting registries with subresource "amlregistry".
 4) Private‑only posture for Storage, Key Vault, ACR.
 5) RBAC at registry scopes: Workspace UAMI (Approver) and Compute UAMI (Registry User).
-See `infra/README.md` for exact commands.
+See `infra/mlops/README.md` for exact commands.
 
 ---
 ## Roadmap (Suggested Next Enhancements)
@@ -735,7 +742,7 @@ python src/cleanup_models/cleanup_models.py \
 
 ## Architecture Overview
 
-This platform implements a **flat dual-VNet architecture** with Azure Bastion jumpbox access and complete environment isolation. For comprehensive deployment strategy, troubleshooting, and architectural decisions, see **[infra/README.md](infra/README.md)**.
+The existing MLOps stack implements a **flat dual-VNet architecture** with Azure Bastion jumpbox access and complete environment isolation. For its deployment strategy, troubleshooting, and architectural decisions, see **[infra/mlops/README.md](infra/mlops/README.md)**. See **[infra/README.md](infra/README.md)** for the complete stack index.
 
 ### Key Architecture Features
 - **Flat Dual VNets**: Independent dev and prod VNets with required VNet peering for admin VM access

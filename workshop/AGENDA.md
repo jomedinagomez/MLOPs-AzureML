@@ -10,6 +10,8 @@
 6. Submit the single-step merge job from a notebook.
 7. Submit the integration compare pipeline from a notebook and inspect its child jobs and outputs.
 8. Review lineage, reproducibility, immutable versions, managed identities, logs, and Day 2 prerequisites.
+9. Optional extension: after the instructor enables the Spark managed-network plane,
+   submit a managed-identity serverless Spark job from a notebook.
 
 ### **Day 1 Breaks**
 

@@ -1,0 +1,8 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+type: command
+experiment_name: single-workspace-smoke
+display_name: single-workspace-cluster-smoke
+command: >-
+  python -c "import platform; print('Azure ML cluster smoke test passed'); print(platform.python_version())"
+environment: azureml://registries/azureml/environments/sklearn-1.5/labels/latest
+compute: azureml:aml-cluster-single-cc01

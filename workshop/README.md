@@ -1,6 +1,6 @@
 # Azure Machine Learning and H2O Workshop
 
-This folder is a portable two-day workshop for one customer operator and team using their own Azure Machine Learning workspace and compute instance. It covers Azure ML assets, jobs, pipelines, managed online endpoints, H2O model onboarding, and a CMK-compatible offline-scoring pipeline suitable for Airflow orchestration.
+This folder is a portable two-day workshop for one customer operator and team using their own Azure Machine Learning workspace and compute instance. It covers Azure ML assets, jobs, pipelines, managed online endpoints, H2O model onboarding, a CMK-compatible offline-scoring pipeline suitable for Airflow orchestration, and an optional managed-identity serverless Spark exercise.
 
 > The reference exercise uses a native H2O binary model. The customer BYOM exercise accepts either a native H2O binary or a portable H2O-3 MOJO ZIP.
 
@@ -93,6 +93,15 @@ The checked-in [customer bundle demo](data/h2o/customer_bundle/README.md) uses a
 
 This self-contained example loads `model/customer_model.joblib`, scores `input.csv` locally, and can deploy the same model and rows to a managed online endpoint. It does not use the workshop `.env` file.
 
+### Serverless Spark Jobs and Pipelines
+
+1. `notebooks/06_spark_jobs_pipelines/01_submit_serverless_spark_job.ipynb`
+
+Complete the infrastructure and RBAC steps in
+[`notebooks/06_spark_jobs_pipelines/README.md`](notebooks/06_spark_jobs_pipelines/README.md)
+before enabling submission. The exercise uses Azure ML serverless Spark, not the
+workspace AML compute cluster.
+
 ### Cleanup
 
 1. `notebooks/99_cleanup/cleanup_workshop_assets.ipynb`
@@ -101,6 +110,8 @@ This self-contained example loads `model/customer_model.joblib`, scores `input.c
 
 - `pipelines/single-step-merge-job.yaml` remains the source-controlled command-job definition.
 - `pipelines/integration-compare-pipeline.yaml` and `src/components/*.yaml` remain the source-controlled five-stage integration definition.
+- `notebooks/06_spark_jobs_pipelines/` contains the notebook-driven serverless Spark
+  exercise and its checked-in PySpark entry point.
 - Each H2O online-deployment notebook generates its own scoring script and request.
 - Each H2O offline-scoring notebook generates its own scorer, component YAML, environment binding, and pipeline YAML.
 

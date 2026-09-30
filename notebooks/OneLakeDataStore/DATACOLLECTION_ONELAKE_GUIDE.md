@@ -37,12 +37,12 @@ datacollection_storage_allowed_ips = ["1.2.3.4"]
 datacollection_storage_versioning_enabled = false
 ```
 
-Note: This is the no-networking template with public access. For private networking, use the `infra/` folder instead.
+Note: This is the no-networking template with public access. For private networking, use the `infra/mlops/` stack instead.
 
 ### 1.2 Deploy with Terraform
 
 ```bash
-cd infra_no_networking
+cd infra/non-networking
 
 # Initialize
 terraform init

@@ -1,0 +1,19 @@
+# Terraform local files (do not commit plans/state)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!.terraform.lock.hcl
+crash.log
+crash.*.log
+
+# Terraform plans and rendered shows
+*.tfplan
+tfplan
+plan.out
+*.out
+
+# IDE/editor
+.vscode/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,91 @@
+$schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
+type: pipeline
+experiment_name: nyc-taxi-single-workspace-integration
+description: >-
+  Deterministic registry-free integration pipeline that exercises merge, transform,
+  train, predict, and compare stages entirely inside managed compute.
+
+outputs:
+  pipeline_job_trained_model:
+    mode: rw_mount
+  pipeline_job_predictions:
+    mode: rw_mount
+  pipeline_job_comparison:
+    mode: rw_mount
+
+settings:
+  default_datastore: azureml:workspaceblobstore
+  default_compute: azureml:aml-cluster-single-cc01
+  continue_on_step_failure: false
+
+jobs:
+  merge_job:
+    type: command
+    command: >-
+      git clone --depth 1 --branch workshop
+      https://github.com/jomedinagomez/MLOPs-AzureML.git repo &&
+      python repo/src/merge_data/merge_data.py
+      --raw_data_green repo/data/taxi-data/raw/greenTaxiData.csv
+      --raw_data_yellow repo/data/taxi-data/raw/yellowTaxiData.csv
+      --merged_data ${{outputs.merged_data}}
+    outputs:
+      merged_data:
+        type: uri_folder
+        mode: rw_mount
+    environment: azureml://registries/azureml/environments/sklearn-1.5/labels/latest
+    identity:
+      type: user_identity
+
+  transform_job:
+    type: command
+    command: >-
+      python -c "from pathlib import Path; import pandas as pd; from sklearn.model_selection import train_test_split; source=Path('${{inputs.clean_data}}')/'merged_taxi_data.csv'; data=pd.read_csv(source); columns=['distance','passengers','vendor']; frame=data[columns].apply(pd.to_numeric,errors='coerce').fillna(0); cost=pd.to_numeric(data['cost'],errors='coerce').fillna(0); frame['target']=(cost>=cost.median()).astype(int); train,test=train_test_split(frame,test_size=0.3,random_state=42,stratify=frame['target']); train_dir=Path('${{outputs.train_data}}'); test_dir=Path('${{outputs.test_data}}'); train_dir.mkdir(parents=True,exist_ok=True); test_dir.mkdir(parents=True,exist_ok=True); train.to_csv(train_dir/'train.csv',index=False); test.to_csv(test_dir/'test.csv',index=False); print({'train_rows':len(train),'test_rows':len(test)})"
+    inputs:
+      clean_data: ${{parent.jobs.merge_job.outputs.merged_data}}
+    outputs:
+      train_data:
+        type: uri_folder
+        mode: rw_mount
+      test_data:
+        type: uri_folder
+        mode: rw_mount
+    environment: azureml://registries/azureml/environments/sklearn-1.5/labels/latest
+    identity:
+      type: user_identity
+
+  train_job:
+    type: command
+    command: >-
+      python -c "from pathlib import Path; import joblib,pandas as pd; from sklearn.ensemble import RandomForestClassifier; data=pd.read_csv(Path('${{inputs.training_data}}')/'train.csv'); model=RandomForestClassifier(n_estimators=50,random_state=42,n_jobs=1); model.fit(data.drop(columns=['target']),data['target']); output=Path('${{outputs.model_output}}'); output.mkdir(parents=True,exist_ok=True); joblib.dump(model,output/'model.joblib'); print({'training_rows':len(data)})"
+    inputs:
+      training_data: ${{parent.jobs.transform_job.outputs.train_data}}
+    outputs:
+      model_output: ${{parent.outputs.pipeline_job_trained_model}}
+    environment: azureml://registries/azureml/environments/sklearn-1.5/labels/latest
+    identity:
+      type: user_identity
+
+  predict_job:
+    type: command
+    command: >-
+      python -c "from pathlib import Path; import joblib,pandas as pd; model=joblib.load(Path('${{inputs.model_input}}')/'model.joblib'); data=pd.read_csv(Path('${{inputs.test_data}}')/'test.csv'); predicted=model.predict(data.drop(columns=['target'])); output=Path('${{outputs.predictions}}'); output.mkdir(parents=True,exist_ok=True); pd.DataFrame({'actual':data['target'],'predicted':predicted}).to_csv(output/'predictions.csv',index=False); print({'prediction_rows':len(data)})"
+    inputs:
+      model_input: ${{parent.jobs.train_job.outputs.model_output}}
+      test_data: ${{parent.jobs.transform_job.outputs.test_data}}
+    outputs:
+      predictions: ${{parent.outputs.pipeline_job_predictions}}
+    environment: azureml://registries/azureml/environments/sklearn-1.5/labels/latest
+    identity:
+      type: user_identity
+
+  compare_job:
+    type: command
+    command: >-
+      python -c "from pathlib import Path; import json,pandas as pd; from sklearn.metrics import accuracy_score; data=pd.read_csv(Path('${{inputs.predictions}}')/'predictions.csv'); accuracy=float(accuracy_score(data['actual'],data['predicted'])); assert accuracy>=0.70,f'accuracy below threshold: {accuracy}'; output=Path('${{outputs.compare_output}}'); output.mkdir(parents=True,exist_ok=True); (output/'metrics.json').write_text(json.dumps({'accuracy':accuracy}),encoding='utf-8'); print({'accuracy':accuracy})"
+    inputs:
+      predictions: ${{parent.jobs.predict_job.outputs.predictions}}
+    outputs:
+      compare_output: ${{parent.outputs.pipeline_job_comparison}}
+    environment: azureml://registries/azureml/environments/sklearn-1.5/labels/latest
+    identity:
+      type: user_identity
