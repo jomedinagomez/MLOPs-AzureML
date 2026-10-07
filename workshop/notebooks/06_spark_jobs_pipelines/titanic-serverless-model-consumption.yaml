@@ -1,0 +1,50 @@
+$schema: https://azuremlschemas.azureedge.net/latest/sparkJob.schema.json
+type: spark
+
+experiment_name: workshop-titanic-model-consumption
+display_name: Consume registered Titanic model on serverless Spark
+description: Load a verified registered Spark ML model and score Titanic on managed Spark 3.5.
+tags:
+  workshop: azureml-h2o
+  operation: titanic-model-consumption
+  SecurityControl: Ignore
+
+code: ./src/inference
+entry:
+  file: spark_inference.py
+
+conf:
+  spark.driver.cores: 1
+  spark.driver.memory: 2g
+  spark.executor.cores: 2
+  spark.executor.memory: 2g
+  spark.executor.instances: 2
+
+inputs:
+  titanic_data:
+    type: uri_file
+    path: abfss://spark@stpublicdlncus04.dfs.core.windows.net/data/titanic.csv
+    mode: direct
+  model_input:
+    type: uri_folder
+    mode: direct
+
+outputs:
+  predictions:
+    type: uri_folder
+    path: abfss://spark@stpublicdlncus04.dfs.core.windows.net/model-consumption/titanic/predictions/
+    mode: direct
+
+# Notebook 04 binds the model URI and ID; standalone Spark inputs are URI-only.
+args: >-
+  --titanic_data ${{inputs.titanic_data}}
+  --model_input ${{inputs.model_input}}
+  --model_asset_id __REGISTERED_MODEL_ID__
+  --predictions ${{outputs.predictions}}
+
+identity:
+  type: user_identity
+
+resources:
+  instance_type: standard_e4s_v3
+  runtime_version: "3.5"

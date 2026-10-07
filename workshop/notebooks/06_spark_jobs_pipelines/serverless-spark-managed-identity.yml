@@ -3,7 +3,7 @@ type: spark
 
 experiment_name: workshop-serverless-spark
 display_name: Workshop Titanic serverless Spark
-description: Managed-identity serverless Spark job submitted from the workshop notebook.
+description: User-identity serverless Spark job submitted from the workshop notebook.
 tags:
   workshop: azureml-h2o
   operation: serverless-spark
@@ -24,13 +24,13 @@ conf:
 inputs:
   titanic_data:
     type: uri_file
-    path: ./data/titanic.csv
+    path: abfss://spark@stpublicdlncus04.dfs.core.windows.net/data/titanic.csv
     mode: direct
 
 outputs:
   wrangled_data:
     type: uri_folder
-    path: azureml://datastores/workspaceblobstore/paths/workshop/serverless-spark/titanic/
+    path: abfss://spark@stpublicdlncus04.dfs.core.windows.net/output/titanic/
     mode: direct
 
 args: >-
@@ -38,8 +38,8 @@ args: >-
   --wrangled_data ${{outputs.wrangled_data}}
 
 identity:
-  type: managed
+  type: user_identity
 
 resources:
-  instance_type: Standard_E4S_V3
-  runtime_version: "3.4"
+  instance_type: standard_e4s_v3
+  runtime_version: "3.5"

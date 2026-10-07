@@ -1,0 +1,149 @@
+$schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
+type: pipeline
+
+experiment_name: workshop-titanic-spark-training
+display_name: Workshop Titanic Spark training pipeline
+description: Prepare Titanic data, train a Spark ML classifier, and evaluate it.
+tags:
+  workshop: azureml-h2o
+  operation: titanic-spark-training
+  SecurityControl: Ignore
+
+inputs:
+  titanic_data:
+    type: uri_file
+    path: abfss://spark@stpublicdlncus04.dfs.core.windows.net/data/titanic.csv
+    mode: direct
+
+outputs:
+  pipeline_model:
+    type: uri_folder
+    path: abfss://spark@stpublicdlncus04.dfs.core.windows.net/pipelines/titanic-training/model/
+    mode: direct
+  pipeline_metrics:
+    type: uri_folder
+    path: abfss://spark@stpublicdlncus04.dfs.core.windows.net/pipelines/titanic-training/metrics/
+    mode: direct
+  pipeline_validation:
+    type: uri_folder
+    path: abfss://spark@stpublicdlncus04.dfs.core.windows.net/pipelines/titanic-training/validation/
+    mode: direct
+
+jobs:
+  prepare_data:
+    type: spark
+    display_name: Prepare Titanic train and test data
+    code: ./src/pipeline
+    entry:
+      file: prepare_titanic.py
+    conf:
+      spark.driver.cores: 1
+      spark.driver.memory: 2g
+      spark.executor.cores: 2
+      spark.executor.memory: 2g
+      spark.executor.instances: 2
+    inputs:
+      raw_data: ${{parent.inputs.titanic_data}}
+    outputs:
+      prepared_data:
+        type: uri_folder
+        path: abfss://spark@stpublicdlncus04.dfs.core.windows.net/pipelines/titanic-training/prepared/
+        mode: direct
+    args: >-
+      --raw_data ${{inputs.raw_data}}
+      --prepared_data ${{outputs.prepared_data}}
+    identity:
+      type: user_identity
+    resources:
+      instance_type: standard_e4s_v3
+      runtime_version: "3.5"
+
+  train_model:
+    type: spark
+    display_name: Train Titanic Spark ML model
+    code: ./src/pipeline
+    entry:
+      file: train_titanic.py
+    conf:
+      spark.driver.cores: 1
+      spark.driver.memory: 2g
+      spark.executor.cores: 2
+      spark.executor.memory: 2g
+      spark.executor.instances: 2
+    inputs:
+      prepared_data:
+        type: uri_folder
+        path: ${{parent.jobs.prepare_data.outputs.prepared_data}}
+        mode: direct
+    outputs:
+      model_output: ${{parent.outputs.pipeline_model}}
+    args: >-
+      --prepared_data ${{inputs.prepared_data}}
+      --model_output ${{outputs.model_output}}
+    identity:
+      type: user_identity
+    resources:
+      instance_type: standard_e4s_v3
+      runtime_version: "3.5"
+
+  score_test_data:
+    type: spark
+    display_name: Score held-out Titanic test data
+    code: ./src/pipeline
+    entry:
+      file: score_titanic.py
+    conf:
+      spark.driver.cores: 1
+      spark.driver.memory: 2g
+      spark.executor.cores: 2
+      spark.executor.memory: 2g
+      spark.executor.instances: 2
+    inputs:
+      prepared_data:
+        type: uri_folder
+        path: ${{parent.jobs.prepare_data.outputs.prepared_data}}
+        mode: direct
+      model_input:
+        type: uri_folder
+        path: ${{parent.jobs.train_model.outputs.model_output}}
+        mode: direct
+    outputs:
+      metrics_output: ${{parent.outputs.pipeline_metrics}}
+    args: >-
+      --prepared_data ${{inputs.prepared_data}}
+      --model_input ${{inputs.model_input}}
+      --metrics_output ${{outputs.metrics_output}}
+    identity:
+      type: user_identity
+    resources:
+      instance_type: standard_e4s_v3
+      runtime_version: "3.5"
+
+  validate_model:
+    type: spark
+    display_name: Validate Titanic model for registration
+    code: ./src/pipeline
+    entry:
+      file: validate_titanic.py
+    conf:
+      spark.driver.cores: 1
+      spark.driver.memory: 2g
+      spark.executor.cores: 2
+      spark.executor.memory: 2g
+      spark.executor.instances: 2
+    inputs:
+      metrics_input:
+        type: uri_folder
+        path: ${{parent.jobs.score_test_data.outputs.metrics_output}}
+        mode: direct
+    outputs:
+      validation_output: ${{parent.outputs.pipeline_validation}}
+    args: >-
+      --metrics_input ${{inputs.metrics_input}}
+      --validation_output ${{outputs.validation_output}}
+      --accuracy_threshold 0.70
+    identity:
+      type: user_identity
+    resources:
+      instance_type: standard_e4s_v3
+      runtime_version: "3.5"

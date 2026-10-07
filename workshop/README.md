@@ -1,6 +1,6 @@
 # Azure Machine Learning and H2O Workshop
 
-This folder is a portable two-day workshop for one customer operator and team using their own Azure Machine Learning workspace and compute instance. It covers Azure ML assets, jobs, pipelines, managed online endpoints, H2O model onboarding, a CMK-compatible offline-scoring pipeline suitable for Airflow orchestration, and an optional managed-identity serverless Spark exercise.
+This folder is a portable two-day workshop for one customer operator and team using their own Azure Machine Learning workspace and compute instance. It covers Azure ML assets, jobs, pipelines, managed online endpoints, H2O model onboarding, a CMK-compatible offline-scoring pipeline suitable for Airflow orchestration, an optional managed-identity serverless Spark exercise, and a managed feature store demo run from local Windows.
 
 > The reference exercise uses a native H2O binary model. The customer BYOM exercise accepts either a native H2O binary or a portable H2O-3 MOJO ZIP.
 
@@ -96,11 +96,41 @@ This self-contained example loads `model/customer_model.joblib`, scores `input.c
 ### Serverless Spark Jobs and Pipelines
 
 1. `notebooks/06_spark_jobs_pipelines/01_submit_serverless_spark_job.ipynb`
+2. `notebooks/06_spark_jobs_pipelines/02_submit_titanic_training_pipeline.ipynb`
+3. [03_run_titanic_spark_inference_pipeline.ipynb](notebooks/06_spark_jobs_pipelines/03_run_titanic_spark_inference_pipeline.ipynb)
+4. [04_consume_registered_model_serverless_spark.ipynb](notebooks/06_spark_jobs_pipelines/04_consume_registered_model_serverless_spark.ipynb)
 
 Complete the infrastructure and RBAC steps in
 [`notebooks/06_spark_jobs_pipelines/README.md`](notebooks/06_spark_jobs_pipelines/README.md)
 before enabling submission. The exercise uses Azure ML serverless Spark, not the
-workspace AML compute cluster.
+workspace AML compute cluster. The second notebook runs prepare, train, score, and
+validate Spark 3.5 jobs from a checked-in pipeline YAML and registers the model only
+after validation passes. The third notebook submits the YAML-defined serverless
+Spark 3.5 inference pipeline directly, loads the registered model, and saves and
+validates ADLS predictions. No batch endpoint or deployment is needed.
+The fourth notebook consumes the same registered model through a standalone
+serverless Spark job, displays predictions, and verifies runtime/provenance without
+a pipeline wrapper or local Spark session.
+
+### Managed Feature Store from Local Windows
+
+Follow
+[`notebooks/07_feature_store/README.md`](notebooks/07_feature_store/README.md)
+and the slide-ready talk track in
+[`FEATURE_STORE_TALK_TRACK.md`](notebooks/07_feature_store/FEATURE_STORE_TALK_TRACK.md).
+The notebooks run the official Microsoft `featurestore_sample` code from a local Windows
+checkout. They use local Spark for feature development, submit materialization and feature
+retrieval to Azure ML serverless Spark, and cover offline and online materialization,
+training, batch inference, and an online endpoint.
+
+1. `notebooks/07_feature_store/00_prepare_sample_data.ipynb`
+2. `notebooks/07_feature_store/01_develop_feature_set_and_register.ipynb`
+3. `notebooks/07_feature_store/02_experiment_and_train_models.ipynb`
+4. `notebooks/07_feature_store/03_recurrent_materialization_batch_inference.ipynb`
+5. `notebooks/07_feature_store/04_online_store_and_online_inference.ipynb`
+
+These notebooks create Azure resources, including a recurrent materialization schedule, Azure
+Managed Redis, and a managed online endpoint. See the module README for costs and cleanup.
 
 ### Cleanup
 
@@ -111,7 +141,9 @@ workspace AML compute cluster.
 - `pipelines/single-step-merge-job.yaml` remains the source-controlled command-job definition.
 - `pipelines/integration-compare-pipeline.yaml` and `src/components/*.yaml` remain the source-controlled five-stage integration definition.
 - `notebooks/06_spark_jobs_pipelines/` contains the notebook-driven serverless Spark
-  exercise and its checked-in PySpark entry point.
+  exercises, a checked-in multi-stage pipeline YAML, and PySpark entry points.
+- `notebooks/07_feature_store/` contains the managed feature store demo based on the
+  official `featurestore_sample` notebooks, its talk track, and the extracted Learn content.
 - Each H2O online-deployment notebook generates its own scoring script and request.
 - Each H2O offline-scoring notebook generates its own scorer, component YAML, environment binding, and pipeline YAML.
 
@@ -126,7 +158,7 @@ Airflow should consume an approved copy of the notebook-generated H2O pipeline a
 
 ## Sources
 
-Workshop code is adapted from this repository, [AzureML-deep-dive-L200](https://github.com/jomedinagomez/AzureML-deep-dive-L200), and [Azure/azureml-examples](https://github.com/Azure/azureml-examples). The bundled customer MOJO comes from [H2O-3](https://github.com/h2oai/h2o-3) under Apache-2.0. See [SOURCES.md](SOURCES.md) for exact paths, revisions, adaptations, and retained notices.
+Workshop code is adapted from this repository, [AzureML-deep-dive-L200](https://github.com/jomedinagomez/AzureML-deep-dive-L200), and [Azure/azureml-examples](https://github.com/Azure/azureml-examples). The managed feature store module is anchored to the official `featurestore_sample` SDK-only track. The bundled customer MOJO comes from [H2O-3](https://github.com/h2oai/h2o-3) under Apache-2.0. See [SOURCES.md](SOURCES.md) for exact paths, revisions, adaptations, and retained notices.
 
 ## Folder Map
 

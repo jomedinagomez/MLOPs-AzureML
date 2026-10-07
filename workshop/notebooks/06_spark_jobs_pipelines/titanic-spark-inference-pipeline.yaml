@@ -1,0 +1,68 @@
+$schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
+type: pipeline
+experiment_name: workshop-titanic-spark-inference
+display_name: Titanic serverless Spark inference
+description: Score the registered Titanic model in a managed Spark 3.5 pipeline without an endpoint.
+tags:
+  workshop: azureml-h2o
+  operation: titanic-spark-inference
+  SecurityControl: Ignore
+settings:
+  continue_on_step_failure: false
+  force_rerun: true
+
+inputs:
+  titanic_data:
+    type: uri_file
+    path: abfss://spark@stpublicdlncus04.dfs.core.windows.net/data/titanic.csv
+    mode: direct
+  # Notebook 03 resolves the immutable registered model artifact before submission.
+  model_input:
+    type: uri_folder
+    mode: direct
+  model_asset_id: registered-model-id
+
+outputs:
+  predictions:
+    type: uri_folder
+    path: abfss://spark@stpublicdlncus04.dfs.core.windows.net/pipelines/titanic-inference/predictions/
+    mode: direct
+
+jobs:
+  spark_score:
+    type: spark
+    display_name: Native Spark 3.5 Titanic inference
+    code: ./src/inference
+    entry:
+      file: spark_inference.py
+    conf:
+      spark.driver.cores: 1
+      spark.driver.memory: 2g
+      spark.executor.cores: 2
+      spark.executor.memory: 2g
+      spark.executor.instances: 2
+    inputs:
+      titanic_data:
+        type: uri_file
+        path: ${{parent.inputs.titanic_data}}
+        mode: direct
+      model_input:
+        type: uri_folder
+        path: ${{parent.inputs.model_input}}
+        mode: direct
+      model_asset_id: ${{parent.inputs.model_asset_id}}
+    outputs:
+      predictions:
+        type: uri_folder
+        path: ${{parent.outputs.predictions}}
+        mode: direct
+    args: >-
+      --titanic_data ${{inputs.titanic_data}}
+      --model_input ${{inputs.model_input}}
+      --model_asset_id ${{inputs.model_asset_id}}
+      --predictions ${{outputs.predictions}}
+    identity:
+      type: user_identity
+    resources:
+      instance_type: standard_e4s_v3
+      runtime_version: "3.5"

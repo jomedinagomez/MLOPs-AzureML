@@ -1,0 +1,390 @@
+[
+  {
+    "order": 1,
+    "title": "What is managed feature store?",
+    "pdf": "AzureMLDocumentation/What is managed feature store_ - Azure Machine Learning _ Microsoft Learn.pdf",
+    "source_url": "https://learn.microsoft.com/en-us/azure/machine-learning/concept-what-is-managed-feature-store?view=azureml-api-2",
+    "folder": "extracted/01-concept-what-is-managed-feature-store",
+    "pages": [
+      "extracted/01-concept-what-is-managed-feature-store/pages/page-01.png",
+      "extracted/01-concept-what-is-managed-feature-store/pages/page-02.png",
+      "extracted/01-concept-what-is-managed-feature-store/pages/page-03.png",
+      "extracted/01-concept-what-is-managed-feature-store/pages/page-04.png",
+      "extracted/01-concept-what-is-managed-feature-store/pages/page-05.png",
+      "extracted/01-concept-what-is-managed-feature-store/pages/page-06.png"
+    ],
+    "images": [
+      {
+        "file": "extracted/01-concept-what-is-managed-feature-store/images/page-02-share-feature-store.png",
+        "page": 2,
+        "width": 1213,
+        "height": 1031,
+        "has_alpha_mask": false,
+        "bbox": [
+          [
+            49,
+            149,
+            563,
+            586
+          ]
+        ],
+        "sha256": "ad211a433e48c38ffaf3ca8890cbfba397d20dc8b3244d65af3406aca7a73b0c",
+        "learn_media": "share-feature-store.png",
+        "alt_text": "Diagram showing how to share feature store among multiple users and workspaces."
+      },
+      {
+        "file": "extracted/01-concept-what-is-managed-feature-store/images/page-03-conceptual-arch.png",
+        "page": 3,
+        "width": 842,
+        "height": 388,
+        "has_alpha_mask": false,
+        "bbox": [
+          [
+            49,
+            29,
+            563,
+            266
+          ]
+        ],
+        "sha256": "2773367a02b97e4cf5e6c9e8e8a1dc3a240a2292d6862ccabf2ae5c4a31a1525",
+        "learn_media": "conceptual-arch.png",
+        "alt_text": "Diagram depicting a conceptual architecture of Azure Machine Learning."
+      }
+    ]
+  },
+  {
+    "order": 2,
+    "title": "Top-level entities in managed feature store",
+    "pdf": "AzureMLDocumentation/Top-level entities in managed feature store - Azure Machine Learning _ Microsoft Learn.pdf",
+    "source_url": "https://learn.microsoft.com/en-us/azure/machine-learning/concept-top-level-entities-in-managed-feature-store?view=azureml-api-2",
+    "folder": "extracted/02-concept-top-level-entities-in-managed-feature-store",
+    "pages": [
+      "extracted/02-concept-top-level-entities-in-managed-feature-store/pages/page-01.png",
+      "extracted/02-concept-top-level-entities-in-managed-feature-store/pages/page-02.png",
+      "extracted/02-concept-top-level-entities-in-managed-feature-store/pages/page-03.png"
+    ],
+    "images": [
+      {
+        "file": "extracted/02-concept-top-level-entities-in-managed-feature-store/images/page-01-concepts.png",
+        "page": 1,
+        "width": 659,
+        "height": 535,
+        "has_alpha_mask": false,
+        "bbox": [
+          [
+            49,
+            171,
+            543,
+            572
+          ]
+        ],
+        "sha256": "5259178e9d7f6eae5300649a32bd140449bfc71e9fcd96338931b548f9b4fadc",
+        "learn_media": "concepts.png",
+        "alt_text": "Diagram depicting the main components of managed feature store."
+      }
+    ]
+  },
+  {
+    "order": 3,
+    "title": "Feature set specification transformation concepts",
+    "pdf": "AzureMLDocumentation/Feature set specification transformation concepts - Azure Machine Learning _ Microsoft Learn.pdf",
+    "source_url": "https://learn.microsoft.com/en-us/azure/machine-learning/feature-set-specification-transformation-concepts?view=azureml-api-2",
+    "folder": "extracted/03-feature-set-specification-transformation-concepts",
+    "pages": [
+      "extracted/03-feature-set-specification-transformation-concepts/pages/page-01.png",
+      "extracted/03-feature-set-specification-transformation-concepts/pages/page-02.png",
+      "extracted/03-feature-set-specification-transformation-concepts/pages/page-03.png",
+      "extracted/03-feature-set-specification-transformation-concepts/pages/page-04.png",
+      "extracted/03-feature-set-specification-transformation-concepts/pages/page-05.png",
+      "extracted/03-feature-set-specification-transformation-concepts/pages/page-06.png",
+      "extracted/03-feature-set-specification-transformation-concepts/pages/page-07.png",
+      "extracted/03-feature-set-specification-transformation-concepts/pages/page-08.png",
+      "extracted/03-feature-set-specification-transformation-concepts/pages/page-09.png"
+    ],
+    "images": [
+      {
+        "file": "extracted/03-feature-set-specification-transformation-concepts/images/page-03-feature-set-specification-example.png",
+        "page": 3,
+        "width": 2477,
+        "height": 1773,
+        "has_alpha_mask": true,
+        "bbox": [
+          [
+            122,
+            29,
+            491,
+            293
+          ]
+        ],
+        "sha256": "accf0336d55b06ec6bab6ab6ef99d18cee5672b7ae3afdf384ad80d4cd35de1b",
+        "learn_media": "feature-set-specification-example.png",
+        "alt_text": "Illustration showing feature set specification and corresponding transformations applied on source data to produce feature dataframe."
+      },
+      {
+        "file": "extracted/03-feature-set-specification-transformation-concepts/images/page-08-illustration-source-lookback.png",
+        "page": 8,
+        "width": 1345,
+        "height": 627,
+        "has_alpha_mask": false,
+        "bbox": [
+          [
+            122,
+            539,
+            491,
+            711
+          ]
+        ],
+        "sha256": "c9df8823ccad6c5fb0ce3ac91eafc7b86a8bc5975e9a6e664d14364ffcb1c384",
+        "learn_media": "illustration-source-lookback.png",
+        "alt_text": "Illustration showing the concept of source_lookback."
+      }
+    ]
+  },
+  {
+    "order": 4,
+    "title": "Feature set materialization concepts",
+    "pdf": "AzureMLDocumentation/Feature set materialization concepts - Azure Machine Learning _ Microsoft Learn.pdf",
+    "source_url": "https://learn.microsoft.com/en-us/azure/machine-learning/feature-set-materialization-concepts?view=azureml-api-2&tabs=SDK-track",
+    "folder": "extracted/04-feature-set-materialization-concepts",
+    "pages": [
+      "extracted/04-feature-set-materialization-concepts/pages/page-01.png",
+      "extracted/04-feature-set-materialization-concepts/pages/page-02.png",
+      "extracted/04-feature-set-materialization-concepts/pages/page-03.png",
+      "extracted/04-feature-set-materialization-concepts/pages/page-04.png",
+      "extracted/04-feature-set-materialization-concepts/pages/page-05.png",
+      "extracted/04-feature-set-materialization-concepts/pages/page-06.png",
+      "extracted/04-feature-set-materialization-concepts/pages/page-07.png",
+      "extracted/04-feature-set-materialization-concepts/pages/page-08.png",
+      "extracted/04-feature-set-materialization-concepts/pages/page-09.png",
+      "extracted/04-feature-set-materialization-concepts/pages/page-10.png"
+    ],
+    "images": [
+      {
+        "file": "extracted/04-feature-set-materialization-concepts/images/page-01-feature-set-materialization-ui.png",
+        "page": 1,
+        "width": 2896,
+        "height": 1752,
+        "has_alpha_mask": false,
+        "bbox": [
+          [
+            49,
+            416,
+            563,
+            728
+          ]
+        ],
+        "sha256": "5e7ad4cc1eb97102f10d262222ad23589d79b7cff1f1d59479780dbb4b024a51",
+        "learn_media": "feature-set-materialization-ui.png",
+        "alt_text": "Screenshot showing the feature set materialization jobs user interface."
+      },
+      {
+        "file": "extracted/04-feature-set-materialization-concepts/images/page-08-illustration-source-delay.png",
+        "page": 8,
+        "width": 1362,
+        "height": 930,
+        "has_alpha_mask": false,
+        "bbox": [
+          [
+            49,
+            29,
+            563,
+            380
+          ]
+        ],
+        "sha256": "780aa8a428f07539b3b98a81b55d120045a5511232b7797c098780d67c344d24",
+        "learn_media": "illustration-source-delay.png",
+        "alt_text": "Illustration that shows the source_delay concept."
+      }
+    ]
+  },
+  {
+    "order": 5,
+    "title": "Offline feature retrieval using a point-in-time join",
+    "pdf": "AzureMLDocumentation/Offline feature retrieval using a point-in-time join - Azure Machine Learning _ Microsoft Learn.pdf",
+    "source_url": "https://learn.microsoft.com/en-us/azure/machine-learning/offline-retrieval-point-in-time-join-concepts?view=azureml-api-2",
+    "folder": "extracted/05-offline-retrieval-point-in-time-join-concepts",
+    "pages": [
+      "extracted/05-offline-retrieval-point-in-time-join-concepts/pages/page-01.png",
+      "extracted/05-offline-retrieval-point-in-time-join-concepts/pages/page-02.png",
+      "extracted/05-offline-retrieval-point-in-time-join-concepts/pages/page-03.png",
+      "extracted/05-offline-retrieval-point-in-time-join-concepts/pages/page-04.png"
+    ],
+    "images": [
+      {
+        "file": "extracted/05-offline-retrieval-point-in-time-join-concepts/images/page-01-point-in-time-join.png",
+        "page": 1,
+        "width": 1092,
+        "height": 339,
+        "has_alpha_mask": false,
+        "bbox": [
+          [
+            49,
+            450,
+            563,
+            610
+          ]
+        ],
+        "sha256": "0ed186774f8f4e2773f0a25f820872c61dd1d445f14ac00c945f47cade463103",
+        "learn_media": "point-in-time-join.png",
+        "alt_text": "Illustration that shows a simple point-in-time join."
+      },
+      {
+        "file": "extracted/05-offline-retrieval-point-in-time-join-concepts/images/page-02-point-in-time-join-output.png",
+        "page": 2,
+        "width": 473,
+        "height": 111,
+        "has_alpha_mask": false,
+        "bbox": [
+          [
+            49,
+            29,
+            404,
+            112
+          ]
+        ],
+        "sha256": "0f7e6d1099237d71ec85d7bec585054b62726523c215f0266e3bb4baef3ba69d",
+        "learn_media": "point-in-time-join-output.png",
+        "alt_text": "Illustration that shows output of a simple point-in-time join."
+      },
+      {
+        "file": "extracted/05-offline-retrieval-point-in-time-join-concepts/images/page-03-point-in-time-join-source-delay.png",
+        "page": 3,
+        "width": 1063,
+        "height": 357,
+        "has_alpha_mask": false,
+        "bbox": [
+          [
+            49,
+            29,
+            563,
+            202
+          ]
+        ],
+        "sha256": "538f36183b7ac3c4076292f214bb9e489fe9f1b68616b2e955bed4062c06dadc",
+        "learn_media": "point-in-time-join-source-delay.png",
+        "alt_text": "Illustration that shows a point-in-time join with source delay."
+      },
+      {
+        "file": "extracted/05-offline-retrieval-point-in-time-join-concepts/images/page-03-point-in-time-join-source-delay-output.png",
+        "page": 3,
+        "width": 479,
+        "height": 113,
+        "has_alpha_mask": false,
+        "bbox": [
+          [
+            49,
+            275,
+            408,
+            360
+          ]
+        ],
+        "sha256": "88202c16d60a74f9affecae6d8912910f7b9d357067b91cf0392eba7f9ebdb97",
+        "learn_media": "point-in-time-join-source-delay-output.png",
+        "alt_text": "Illustration that shows output of a point-in-time join with source delay."
+      },
+      {
+        "file": "extracted/05-offline-retrieval-point-in-time-join-concepts/images/page-04-point-in-time-join-temporal-lookback.png",
+        "page": 4,
+        "width": 1073,
+        "height": 323,
+        "has_alpha_mask": false,
+        "bbox": [
+          [
+            49,
+            83,
+            563,
+            238
+          ]
+        ],
+        "sha256": "e36e8b1c00030bb486216eda0e364e90a528c21070f66fad6d74df35a1801661",
+        "learn_media": "point-in-time-join-temporal-lookback.png",
+        "alt_text": "Illustration that shows a point-in-time join with temporal lookback."
+      },
+      {
+        "file": "extracted/05-offline-retrieval-point-in-time-join-concepts/images/page-04-point-in-time-join-temporal-lookback-output.png",
+        "page": 4,
+        "width": 471,
+        "height": 109,
+        "has_alpha_mask": false,
+        "bbox": [
+          [
+            49,
+            312,
+            402,
+            394
+          ]
+        ],
+        "sha256": "b950cb32dc93d14e6711afc4f8b55a2609929c6390af8327153e676d37deb866",
+        "learn_media": "point-in-time-join-temporal-lookback-output.png",
+        "alt_text": "Illustration that shows output of a point-in-time join with temporal lookback."
+      }
+    ]
+  },
+  {
+    "order": 6,
+    "title": "Feature retrieval specification and usage in training and inference",
+    "pdf": "AzureMLDocumentation/Feature retrieval specification and usage in training and inference - Azure Machine Learning _ Microsoft Learn.pdf",
+    "source_url": "https://learn.microsoft.com/en-us/azure/machine-learning/feature-retrieval-concepts?view=azureml-api-2",
+    "folder": "extracted/06-feature-retrieval-concepts",
+    "pages": [
+      "extracted/06-feature-retrieval-concepts/pages/page-01.png",
+      "extracted/06-feature-retrieval-concepts/pages/page-02.png",
+      "extracted/06-feature-retrieval-concepts/pages/page-03.png",
+      "extracted/06-feature-retrieval-concepts/pages/page-04.png",
+      "extracted/06-feature-retrieval-concepts/pages/page-05.png",
+      "extracted/06-feature-retrieval-concepts/pages/page-06.png",
+      "extracted/06-feature-retrieval-concepts/pages/page-07.png",
+      "extracted/06-feature-retrieval-concepts/pages/page-08.png",
+      "extracted/06-feature-retrieval-concepts/pages/page-09.png"
+    ],
+    "images": []
+  },
+  {
+    "order": 7,
+    "title": "Manage access to managed feature store",
+    "pdf": "AzureMLDocumentation/Manage access to managed feature store - Azure Machine Learning _ Microsoft Learn.pdf",
+    "source_url": "https://learn.microsoft.com/en-us/azure/machine-learning/how-to-setup-access-control-feature-store?view=azureml-api-2",
+    "folder": "extracted/07-how-to-setup-access-control-feature-store",
+    "pages": [
+      "extracted/07-how-to-setup-access-control-feature-store/pages/page-01.png",
+      "extracted/07-how-to-setup-access-control-feature-store/pages/page-02.png",
+      "extracted/07-how-to-setup-access-control-feature-store/pages/page-03.png",
+      "extracted/07-how-to-setup-access-control-feature-store/pages/page-04.png",
+      "extracted/07-how-to-setup-access-control-feature-store/pages/page-05.png",
+      "extracted/07-how-to-setup-access-control-feature-store/pages/page-06.png",
+      "extracted/07-how-to-setup-access-control-feature-store/pages/page-07.png"
+    ],
+    "images": []
+  },
+  {
+    "order": 8,
+    "title": "Troubleshoot managed feature store errors",
+    "pdf": "AzureMLDocumentation/Troubleshoot managed feature store errors - Azure Machine Learning _ Microsoft Learn.pdf",
+    "source_url": "https://learn.microsoft.com/en-us/azure/machine-learning/troubleshooting-managed-feature-store?view=azureml-api-2",
+    "folder": "extracted/08-troubleshooting-managed-feature-store",
+    "pages": [
+      "extracted/08-troubleshooting-managed-feature-store/pages/page-01.png",
+      "extracted/08-troubleshooting-managed-feature-store/pages/page-02.png",
+      "extracted/08-troubleshooting-managed-feature-store/pages/page-03.png",
+      "extracted/08-troubleshooting-managed-feature-store/pages/page-04.png",
+      "extracted/08-troubleshooting-managed-feature-store/pages/page-05.png",
+      "extracted/08-troubleshooting-managed-feature-store/pages/page-06.png",
+      "extracted/08-troubleshooting-managed-feature-store/pages/page-07.png",
+      "extracted/08-troubleshooting-managed-feature-store/pages/page-08.png",
+      "extracted/08-troubleshooting-managed-feature-store/pages/page-09.png",
+      "extracted/08-troubleshooting-managed-feature-store/pages/page-10.png",
+      "extracted/08-troubleshooting-managed-feature-store/pages/page-11.png",
+      "extracted/08-troubleshooting-managed-feature-store/pages/page-12.png",
+      "extracted/08-troubleshooting-managed-feature-store/pages/page-13.png",
+      "extracted/08-troubleshooting-managed-feature-store/pages/page-14.png",
+      "extracted/08-troubleshooting-managed-feature-store/pages/page-15.png",
+      "extracted/08-troubleshooting-managed-feature-store/pages/page-16.png",
+      "extracted/08-troubleshooting-managed-feature-store/pages/page-17.png",
+      "extracted/08-troubleshooting-managed-feature-store/pages/page-18.png",
+      "extracted/08-troubleshooting-managed-feature-store/pages/page-19.png",
+      "extracted/08-troubleshooting-managed-feature-store/pages/page-20.png",
+      "extracted/08-troubleshooting-managed-feature-store/pages/page-21.png"
+    ],
+    "images": []
+  }
+]
