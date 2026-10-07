@@ -1,10 +1,69 @@
-# Spark-Ready Azure ML Workspace
+# Single Azure ML Workspace
 
-This independent Terraform root creates the Canada Central replacement workspace with
-`purpose=spark` and `naming_suffix=02`. It uses local state in this directory and must
-never share state, plans, `.terraform`, or `terraform.tfvars` with another root.
+This Terraform root supports two isolated profiles:
 
-## Expected resources
+- `managed`: `AllowOnlyApprovedOutbound`, selected-IP ingress, and a post-create
+  managed-network/Spark provisioning phase.
+- `public`: open public connectivity with AML managed-network isolation disabled.
+
+Different deployments use separate local state, tfvars, and saved plans. Never reuse
+one deployment's state file for another profile or region.
+
+## North Central US public profile
+
+The current public deployment uses:
+
+```powershell
+$env:TF_DATA_DIR = (
+  Resolve-Path infra\single-workspace
+).Path + "\.terraform-public-ncus"
+terraform -chdir=infra\single-workspace init `
+  -input=false
+terraform -chdir=infra\single-workspace workspace select `
+  -or-create public-ncus
+terraform -chdir=infra\single-workspace plan `
+  -var-file=public.ncus.tfvars `
+  -out=public-ncus.tfplan
+
+.\infra\single-workspace\scripts\validate-plan.ps1 `
+  -PlanPath public-ncus.tfplan `
+  -ExpectedLocation northcentralus `
+  -ExpectedLocationCode ncus `
+  -ExpectedPurpose public `
+  -ExpectedSuffix 04 `
+  -ExpectedNetworkProfile public `
+  -ExpectedCreateCompute $true
+```
+
+Expected names:
+
+| Resource | Name |
+|---|---|
+| Resource group | `rg-aml-ws-public-ncus-04` |
+| Azure ML workspace | `mlwpublicncus04` |
+| Storage account | `stpublicncus04` |
+| Spark ADLS Gen2 | `stpublicdlncus04` |
+| Container registry | `acrpublicncus04` |
+| Workspace Key Vault | `kvpublicncus04` |
+| CMK Key Vault | `kvcmkpublicncus04` |
+| Log Analytics workspace | `log-aml-public-ncus04` |
+| Application Insights | `mlwinpublicncus04` |
+| Compute cluster | `aml-cluster-public-ncus04` |
+| Compute instance | `ci-public-ncus04` |
+
+Apply only the validated saved plan. Post-deployment validation uses:
+
+```powershell
+.\infra\single-workspace\scripts\validate-public-deployment.ps1 `
+  -StatePath terraform.tfstate.d\public-ncus\terraform.tfstate
+```
+
+## Managed Canada Central profile
+
+The existing managed profile retains its separate Canada Central state and names.
+The network sequence below applies only to that profile.
+
+## Historical managed-profile resources
 
 | Resource | Name |
 |---|---|
@@ -43,22 +102,23 @@ The deployment validator requires exactly one Azure-created Blob rule targeting
 `stsparkcc02`, with `spark_enabled=true`, `status=Active`, and workspace
 `sparkReady=true`.
 
-## Configure
+## Configure a profile
 
 ```powershell
-Set-Location infra\spark-workspace
-Copy-Item terraform.tfvars.example terraform.tfvars
+Set-Location infra\single-workspace
+Copy-Item public.ncus.tfvars.example public.ncus.tfvars
 ```
 
-Replace the documentation IP with approved public IPv4 CIDRs. A single address must
-use `/32`. Keep the confirmed subscription, Canada Central location, `spark`, `02`, and
-`SecurityControl=Ignore`.
+Replace the documentation IP with an approved public IPv4 CIDR. A single address must
+use `/32`. Keep the confirmed subscription and `SecurityControl=Ignore`. The public
+profile does not apply selected-IP firewalls, but the validated CIDR remains available
+if the stack is later converted to the managed profile.
 
 ## Local validation
 
 ```powershell
 terraform fmt -check -recursive
-terraform init -backend=false
+terraform init -input=false
 terraform validate
 ```
 
@@ -69,25 +129,28 @@ No Azure access is required for these checks.
 Planning is a later, explicitly approved step:
 
 ```powershell
-terraform plan -out=tfplan
-.\scripts\validate-plan.ps1 -PlanPath tfplan
+terraform init -input=false
+terraform workspace select -or-create <workspace-name>
+terraform plan -var-file=<tfvars-file> -out=<plan-file>
+.\scripts\validate-plan.ps1 -PlanPath <plan-file> <expected-profile-parameters>
 ```
 
-The validator requires all managed resources to be create-only, no deletes or
-replacements, exact names, mandatory tags, CMK, UAMIs, selected-IP services, and the
-Terraform-native Spark action. Review the saved plan before applying it.
+The validator requires all resources to be create-only with no deletes or
+replacements, exact names, mandatory tags, CMK, UAMIs, profile-specific networking,
+and the expected compute phase. Review the saved plan before applying it.
 
 ## Post-deployment validation
 
 After a separately approved deployment:
 
 ```powershell
-.\scripts\validate-deployment.ps1
+.\scripts\validate-public-deployment.ps1 `
+  -StatePath terraform.tfstate.d\public-ncus\terraform.tfstate
 ```
 
-The validator checks exact names, tags, CMK, UAMIs, selected-IP ACLs, one Azure-created
-Spark Blob rule, `sparkReady`, compute security, a smoke job, and the integration
-pipeline. It stops the compute instance and waits for the cluster to scale to zero.
+The public validator checks exact names, North Central US locations, tags, CMK,
+UAMIs, public connectivity, compute security, ADLS Gen2, and a smoke job. It stops
+the compute instance and waits for the cluster to scale to zero.
 
 ## State and generated files
 

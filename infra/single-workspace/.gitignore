@@ -1,5 +1,7 @@
 # Terraform local files (do not commit plans/state)
 .terraform/
+.terraform-*/
+terraform.tfstate.d/
 *.tfstate
 *.tfstate.*
 *.tfvars

@@ -15,8 +15,8 @@ variable "location" {
   default     = "canadacentral"
 
   validation {
-    condition     = var.location == "canadacentral"
-    error_message = "This replacement root is restricted to Canada Central."
+    condition     = contains(["canadacentral", "northcentralus"], var.location)
+    error_message = "location must be canadacentral or northcentralus."
   }
 }
 
@@ -26,8 +26,8 @@ variable "location_code" {
   default     = "cc"
 
   validation {
-    condition     = var.location_code == "cc"
-    error_message = "location_code must remain cc for Canada Central."
+    condition     = contains(["cc", "ncus"], var.location_code)
+    error_message = "location_code must be cc or ncus."
   }
 }
 
@@ -65,8 +65,8 @@ variable "naming_suffix" {
   default     = "03"
 
   validation {
-    condition     = var.naming_suffix == "03"
-    error_message = "naming_suffix must remain 03 for this replacement root."
+    condition     = can(regex("^[0-9]{2}$", var.naming_suffix))
+    error_message = "naming_suffix must be exactly two digits."
   }
 }
 

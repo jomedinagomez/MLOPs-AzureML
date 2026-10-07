@@ -76,7 +76,8 @@ module "storage_account_default" {
   tags                = var.tags
 
   # Identity controls
-  key_based_authentication = false
+  key_based_authentication         = false
+  storage_account_replication_type = var.network_profile == "public" ? "LRS" : "GRS"
 
   # Networking controls
   allow_blob_public_access = false

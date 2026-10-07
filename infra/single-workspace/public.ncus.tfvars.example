@@ -1,0 +1,29 @@
+subscription_id = "5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25"
+location        = "northcentralus"
+location_code   = "ncus"
+prefix          = "aml"
+purpose         = "public"
+naming_suffix   = "04"
+network_profile = "public"
+
+allowed_public_ip_cidrs = [
+  "203.0.113.10/32"
+]
+
+assign_user_roles        = true
+create_compute_resources = true
+
+compute_cluster_vm_size                        = "Standard_F8s_v2"
+compute_cluster_min_nodes                      = 0
+compute_cluster_max_nodes                      = 4
+compute_cluster_idle_seconds_before_scale_down = 120
+compute_instance_name                          = "ci-public-ncus04"
+compute_instance_vm_size                       = "Standard_F8s_v2"
+
+tags = {
+  project         = "ml-platform"
+  environment     = "public"
+  created_by      = "terraform"
+  owner           = "ml-team"
+  SecurityControl = "Ignore"
+}

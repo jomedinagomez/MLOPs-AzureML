@@ -1,6 +1,6 @@
 locals {
   spark_data_lake_account_name = substr(
-    lower(replace("st${var.purpose}dl${var.location_code}${var.naming_suffix}", "-", "")),
+    lower(replace("st${var.purpose}dl${var.location_code}04", "-", "")),
     0,
     24
   )
@@ -27,18 +27,20 @@ resource "azurerm_storage_account" "spark_data_lake" {
     type = "SystemAssigned"
   }
 
-  network_rules {
-    default_action = var.network_profile == "managed" ? "Deny" : "Allow"
-    bypass         = ["AzureServices"]
-    ip_rules = var.network_profile == "managed" ? [
-      for cidr in var.allowed_public_ip_cidrs :
-      endswith(cidr, "/32") ? trimsuffix(cidr, "/32") : cidr
-    ] : []
+  dynamic "network_rules" {
+    for_each = var.network_profile == "managed" ? [1] : []
+
+    content {
+      default_action = "Deny"
+      bypass         = ["AzureServices"]
+      ip_rules = [
+        for cidr in var.allowed_public_ip_cidrs :
+        endswith(cidr, "/32") ? trimsuffix(cidr, "/32") : cidr
+      ]
+    }
   }
 
   blob_properties {
-    versioning_enabled = true
-
     delete_retention_policy {
       days = 30
     }

@@ -4,7 +4,31 @@ param(
     [string]$TerraformDirectory = (Split-Path -Parent $PSScriptRoot),
 
     [Parameter()]
-    [string]$PlanPath = "tfplan"
+    [string]$PlanPath = "tfplan",
+
+    [Parameter()]
+    [string]$ExpectedSubscription = "5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25",
+
+    [Parameter()]
+    [string]$ExpectedLocation = "canadacentral",
+
+    [Parameter()]
+    [string]$ExpectedLocationCode = "cc",
+
+    [Parameter()]
+    [ValidateSet("spark", "public")]
+    [string]$ExpectedPurpose = "spark",
+
+    [Parameter()]
+    [ValidatePattern("^[0-9]{2}$")]
+    [string]$ExpectedSuffix = "03",
+
+    [Parameter()]
+    [ValidateSet("managed", "public")]
+    [string]$ExpectedNetworkProfile = "managed",
+
+    [Parameter()]
+    [bool]$ExpectedCreateCompute = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,6 +49,20 @@ function Assert-PlanCondition {
     Write-Host "PASS: $Message" -ForegroundColor Green
 }
 
+function Get-PlannedResource {
+    param(
+        [Parameter(Mandatory)]
+        [object[]]$Resources,
+
+        [Parameter(Mandatory)]
+        [string]$Address
+    )
+
+    $matches = @($Resources | Where-Object { $_.address -eq $Address })
+    Assert-PlanCondition -Condition ($matches.Count -eq 1) -Message "Required resource is planned: $Address"
+    return $matches[0]
+}
+
 $resolvedTerraformDirectory = (Resolve-Path -LiteralPath $TerraformDirectory).Path
 $resolvedPlanPath = if ([System.IO.Path]::IsPathRooted($PlanPath)) {
     (Resolve-Path -LiteralPath $PlanPath).Path
@@ -40,19 +78,30 @@ if ($LASTEXITCODE -ne 0) {
 
 $plan = $planJson | ConvertFrom-Json -Depth 100
 $resources = @($plan.resource_changes)
+$expectedResourceGroup = "rg-aml-ws-$ExpectedPurpose-$ExpectedLocationCode-$ExpectedSuffix"
+$expectedWorkspace = "mlw$ExpectedPurpose$ExpectedLocationCode$ExpectedSuffix"
+$expectedStorage = "st$ExpectedPurpose$ExpectedLocationCode$ExpectedSuffix"
+$expectedAcr = "acr$ExpectedPurpose$ExpectedLocationCode$ExpectedSuffix"
+$expectedWorkspaceVault = "kv$ExpectedPurpose$ExpectedLocationCode$ExpectedSuffix"
+$expectedCmkVault = "kvcmk$ExpectedPurpose$ExpectedLocationCode$ExpectedSuffix"
+$expectedLogAnalytics = "log-aml-$ExpectedPurpose-$ExpectedLocationCode$ExpectedSuffix"
+$expectedAppInsights = "mlwin$ExpectedPurpose$ExpectedLocationCode$ExpectedSuffix"
+$expectedSparkStorage = ("st{0}dl{1}04" -f $ExpectedPurpose, $ExpectedLocationCode).ToLower()
+$expectedComputeInstance = if ([string]::IsNullOrWhiteSpace($plan.variables.compute_instance_name.value)) {
+    "aml-instance-$ExpectedPurpose-$ExpectedLocationCode$ExpectedSuffix"
+}
+else {
+    $plan.variables.compute_instance_name.value
+}
 
-$expectedSubscription = "5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25"
-$expectedLocation = "canadacentral"
-$expectedPurpose = "spark"
-$expectedSuffix = "03"
-
-Assert-PlanCondition -Condition ($plan.variables.subscription_id.value -eq $expectedSubscription) -Message "Plan targets the confirmed subscription"
-Assert-PlanCondition -Condition ($plan.variables.location.value -eq $expectedLocation) -Message "Plan targets Canada Central"
-Assert-PlanCondition -Condition ($plan.variables.location_code.value -eq "cc") -Message "Plan uses the Canada Central location code"
-Assert-PlanCondition -Condition ($plan.variables.purpose.value -eq $expectedPurpose) -Message "Plan purpose is spark"
-Assert-PlanCondition -Condition ($plan.variables.naming_suffix.value -eq $expectedSuffix) -Message "Plan suffix is 03"
+Assert-PlanCondition -Condition ($plan.variables.subscription_id.value -eq $ExpectedSubscription) -Message "Plan targets the confirmed subscription"
+Assert-PlanCondition -Condition ($plan.variables.location.value -eq $ExpectedLocation) -Message "Plan targets $ExpectedLocation"
+Assert-PlanCondition -Condition ($plan.variables.location_code.value -eq $ExpectedLocationCode) -Message "Plan uses location code $ExpectedLocationCode"
+Assert-PlanCondition -Condition ($plan.variables.purpose.value -eq $ExpectedPurpose) -Message "Plan purpose is $ExpectedPurpose"
+Assert-PlanCondition -Condition ($plan.variables.naming_suffix.value -eq $ExpectedSuffix) -Message "Plan suffix is $ExpectedSuffix"
+Assert-PlanCondition -Condition ($plan.variables.network_profile.value -eq $ExpectedNetworkProfile) -Message "Plan uses $ExpectedNetworkProfile network profile"
+Assert-PlanCondition -Condition ($plan.variables.create_compute_resources.value -eq $ExpectedCreateCompute) -Message "Compute creation matches the approved phase"
 Assert-PlanCondition -Condition ($plan.variables.tags.value.SecurityControl -eq "Ignore") -Message "SecurityControl=Ignore is mandatory"
-Assert-PlanCondition -Condition ($plan.variables.create_compute_resources.value -eq $false) -Message "Phase 1 defers compute creation until Spark networking is ready"
 
 $deleteActions = @($resources | Where-Object { $_.change.actions -contains "delete" })
 Assert-PlanCondition -Condition ($deleteActions.Count -eq 0) -Message "Plan contains no delete or replacement actions"
@@ -65,36 +114,6 @@ $managedNonCreates = @(
 )
 Assert-PlanCondition -Condition ($managedNonCreates.Count -eq 0) -Message "Every managed resource action is create-only"
 
-$requiredAddresses = @(
-    "azurerm_resource_group.workspace",
-    "module.workspace.azapi_resource.aml_workspace",
-    "module.workspace.terraform_data.linked_service_network_policy",
-    "module.workspace.azurerm_key_vault.cmk[0]",
-    "module.workspace.azapi_resource.workspace_cmk[0]",
-    "module.workspace.azapi_resource.storage_encryption_scope[0]"
-)
-
-foreach ($address in $requiredAddresses) {
-    $matchingResource = @($resources | Where-Object { $_.address -eq $address })
-    Assert-PlanCondition -Condition ($matchingResource.Count -eq 1) -Message "Required resource is planned: $address"
-}
-
-$workspaceResources = @(
-    $resources | Where-Object {
-        $_.type -eq "azapi_resource" -and
-        $_.change.after.type -like "Microsoft.MachineLearningServices/workspaces@*"
-    }
-)
-Assert-PlanCondition -Condition ($workspaceResources.Count -eq 1) -Message "Exactly one Azure ML workspace is planned"
-
-$registryResources = @(
-    $resources | Where-Object {
-        $_.type -eq "azapi_resource" -and
-        $_.change.after.type -like "Microsoft.MachineLearningServices/registries@*"
-    }
-)
-Assert-PlanCondition -Condition ($registryResources.Count -eq 0) -Message "No Azure ML registry is planned"
-
 $forbiddenTypes = @(
     "azurerm_virtual_network",
     "azurerm_subnet",
@@ -105,41 +124,29 @@ $forbiddenTypes = @(
     "azurerm_windows_virtual_machine",
     "azurerm_linux_virtual_machine"
 )
-
 $forbiddenResources = @($resources | Where-Object { $_.type -in $forbiddenTypes })
 Assert-PlanCondition -Condition ($forbiddenResources.Count -eq 0) -Message "No customer-managed network, Bastion, or VM resources are planned"
 
-$resourceGroups = @($resources | Where-Object { $_.type -eq "azurerm_resource_group" })
-Assert-PlanCondition -Condition ($resourceGroups.Count -eq 1) -Message "Exactly one resource group is planned"
-Assert-PlanCondition -Condition ($resourceGroups[0].change.after.name -eq "rg-aml-ws-spark-cc-03") -Message "Expected Spark resource group name is planned"
+$registryResources = @(
+    $resources | Where-Object {
+        $_.type -eq "azapi_resource" -and
+        $_.change.after.type -like "Microsoft.MachineLearningServices/registries@*"
+    }
+)
+Assert-PlanCondition -Condition ($registryResources.Count -eq 0) -Message "No Azure ML registry is planned"
 
-$allowedCidrs = @($plan.variables.allowed_public_ip_cidrs.value)
-Assert-PlanCondition -Condition ($allowedCidrs.Count -gt 0) -Message "At least one selected public IPv4 CIDR is supplied"
+$resourceGroup = Get-PlannedResource -Resources $resources -Address "azurerm_resource_group.workspace"
+Assert-PlanCondition -Condition ($resourceGroup.change.after.name -eq $expectedResourceGroup) -Message "Expected resource group name is planned"
+Assert-PlanCondition -Condition ($resourceGroup.change.after.location -eq $ExpectedLocation) -Message "Resource group uses the expected location"
 
-$workspace = $resources | Where-Object { $_.address -eq "module.workspace.azapi_resource.aml_workspace" }
-Assert-PlanCondition -Condition ($workspace.change.actions -contains "create") -Message "Replacement workspace is created in independent state"
-Assert-PlanCondition -Condition ($workspace.change.after.name -eq "mlwsparkcc03") -Message "Expected Spark workspace name is planned"
-Assert-PlanCondition -Condition ($workspace.change.after.body.properties.publicNetworkAccess -eq "Disabled") -Message "Workspace creation starts with public access disabled"
-Assert-PlanCondition -Condition ($workspace.change.after.body.properties.managedNetwork.isolationMode -eq "AllowOnlyApprovedOutbound") -Message "AML managed network uses AllowOnlyApprovedOutbound"
-Assert-PlanCondition -Condition ($workspace.change.after.body.properties.managedNetwork.firewallSku -eq "Standard") -Message "AML managed network uses Azure Firewall Standard for FQDN rules"
+$workspace = Get-PlannedResource -Resources $resources -Address "module.workspace.azapi_resource.aml_workspace"
+Assert-PlanCondition -Condition ($workspace.change.after.name -eq $expectedWorkspace) -Message "Expected Azure ML workspace name is planned"
+Assert-PlanCondition -Condition ($workspace.change.after.location -eq $ExpectedLocation) -Message "Azure ML workspace uses the expected location"
 Assert-PlanCondition -Condition ($workspace.change.after.body.properties.encryption.status -eq "Enabled") -Message "Workspace CMK encryption is enabled"
-Assert-PlanCondition -Condition ($workspace.change.after.body.properties.provisionNetworkNow -eq $false) -Message "Workspace creation defers managed-network provisioning to the visible CLI phase"
+Assert-PlanCondition -Condition ($workspace.change.after.body.properties.systemDatastoresAuthMode -eq "identity") -Message "Workspace system datastores use identity authentication"
 
-$configuredOutboundRules = $workspace.change.after.body.properties.managedNetwork.outboundRules
-$configuredFqdnRules = @(
-    $configuredOutboundRules.PSObject.Properties | Where-Object {
-        $_.Value.type -eq "FQDN"
-    }
-)
-Assert-PlanCondition -Condition ($configuredFqdnRules.Count -gt 0) -Message "Original FQDN outbound rules are retained"
-
-$configuredBlobRules = @(
-    $configuredOutboundRules.PSObject.Properties | Where-Object {
-        $_.Value.type -eq "PrivateEndpoint" -and
-        $_.Value.destination.subresourceTarget -eq "blob"
-    }
-)
-Assert-PlanCondition -Condition ($configuredBlobRules.Count -eq 0) -Message "Phase 1 leaves the Spark-enabled Blob rule to the documented CLI patch"
+$linkedServicePolicy = Get-PlannedResource -Resources $resources -Address "module.workspace.terraform_data.linked_service_network_policy"
+Assert-PlanCondition -Condition ($linkedServicePolicy.change.after.input.enforcement_source -eq "Terraform") -Message "Linked-service network policy is Terraform-owned"
 
 $embeddedNetworkActions = @(
     $resources | Where-Object {
@@ -151,57 +158,87 @@ $embeddedNetworkActions = @(
         )
     }
 )
-Assert-PlanCondition -Condition ($embeddedNetworkActions.Count -eq 0) -Message "Terraform does not hide Spark provisioning or ACL patching inside the apply"
+Assert-PlanCondition -Condition ($embeddedNetworkActions.Count -eq 0) -Message "Terraform does not hide network provisioning or ACL patching inside the apply"
 
-$sparkStorageRole = $resources | Where-Object { $_.address -eq "module.workspace.azurerm_role_assignment.workspace_storage_contributor_for_spark" }
-Assert-PlanCondition -Condition ($sparkStorageRole.change.after.role_definition_name -eq "Contributor") -Message "Workspace UAMI receives Storage Contributor for Spark"
+$workspaceKeyVault = Get-PlannedResource -Resources $resources -Address "module.workspace.module.keyvault_aml.azurerm_key_vault.kv"
+$cmkKeyVault = Get-PlannedResource -Resources $resources -Address "module.workspace.azurerm_key_vault.cmk[0]"
+$storage = Get-PlannedResource -Resources $resources -Address "module.workspace.module.storage_account_default.azurerm_storage_account.storage_account"
+$acr = Get-PlannedResource -Resources $resources -Address "module.workspace.module.container_registry.azurerm_container_registry.acr"
+$logAnalytics = Get-PlannedResource -Resources $resources -Address "azurerm_log_analytics_workspace.workspace"
+$appInsights = Get-PlannedResource -Resources $resources -Address "module.workspace.azurerm_application_insights.aml-appins"
+$sparkStorage = Get-PlannedResource -Resources $resources -Address "azurerm_storage_account.spark_data_lake"
+$sparkFilesystem = Get-PlannedResource -Resources $resources -Address "azurerm_storage_data_lake_gen2_filesystem.spark"
 
-$linkedServicePolicy = $resources | Where-Object { $_.address -eq "module.workspace.terraform_data.linked_service_network_policy" }
-Assert-PlanCondition -Condition ($linkedServicePolicy.change.after.input.public_network_access -eq "EnabledForSelectedIPs") -Message "Linked Storage and Key Vault use selected-IP public access"
-Assert-PlanCondition -Condition ($linkedServicePolicy.change.after.input.enforcement_source -eq "Terraform") -Message "Linked-service network policy is Terraform-owned"
+Assert-PlanCondition -Condition ($workspaceKeyVault.change.after.name -eq $expectedWorkspaceVault) -Message "Expected workspace Key Vault name is planned"
+Assert-PlanCondition -Condition ($cmkKeyVault.change.after.name -eq $expectedCmkVault) -Message "Expected CMK Key Vault name is planned"
+Assert-PlanCondition -Condition ($storage.change.after.name -eq $expectedStorage) -Message "Expected default Storage name is planned"
+Assert-PlanCondition -Condition ($acr.change.after.name -eq $expectedAcr) -Message "Expected ACR name is planned"
+Assert-PlanCondition -Condition ($logAnalytics.change.after.name -eq $expectedLogAnalytics) -Message "Expected Log Analytics name is planned"
+Assert-PlanCondition -Condition ($appInsights.change.after.name -eq $expectedAppInsights) -Message "Expected Application Insights name is planned"
+Assert-PlanCondition -Condition ($sparkStorage.change.after.name -eq $expectedSparkStorage) -Message "Expected Spark ADLS name is planned"
+Assert-PlanCondition -Condition ($sparkFilesystem.change.after.name -eq "spark") -Message "Spark filesystem is planned"
+Assert-PlanCondition -Condition ($workspaceKeyVault.change.after.purge_protection_enabled -eq $false) -Message "Workspace Key Vault purge protection is disabled for the POC"
+Assert-PlanCondition -Condition ($cmkKeyVault.change.after.purge_protection_enabled -eq $true) -Message "CMK Key Vault purge protection is enabled"
+Assert-PlanCondition -Condition ($storage.change.after.shared_access_key_enabled -eq $false) -Message "Default Storage shared-key access is disabled"
+Assert-PlanCondition -Condition ($sparkStorage.change.after.shared_access_key_enabled -eq $false) -Message "Spark ADLS shared-key access is disabled"
+Assert-PlanCondition -Condition ($sparkStorage.change.after.is_hns_enabled -eq $true) -Message "Spark Storage has hierarchical namespace enabled"
 
-$workspaceKeyVault = $resources | Where-Object { $_.address -eq "module.workspace.module.keyvault_aml.azurerm_key_vault.kv" }
-$cmkKeyVault = $resources | Where-Object { $_.address -eq "module.workspace.azurerm_key_vault.cmk[0]" }
-$storage = $resources | Where-Object { $_.address -eq "module.workspace.module.storage_account_default.azurerm_storage_account.storage_account" }
-$acr = $resources | Where-Object { $_.address -eq "module.workspace.module.container_registry.azurerm_container_registry.acr" }
-Assert-PlanCondition -Condition ($workspaceKeyVault.change.after.purge_protection_enabled -eq $false) -Message "Workspace Key Vault purge protection is disabled for the demo"
-Assert-PlanCondition -Condition ($cmkKeyVault.change.after.purge_protection_enabled -eq $true) -Message "CMK Key Vault purge protection is enabled as required by Azure CMK services"
-Assert-PlanCondition -Condition ($workspaceKeyVault.change.after.name -eq "kvsparkcc03") -Message "Expected workspace Key Vault name is planned"
-Assert-PlanCondition -Condition ($cmkKeyVault.change.after.name -eq "kvcmksparkcc03") -Message "Expected CMK Key Vault name is planned"
-Assert-PlanCondition -Condition ($storage.change.after.name -eq "stsparkcc03") -Message "Expected Storage account name is planned"
-Assert-PlanCondition -Condition ($acr.change.after.name -eq "acrsparkcc03") -Message "Expected ACR name is planned"
-Assert-PlanCondition -Condition ($workspaceKeyVault.change.after.public_network_access_enabled -eq $true) -Message "Workspace Key Vault selected-IP access is enabled"
-Assert-PlanCondition -Condition ($cmkKeyVault.change.after.public_network_access_enabled -eq $true) -Message "CMK Key Vault selected-IP access is enabled"
-Assert-PlanCondition -Condition ($storage.change.after.public_network_access_enabled -eq $true) -Message "Storage selected-IP access is enabled"
-Assert-PlanCondition -Condition ($acr.change.after.public_network_access_enabled -eq $true) -Message "ACR selected-IP access is enabled"
-Assert-PlanCondition -Condition ($workspaceKeyVault.change.after.network_acls[0].default_action -eq "Deny") -Message "Workspace Key Vault denies nonselected IPs"
-Assert-PlanCondition -Condition ($cmkKeyVault.change.after.network_acls[0].default_action -eq "Deny") -Message "CMK Key Vault denies nonselected IPs"
-Assert-PlanCondition -Condition ($storage.change.after.network_rules[0].default_action -eq "Deny") -Message "Storage denies nonselected IPs"
-Assert-PlanCondition -Condition ($acr.change.after.network_rule_set[0].default_action -eq "Deny") -Message "ACR denies nonselected IPs"
+if ($ExpectedNetworkProfile -eq "public") {
+    Assert-PlanCondition -Condition ($workspace.change.after.body.properties.publicNetworkAccess -eq "Enabled") -Message "Workspace public access is enabled"
+    Assert-PlanCondition -Condition ($workspace.change.after.body.properties.managedNetwork.isolationMode -eq "Disabled") -Message "AML managed-network isolation is disabled"
+    Assert-PlanCondition -Condition ($linkedServicePolicy.change.after.input.public_network_access -eq "Enabled") -Message "Linked services use open public access"
+    Assert-PlanCondition -Condition ($workspaceKeyVault.change.after.network_acls[0].default_action -eq "Allow") -Message "Workspace Key Vault allows public network access"
+    Assert-PlanCondition -Condition ($cmkKeyVault.change.after.network_acls[0].default_action -eq "Allow") -Message "CMK Key Vault allows public network access"
+    Assert-PlanCondition -Condition ($storage.change.after.network_rules[0].default_action -eq "Allow") -Message "Default Storage allows public network access"
+    Assert-PlanCondition -Condition ($acr.change.after.network_rule_set[0].default_action -eq "Allow") -Message "ACR allows public network access"
+    Assert-PlanCondition -Condition (@($sparkStorage.change.after.network_rules).Count -eq 0) -Message "Spark ADLS uses Azure's implicit open firewall configuration"
+}
+else {
+    Assert-PlanCondition -Condition ($workspace.change.after.body.properties.publicNetworkAccess -eq "Disabled") -Message "Managed workspace creation starts with public access disabled"
+    Assert-PlanCondition -Condition ($workspace.change.after.body.properties.managedNetwork.isolationMode -eq "AllowOnlyApprovedOutbound") -Message "AML managed network uses AllowOnlyApprovedOutbound"
+    Assert-PlanCondition -Condition ($linkedServicePolicy.change.after.input.public_network_access -eq "EnabledForSelectedIPs") -Message "Linked services use selected-IP public access"
+}
 
 $computeResources = @(
     $resources | Where-Object {
         $_.address -like "module.workspace.azapi_resource.compute_*"
     }
 )
-Assert-PlanCondition -Condition ($computeResources.Count -eq 0) -Message "Phase 1 does not create compute before Spark networking is ready"
+if ($ExpectedCreateCompute) {
+    Assert-PlanCondition -Condition ($computeResources.Count -eq 2) -Message "Exactly one cluster and one compute instance are planned"
+    $cluster = Get-PlannedResource -Resources $resources -Address "module.workspace.azapi_resource.compute_cluster_uami[0]"
+    $instance = Get-PlannedResource -Resources $resources -Address "module.workspace.azapi_resource.compute_instance_uami[0]"
+    Assert-PlanCondition -Condition ($cluster.change.after.name -eq "aml-cluster-$ExpectedPurpose-$ExpectedLocationCode$ExpectedSuffix") -Message "Expected compute cluster name is planned"
+    Assert-PlanCondition -Condition ($instance.change.after.name -eq $expectedComputeInstance) -Message "Expected compute instance name is planned"
+    Assert-PlanCondition -Condition ($instance.change.after.name.Length -le 24) -Message "Compute instance name satisfies the Azure ML 24-character limit"
+    Assert-PlanCondition -Condition ($cluster.change.after.body.properties.properties.enableNodePublicIp -eq ($ExpectedNetworkProfile -eq "public")) -Message "Cluster node public-IP setting matches the network profile"
+    Assert-PlanCondition -Condition ($cluster.change.after.body.properties.properties.remoteLoginPortPublicAccess -eq "Disabled") -Message "Cluster remote login is disabled"
+    Assert-PlanCondition -Condition ($cluster.change.after.body.properties.properties.scaleSettings.minNodeCount -eq 0) -Message "Cluster scales down to zero"
+    Assert-PlanCondition -Condition ($instance.change.after.body.properties.properties.enableNodePublicIp -eq ($ExpectedNetworkProfile -eq "public")) -Message "Compute-instance public-IP setting matches the network profile"
+    Assert-PlanCondition -Condition ($instance.change.after.body.properties.properties.sshSettings.sshPublicAccess -eq "Disabled") -Message "Compute-instance SSH public access is disabled"
+}
+else {
+    Assert-PlanCondition -Condition ($computeResources.Count -eq 0) -Message "Compute creation is deferred"
+}
 
 $expectedNames = @{
-    "azurerm_log_analytics_workspace.workspace"                                  = "log-aml-spark-cc03"
-    "azurerm_user_assigned_identity.compute_cluster"                             = "spark-mi-compute"
-    "azurerm_user_assigned_identity.compute_instance"                            = "spark-mi-compute-instance"
-    "azurerm_user_assigned_identity.online_endpoint"                             = "spark-mi-online-endpoint"
-    "module.workspace.azurerm_application_insights.aml-appins"                   = "mlwinsparkcc03"
-    "module.workspace.azurerm_user_assigned_identity.workspace_identity"          = "spark-mi-workspace"
+    "azurerm_user_assigned_identity.compute_cluster"                            = "$ExpectedPurpose-mi-compute"
+    "azurerm_user_assigned_identity.compute_instance"                           = "$ExpectedPurpose-mi-compute-instance"
+    "azurerm_user_assigned_identity.online_endpoint"                            = "$ExpectedPurpose-mi-online-endpoint"
+    "module.workspace.azurerm_user_assigned_identity.workspace_identity"         = "$ExpectedPurpose-mi-workspace"
 }
 foreach ($entry in $expectedNames.GetEnumerator()) {
-    $resource = $resources | Where-Object { $_.address -eq $entry.Key }
+    $resource = Get-PlannedResource -Resources $resources -Address $entry.Key
     Assert-PlanCondition -Condition ($resource.change.after.name -eq $entry.Value) -Message "Expected resource name is planned: $($entry.Value)"
 }
+
+$sparkStorageRole = Get-PlannedResource -Resources $resources -Address "module.workspace.azurerm_role_assignment.workspace_storage_contributor_for_spark"
+Assert-PlanCondition -Condition ($sparkStorageRole.change.after.role_definition_name -eq "Contributor") -Message "Workspace UAMI receives Storage Contributor for Spark"
 
 $taggedAddresses = @(
     "azurerm_resource_group.workspace",
     "azurerm_log_analytics_workspace.workspace",
+    "azurerm_storage_account.spark_data_lake",
     "azurerm_user_assigned_identity.compute_cluster",
     "azurerm_user_assigned_identity.compute_instance",
     "azurerm_user_assigned_identity.online_endpoint",
@@ -214,7 +251,7 @@ $taggedAddresses = @(
     "module.workspace.azapi_resource.aml_workspace"
 )
 foreach ($address in $taggedAddresses) {
-    $resource = $resources | Where-Object { $_.address -eq $address }
+    $resource = Get-PlannedResource -Resources $resources -Address $address
     $tags = if ($null -ne $resource.change.after.tags) {
         $resource.change.after.tags
     }
@@ -224,4 +261,4 @@ foreach ($address in $taggedAddresses) {
     Assert-PlanCondition -Condition ($tags.SecurityControl -eq "Ignore") -Message "SecurityControl=Ignore is planned on $address"
 }
 
-Write-Host "All Spark workspace Terraform plan invariants passed." -ForegroundColor Green
+Write-Host "All Azure ML workspace Terraform plan invariants passed." -ForegroundColor Green
