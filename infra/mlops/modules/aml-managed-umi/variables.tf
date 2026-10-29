@@ -200,6 +200,24 @@ variable "enable_auto_purge" {
   default     = false
 }
 
+variable "enable_legacy_queue_logging" {
+  description = "Configure legacy Storage Analytics queue logging through the data plane. Disable when provisioning from outside the private network; Azure Monitor queue diagnostics remain enabled."
+  type        = bool
+  default     = true
+}
+
+variable "validate_workspace_schema" {
+  description = "Enable embedded workspace API schema checks when the selected AzAPI provider supports the workspace API version."
+  type        = bool
+  default     = false
+}
+
+variable "provision_network_now" {
+  description = "Provision the managed network during workspace creation. Set false to create the workspace private endpoint first and let the first compute provision the network."
+  type        = bool
+  default     = true
+}
+
 variable "key_vault_purge_protection_enabled" {
   description = "Enable purge protection on the Key Vault created for the AML workspace"
   type        = bool
@@ -247,4 +265,24 @@ variable "assigned_user_object_id" {
   description = "Object ID of the user to assign the compute instance to (POBO to disable SSO by default). If null, falls back to current caller."
   type        = string
   default     = null
+}
+
+variable "allowed_public_ip_cidrs" {
+  description = "Optional IPv4 CIDRs allowed to test workspace Storage, Key Vault, and ACR through their deny-by-default public firewalls. Does not expose the AML workspace."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for cidr in var.allowed_public_ip_cidrs :
+      can(cidrnetmask(cidr)) && try(tonumber(split("/", cidr)[1]) != 31, false)
+    ])
+    error_message = "Use IPv4 CIDRs; use individual /32 addresses instead of /31 ranges for Azure Storage compatibility."
+  }
+}
+
+variable "asset_sharing_registry_ids" {
+  description = "Exact AML registry resource IDs permitted through the workspace storage firewall for native asset sharing."
+  type        = list(string)
+  default     = []
 }

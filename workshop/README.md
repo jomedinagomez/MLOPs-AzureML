@@ -63,6 +63,20 @@ The two notebooks in `notebooks/02_jobs_and_pipelines/` intentionally remain YAM
 5. `notebooks/01_foundations/04_register_model.ipynb`
 6. `notebooks/01_foundations/05_submit_command_job.ipynb`
 7. `notebooks/01_foundations/06_deploy_online_endpoint.ipynb`
+8. [08_register_assets_to_registry.ipynb](notebooks/01_foundations/08_register_assets_to_registry.ipynb) (optional external registry)
+
+The registry notebook adapts the repository's asset-sharing example to existing
+workshop models, environments, and data assets. Set `AZUREML_REGISTRY_NAME` in
+`.env`, preview the exact source/destination versions, and opt in with
+`SHARE_FOUNDATION_ASSETS=true`. It uses managed identity on compute when available
+and Azure CLI credentials for privately connected development. Run it from a
+machine that can reach the private registry and its backing Storage/ACR.
+The [AzureMLManagedVnet stack](../infra/AzureMLManagedVnet/README.md) deploys
+private workspace/registry access, but deliberately does not enable the
+source-storage public-access exception required for native asset sharing.
+Keep `SHARE_FOUNDATION_ASSETS=false` with that stack until a supported sharing
+path is approved and verified. Private endpoints alone do not enable this
+service-side sharing operation.
 
 ### Jobs and Pipelines
 

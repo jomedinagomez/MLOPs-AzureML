@@ -38,6 +38,7 @@ CICD.md
 *.tfstate*
 *.tfvars
 tfplan
+*.tfplan
 import_role_assignments.ps1
 
 # Distribution / packaging

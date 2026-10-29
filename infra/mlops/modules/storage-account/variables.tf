@@ -131,6 +131,12 @@ variable "enable_auto_purge" {
   default     = false
 }
 
+variable "enable_legacy_queue_logging" {
+  description = "Configure legacy Storage Analytics queue logging using the Storage data plane. Azure Monitor queue diagnostics are always configured independently."
+  type        = bool
+  default     = true
+}
+
 variable "public_network_access_enabled" {
   description = "Whether public network access is enabled for the Storage Account. Set to false to require private endpoints."
   type        = bool

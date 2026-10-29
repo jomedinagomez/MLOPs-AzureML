@@ -5,7 +5,7 @@ locals {
 # Create a storage account
 resource "azurerm_storage_account" "storage_account" {
   #checkov:skip=CKV_AZURE_43: The resolved names use the validated st{purpose}{region}{suffix} pattern and pass Azure naming checks.
-  #checkov:skip=CKV_AZURE_33: Queue logging is configured by azurerm_storage_account_queue_properties.logging below.
+  #checkov:skip=CKV_AZURE_33: Queue events are sent through Azure Monitor diagnostics; legacy Storage Analytics logging is optional.
   #checkov:skip=CKV2_AZURE_33: Private endpoints are declared by the parent AML workspace module for each required subresource.
   #checkov:skip=CKV2_AZURE_1: The parent AML workspace module creates the customer-managed encryption scope and workspace CMK binding.
 
@@ -79,6 +79,8 @@ resource "azurerm_storage_account" "storage_account" {
 }
 
 resource "azurerm_storage_account_queue_properties" "logging" {
+  count = var.enable_legacy_queue_logging ? 1 : 0
+
   storage_account_id = azurerm_storage_account.storage_account.id
 
   logging {
@@ -88,6 +90,11 @@ resource "azurerm_storage_account_queue_properties" "logging" {
     write                 = true
     retention_policy_days = 30
   }
+}
+
+moved {
+  from = azurerm_storage_account_queue_properties.logging
+  to   = azurerm_storage_account_queue_properties.logging[0]
 }
 
 # Configure diagnostic settings

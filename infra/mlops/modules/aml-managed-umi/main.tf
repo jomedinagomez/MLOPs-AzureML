@@ -53,6 +53,9 @@ module "container_registry" {
   law_resource_id     = var.log_analytics_workspace_id
   enable_auto_purge   = var.enable_auto_purge
 
+  public_network_access_enabled = length(var.allowed_public_ip_cidrs) > 0
+  allowed_ip_cidrs              = var.allowed_public_ip_cidrs
+
   tags = var.tags
 }
 
@@ -79,15 +82,22 @@ module "storage_account_default" {
   network_trusted_services_bypass = [
     "AzureServices"
   ]
-  resource_access = [
+  public_network_access_enabled = length(var.allowed_public_ip_cidrs) > 0 || length(var.asset_sharing_registry_ids) > 0
+  allowed_ips                   = local.service_firewall_ip_rules
+  resource_access = concat([
     {
       endpoint_resource_id = "/subscriptions/${var.sub_id}/resourcegroups/*/providers/Microsoft.MachineLearningServices/workspaces/*"
     }
-  ]
+    ], [
+    for registry_id in var.asset_sharing_registry_ids : {
+      endpoint_resource_id = registry_id
+    }
+  ])
   law_resource_id = var.log_analytics_workspace_id
 
   # Enable auto-purge for dev/test environments
-  enable_auto_purge = var.enable_auto_purge
+  enable_auto_purge           = var.enable_auto_purge
+  enable_legacy_queue_logging = var.enable_legacy_queue_logging
 }
 
 ## Create Key Vault which will hold secrets for the AML workspace
@@ -105,8 +115,10 @@ module "keyvault_aml" {
   law_resource_id     = var.log_analytics_workspace_id
   tags                = var.tags
 
-  firewall_default_action = "Deny"
-  firewall_bypass         = "AzureServices"
+  firewall_default_action       = "Deny"
+  firewall_bypass               = "AzureServices"
+  firewall_ip_rules             = local.service_firewall_ip_rules
+  public_network_access_enabled = length(var.allowed_public_ip_cidrs) > 0
 
   # Enable auto-purge for dev/test environments
   enable_auto_purge = var.enable_auto_purge
@@ -217,7 +229,7 @@ resource "azapi_resource" "aml_workspace" {
   name                      = "${local.aml_workspace_prefix}${var.purpose}${var.location_code}${local.resolved_suffix}"
   parent_id                 = local.rg_id
   location                  = var.location
-  schema_validation_enabled = false
+  schema_validation_enabled = var.validate_workspace_schema
 
   body = {
 
@@ -235,8 +247,6 @@ resource "azapi_resource" "aml_workspace" {
     properties = {
       description = "Azure Machine Learning Workspace for testing"
 
-      # The version of the managed network model to use; unsure what v2 is
-      managedNetworkKind = "V1"
       # The resources that will be associated with the AML Workspace
       applicationInsights = replace(azurerm_application_insights.aml-appins.id, "Microsoft.Insights", "Microsoft.insights")
       keyVault            = replace(module.keyvault_aml.id, "Microsoft.KeyVault", "Microsoft.Keyvault")
@@ -263,6 +273,7 @@ resource "azapi_resource" "aml_workspace" {
 
       # Configure the AML workspace to use the managed virtual network model
       managedNetwork = {
+        managedNetworkKind = "V1"
         # Managed virtual network will block all outbound traffic unless explicitly allowed
         isolationMode = "AllowOnlyApprovedOutbound"
         # Use Azure Firewall Standard SKU to support FQDN-based rules
@@ -510,8 +521,7 @@ resource "azapi_resource" "aml_workspace" {
       allowRoleAssignmentOnRG = true
       # The default storage account associated with AML workspace will use Entra ID for authentication instad of storage access keys
       systemDatastoresAuthMode = "identity"
-      # Create the manage virtual network for the AML workspace upon creation vs waiting for the first compute resource to be created
-      provisionNetworkNow = true
+      provisionNetworkNow      = var.provision_network_now
     }
 
     tags = var.tags
@@ -521,53 +531,6 @@ resource "azapi_resource" "aml_workspace" {
     ignore_changes = [tags]
   }
 
-  # Destroy-time purge to avoid soft-deleted AML workspace blocking future deployments
-  # This executes before the provider delete; it requests a permanent delete so
-  # the subsequent provider delete will be a no-op (resource already gone).
-  provisioner "local-exec" {
-    when        = destroy
-    interpreter = ["pwsh", "-Command"]
-    on_failure  = continue
-    command     = <<-EOT
-      $ErrorActionPreference = 'Continue'
-      $id = '${self.id}'
-      $parent = '${self.parent_id}'
-      $wsName = '${self.name}'
-
-      # Prefer parsing subscription and RG from parent_id, fall back to id
-      $parsed = $false
-      if ($parent -and ($parent -match "/subscriptions/(?<sub>[^/]+)/resourceGroups/(?<rg>[^/]+)/")) {
-        $subscription = $Matches.sub
-        $rgName = $Matches.rg
-        $parsed = $true
-      }
-      if (-not $parsed) {
-        if ($id -match "/subscriptions/(?<sub>[^/]+)/resourceGroups/(?<rg>[^/]+)/") {
-          $subscription = $Matches.sub
-          $rgName = $Matches.rg
-          $parsed = $true
-        }
-      }
-      if (-not $parsed -or -not $wsName) {
-        Write-Host "[AML Purge] Could not determine RG/subscription/name from self. Skipping purge. ID: $id Parent: $parent Name: $wsName"
-        exit 0
-      }
-
-      Write-Host "[AML Purge] Ensuring Azure ML CLI extension and subscription context..."
-      try { az account set --subscription $subscription 2>$null } catch {}
-      # Ensure the 'ml' extension is available
-      $mlExt = az extension show -n ml 2>$null
-      if (-not $mlExt) { az extension add -n ml -y 2>$null }
-
-  Write-Host "[AML Purge] Attempting permanent delete of workspace '$wsName' in RG '$rgName'..."
-      az ml workspace delete --name $wsName --resource-group $rgName --permanently-delete --yes 2>$null
-      if ($LASTEXITCODE -ne 0) {
-        Write-Host "[AML Purge] Workspace not found or already purged. Continuing..."
-        exit 0
-      }
-      Write-Host "[AML Purge] Workspace permanently deleted."
-    EOT
-  }
 }
 
 ##### Create a Private Endpoints workspace required resources including default storage account
@@ -1153,6 +1116,10 @@ resource "azapi_resource" "compute_cluster_uami" {
 
   tags = var.tags
 
+  timeouts {
+    create = "60m"
+  }
+
   lifecycle {
     ignore_changes = [
       tags["created_date"],
@@ -1194,7 +1161,7 @@ resource "azapi_resource" "compute_instance_uami" {
         enableNodePublicIp = false
         personalComputeInstanceSettings = {
           assignedUser = {
-            objectId = data.azurerm_client_config.current.object_id
+            objectId = coalesce(var.assigned_user_object_id, data.azurerm_client_config.current.object_id)
             tenantId = data.azurerm_client_config.current.tenant_id
           }
         }
@@ -1210,6 +1177,10 @@ resource "azapi_resource" "compute_instance_uami" {
   }
 
   tags = var.tags
+
+  timeouts {
+    create = "60m"
+  }
 
   lifecycle {
     ignore_changes = [
@@ -1256,5 +1227,3 @@ resource "azapi_update_resource" "workspace_image_build_config" {
     interpreter = ["pwsh", "-Command"]
   }
 }
-
-

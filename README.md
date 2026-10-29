@@ -77,6 +77,7 @@ End‑to‑end Azure Machine Learning platform (dev + prod) with an opinionated 
 **For infrastructure deployment**, see:
 - **[infra/README.md](infra/README.md)** - Index of independently deployed Terraform stacks
 - **[infra/mlops/README.md](infra/mlops/README.md)** - Existing private two-workspace/two-registry platform
+- **[infra/AzureMLManagedVnet/README.md](infra/AzureMLManagedVnet/README.md)** - One private managed-VNet workspace and registry with managed-identity compute, no CMK, and development Key Vault purge protection disabled
 - **[infra/single-workspace/README.md](infra/single-workspace/README.md)** - CMK-enabled single-workspace platform
 - **[infra/spark-workspace/README.md](infra/spark-workspace/README.md)** - Spark-ready replacement workspace with independent Terraform state
 

@@ -32,6 +32,12 @@ variable "public_network_access_enabled" {
   default     = false
 }
 
+variable "allowed_ip_cidrs" {
+  description = "Optional IPv4 CIDRs allowed through the deny-by-default ACR public firewall."
+  type        = list(string)
+  default     = []
+}
+
 variable "prefix" {
   description = "Base prefix for all resource names to ensure uniqueness and consistency"
   type        = string

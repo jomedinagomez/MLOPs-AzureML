@@ -1,0 +1,19 @@
+subscription_id         = "<SUBSCRIPTION_ID>"
+location                = "<AZURE_REGION>"
+location_code           = "cc"
+naming_suffix           = "demo01"
+assigned_user_object_id = "<HUMAN_ENTRA_OBJECT_ID>"
+
+# Only managed-identity/application service-principal object IDs belong here.
+# The workspace UAMI is added automatically; never add a human user object ID.
+registry_managed_rg_assigned_principal_ids = []
+
+vnet_address_space             = ["10.30.0.0/16"]
+private_endpoint_subnet_prefix = "10.30.1.0/24"
+
+# Explicit development-only policy opt-out. Use only where authorized.
+tags = {
+  project         = "ml-platform"
+  managed_by      = "terraform"
+  SecurityControl = "Ignore"
+}

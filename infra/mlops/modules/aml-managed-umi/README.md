@@ -2,6 +2,31 @@
 
 This Terraform module deploys a complete, production-ready Azure Machine Learning workspace with managed virtual network, supporting services, comprehensive security, and RBAC configuration. This module assumes the resource group already exists and is passed in by the root module. It creates the core ML platform for development and production workloads.
 
+## Optional Access Controls
+
+The default creation behavior is unchanged: no laptop IP exceptions, no registry-specific
+storage exception, and a private AML workspace. The independent
+[`AzureMLManagedVnet` stack](../../../AzureMLManagedVnet/README.md)
+leaves public-access exceptions disabled without modifying the existing dev/prod configuration:
+
+| Input | Default | Purpose |
+| --- | --- | --- |
+| `allowed_public_ip_cidrs` | `[]` | Allow selected IPv4 CIDRs through workspace Storage, Key Vault, and ACR public firewalls; `/32` becomes an individual IP where required. |
+| `asset_sharing_registry_ids` | `[]` | Allow the exact registry resource instances required for native asset sharing through deny-by-default source Storage. |
+| `assigned_user_object_id` | `null` | Assign the personal compute instance to a human user; null preserves the current-caller fallback. Managed-identity deployments should set this explicitly. |
+| `enable_legacy_queue_logging` | `true` | Configure legacy Storage Analytics through its data plane; the fully private stack sets this false and uses the existing Azure Monitor queue diagnostics. |
+| `validate_workspace_schema` | `false` | Enable embedded workspace schema checks only with a supporting AzAPI version; `AzureMLManagedVnet` enables this with AzAPI 2.13. |
+| `provision_network_now` | `true` | Eagerly provision during workspace creation; the fully private root sets this false so its private endpoint exists before the first compute provisions the managed network. |
+
+These settings do not expose the AML workspace API. Registry sharing requires
+selected-network public access on source Storage, not unrestricted public access.
+Key Vault and ACR public access is enabled only when laptop IP rules are supplied.
+
+The fully private root also sets the provider feature
+`storage.data_plane_available=false`. Other roots retain their existing
+creation defaults. Workspace destruction no longer invokes an implicit CLI
+permanent delete; native Azure deletion and retention rules apply.
+
 ## Table of Contents
 
 ### Overview
@@ -403,15 +428,15 @@ az monitor activity-log list --resource-group <resource-group>
 
 ## Destroy behavior and verification
 
-This module permanently deletes the ML workspace during `terraform destroy` using the ML CLI, matching the code in `main.tf` (local-exec on the workspace resource).
+Workspace destruction now uses the native Terraform/Azure deletion operation.
+It does not run an implicit permanent-delete CLI provisioner or suppress purge
+errors. Azure retention and soft-deleted-name restrictions may still apply.
 
-- Exact command invoked:
-  ```powershell
-  az ml workspace delete --name <workspace-name> --resource-group <resource-group> --permanently-delete --yes
-  ```
-- The script ensures the `ml` CLI extension is installed and sets the subscription from the resource ID before deletion.
-- Expect a several-minute delay; logs include: `[AML Purge] Workspace permanently deleted.`
-- Verify name availability after destroy:
+- Review the exact destroy plan and obtain approval before deletion.
+- Any later permanent deletion is a separate, explicitly approved operation.
+- Keep Key Vault purge-on-destroy and `enable_auto_purge` disabled for the
+  development managed-VNet stack.
+- Verify remaining live resources and soft-deleted names after cleanup:
   ```powershell
   az ml workspace list --query "[?name=='<workspace-name>'].[name,resourceGroup]" -o table
   ```

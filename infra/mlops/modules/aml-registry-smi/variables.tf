@@ -116,7 +116,7 @@ variable "log_analytics_workspace_id" {
 // Principals assigned to the registry managed resource group are exempted from its deny assignment.
 // Include only identities with a proven need to operate on registry-managed resources.
 variable "managed_rg_assigned_principal_ids" {
-  description = "Object IDs to assign in the registry managed resource group (assignedIdentities.principalId)"
+  description = "Service-principal object IDs, including managed identities, to assign in the registry managed resource group. Human user object IDs are not supported."
   type        = set(string)
   default     = []
 }

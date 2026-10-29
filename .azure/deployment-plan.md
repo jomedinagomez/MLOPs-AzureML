@@ -1,8 +1,645 @@
 # Azure Deployment Plan
 
-> **Status:** Completed
+> **Status:** Deployed
 
 Generated: 2026-10-05
+Updated: 2026-10-28
+
+---
+
+## Applied CLI Computer IP Allowlist
+
+The user requests interactive notebook execution, one cell at a time, rather
+than PowerShell helper scripts or batch runners. Stop the automated notebook
+workflow. They also request inbound access from their computer's public IP to
+the existing workspace and its Storage account.
+
+The user approved the detected single-host address and existing subscription
+and region, then explicitly requested Azure CLI rather than Terraform for this
+temporary exception. The proposed allowlist Terraform changes were removed
+before any apply. Terraform remains the private-only baseline; a later apply can
+remove the manual exception. No allowlist variables or address remain in Terraform.
+The existing 22 focused regression tests still pass.
+
+Microsoft's private-link documentation confirms selected-IP workspace ingress:
+publicNetworkAccess Enabled with networkAcls.defaultAction Deny and explicit
+IPv4 ipRules. These ACLs can be configured after initial workspace creation;
+this workspace already exists. The shared SDK confirms the ARM rule uses a
+value field, not a Storage-style action field.
+
+Direct visible CLI commands added the single approved Storage IP while its
+public endpoint was disabled, then enabled selected-IP access with default deny.
+The workspace CLI update enabled public access with one /32 rule and default deny.
+Live ARM readback confirms the workspace ACL, user-assigned identity, Active
+managed network, AllowOnlyApprovedOutbound isolation, and Active outbound rules.
+Storage readback confirms one allowed IP, default deny, and shared keys disabled.
+An independent authenticated `az storage container list --auth-mode login` now
+succeeds from the computer; the previous upload-connectivity blocker is resolved.
+
+No registry, Key Vault, ACR, private endpoint, identity, compute, or outbound
+network setting was changed. No new environment, endpoint deployment, or asset
+sharing was performed. Notebook mutation switches remain false.
+Continue in the actual notebook editor one cell at a time. Its kernel starts,
+but the cell execution tool returned a selected-model-unavailable error; do not
+silently substitute batch scripts. The user can execute a cell with Shift+Enter.
+
+## Pending Expanded Foundations Notebook Scope
+
+The user intentionally enabled all foundation mutation switches and requested a
+review before further execution. Pause mutations until the following choices
+are confirmed. Interactive notebook 01 output and notebook 02's upload/readback
+of `workshop-taxi-data:1` are verified. The user chose to reuse environment
+version 1 rather than create another version.
+
+- Finish notebook 04 model registration and notebook 05's managed-identity
+  command job, one notebook cell at a time.
+- Notebook 06 deploys `blue`; notebook 07 deploys `collector` under the same
+  endpoint. Each configures one Standard_DS3_v2 replica, so running both incurs
+  two continuously billable replicas. Quota, name availability, and configured
+  endpoint identity permissions require preflight before creation.
+- The configured collector datastore is now `workspaceblobstore`. Microsoft
+  supports workspace Blob Storage for collection; no new ADLS account or
+  datastore is required for this choice.
+- The endpoint is currently configured with public access disabled, so laptop
+  scoring is not enabled by the workspace/Storage exceptions alone. Choose
+  either selected-IP endpoint ingress using the workspace ACL or execution from
+  an approved privately connected host. Do not silently enable endpoint ingress.
+- Both promotion flags are currently true: notebook 06 promotes blue to 100%;
+  notebook 07 subsequently promotes collector to 100%. Confirm the intended
+  traffic behavior instead of treating the two flags as independent outcomes.
+- Notebook 08 needs the exact registry resource-instance rule on source Storage.
+  The existing workspace/data-scanner rules do not include this registry.
+  A read-only registry model-list operation succeeds from the computer; this
+  does not prove that asset sharing will succeed. Keep the registry and its
+  backing resources private and verify each immutable shared version.
+
+No endpoint exists in the target workspace at review time. No expanded-scope
+deployment, traffic promotion, or sharing rule has been applied by the assistant.
+Keep existing Terraform unchanged and use direct scoped CLI operations only for
+approved access changes. Do not restore batch runners or PowerShell helpers.
+
+## AzureMLManagedVnet Development Deployment (2026-10-28)
+
+The user approved the session plan to rename only the infrastructure root to
+`infra/AzureMLManagedVnet` and retain one private workspace, external registry,
+compute instance, and compute cluster. The user then clarified that this is a
+single development project: all user-managed resources now share
+`rg-aml-private-ncus-06`, not three separate groups. Azure ML still creates its
+required registry backing-resource group automatically.
+Use managed identities and AML-managed networking, not customer-VNet injection.
+
+The new workspace Key Vault must have purge protection disabled and the required
+seven-day soft-delete retention. Keep Microsoft-managed encryption and omit CMK.
+Remove implicit workspace permanent deletion; retain explicit scoped teardown
+approval and provider resource-group safeguards.
+
+Keep all relevant endpoints private. Do not add NSPs, policy-exemption resources,
+ineffective laptop IP exceptions, or source-storage exceptions for native registry
+sharing. The user explicitly requested the development-only
+`SecurityControl=Ignore` tag, which is now supplied through the local/example
+variable file for the new project group and Terraform-managed resources.
+This intentionally opts out of applicable tag-conditioned policies; it is not
+silently treated as a cosmetic label or applied to existing environments.
+Private settings and keyless access remain explicit in Terraform.
+Native sharing and private-host SDK/job smoke tests remain deferred.
+
+Implementation and local validation are approved. Reconfirm Azure target/names,
+policy, quotas, permissions, and costs, then obtain approval of a fresh saved
+Terraform plan before provisioning. No commits, CI/CD, online endpoint deployment,
+automatic workshop registration, or changes to other live environments.
+
+### Private Baseline Deployment Proof (Before CLI Exception)
+
+The approved platform deployment completed through visible VS Code terminals.
+The manual selected-IP exception above supersedes this section's private-only
+ingress and no-drift observations; a new Terraform plan will see that exception.
+The final full Terraform plan reports **no changes**, and its exact-plan checker
+confirms zero additions, removals, updates, or replacements.
+Final plan SHA-256:
+`EB51817F248BEA4D9C7F1E8392E74705CBFC9D16C877FCFDD81A8890AD8CAA65`.
+
+| Live check | Verified result |
+|---|---|
+| Project layout | One workspace `mlwprivatencus06` and one registry `mlrprivatencus06` in `rg-aml-private-ncus-06`; registry backing group remains Azure-managed |
+| Workspace | Succeeded, public access Disabled, user-assigned identity, identity-based system datastores |
+| Managed network | Active, V1, AllowOnlyApprovedOutbound |
+| Registry connection | One Active registry-target rule; Azure created Active blob and ACR Dependency rules linked to it |
+| Registry backends | Public access Disabled, Storage shared keys disabled, ACR admin authentication disabled, managed private connections Approved |
+| Compute | Instance and cluster Succeeded, UAMIs, public node IPs disabled; instance owner matches requested human and SSO is false; cluster scales 0-4 |
+| Workspace dependencies | Storage, ACR, and Key Vault public access Disabled; Storage shared keys/anonymous blobs and ACR admin disabled; no Storage IP rules |
+| Vault lifecycle | Purge protection not enabled in Azure and false in Terraform state; mandatory seven-day soft delete retained |
+| Customer private endpoints | All ten Succeeded and Approved; API/ACR private DNS A records use the project subnet |
+| Scoped access | All 39 Terraform-managed role assignments match their live principal, scope, and role definition |
+| Local checks | 22 focused tests pass; formatting checks and both affected Terraform roots validate |
+
+The one-time outbound-rule migration required an additional live-state check:
+the two concurrent removals reported success, but Azure still returned the
+original blob rule. Removing only that same approved rule sequentially and
+confirming its absence allowed the registry-target rule to succeed. The exact
+internal Azure cause is not claimed. No workspace, registry, compute, or customer
+private endpoint was replaced during this correction.
+
+### Foundations Notebook Trial
+
+The user approved running foundations notebooks 01-05 against this deployment,
+without online endpoints, traffic promotion, or registry sharing. The previous
+workshop configuration was backed up before updating only the deployed Azure ML
+identifiers and foundation switches. Unrelated settings and source notebooks
+were preserved. Execution ran visibly in local VS Code task terminals, with
+separate executed copies under ignored workshop outputs.
+
+- Notebook 01 completed its read-only workspace/compute/asset tour.
+- Notebook 03 registered and retrieved `workshop-taxi-environment:1`.
+  The only resulting Azure job, `imgbldrun_694999f`, reports Completed.
+- Notebooks 02, 04, and 05 failed during Blob upload with `AuthorizationFailure`.
+  No workshop data/model asset or submitted workshop command job was found in
+  readback. No online endpoint was created.
+- The client resolves the workspace Storage hostname to public addresses instead
+  of its approved private Blob address, `10.30.1.6`. Storage public access is
+  Disabled and the caller already has Storage Blob Data Contributor. An
+  independent authenticated Azure CLI Blob read fails under the same network
+  restriction. This is a private client connectivity blocker, not evidence that
+  broadening RBAC or enabling keys/public access is required.
+- All foundation mutation switches were returned to false after the attempts.
+  Notebook 06-08 operations were not run.
+
+Private-client routing/Studio access, private-host command-job execution, and
+native workspace-to-registry asset sharing remain deferred. No CI/CD, NSP, CMK,
+online endpoint, automatic asset promotion, or deny-assignment bypass was added.
+The foundations sharing notebook remains available for later use.
+
+### Implementation and Recovery History
+
+- The staged deployment has now provisioned the workspace, registry, cluster,
+  and instance. The managed network is Active and the instance is Running with
+  private connectivity. Full post-deployment verification is not complete yet.
+- Azure's activity log confirmed the remaining error: the registry-target
+  outbound rule resolves its backing endpoints, and the separately declared
+  blob/ACR rules caused duplicate-destination validation. The root now declares
+  only the registry target.
+- The user approved replacing only those two registry-specific managed outbound
+  rules with one registry-target rule. Apply is staged: remove just the two
+  duplicates, then inspect a fresh full plan and add only the registry rule.
+  The workspace, registry, compute, and customer private endpoints must not change.
+- All 22 focused regressions pass, both Terraform roots validate, and the
+  transition plan has exactly one addition and two approved removals.
+  Transition SHA-256:
+  `87AE6BE316F20F060F84D84FD688224C996784D130D66BC1ED5369573F9CDE00`.
+  Full live verification and a final no-drift plan are still required.
+
+Earlier staged/recovery evidence:
+
+- Earlier Azure result: the eager managed-network operation returned a service-side
+  404 after workspace metadata briefly existed; Azure then rolled the workspace
+  record back. The registry remains private and provisioned. The exact internal
+  Azure cause is not available from the client error and is not claimed as known.
+- The new root now uses Azure ML's documented automatic network provisioning on
+  the first compute: create workspace, create its private endpoint, then create
+  compute. `provision_network_now=false` only in this root; shared defaults remain
+  true. Compute creation has a bounded extended timeout for first-network setup.
+- All subsequent shell commands now run in visible VS Code task terminals,
+  with command tracing and unredirected output, as explicitly requested.
+- Visible validation and saved-plan checks pass: the staged plan adds 26 remaining
+  resources, with no updates, replacements or deletions. The existing private
+  registry and one-project layout are unchanged.
+- Staged plan SHA-256:
+  `F93E9E1032EB61733504F7C0500E948EAC370955803C833D5C7322AABED9B2EF`.
+- This is a documented alternative provisioning sequence, not a claim that the
+  Azure service-side failure is resolved. Apply and live readiness verification
+  are still required; no destructive recovery is authorized.
+- First `ncus06` apply partially succeeded: the single project group, private
+  registry, identities, workspace dependencies and their private endpoints exist.
+  Workspace/compute did not complete.
+- Two concrete template errors were found: AzAPI 2.3 could not validate the
+  workspace API at apply, and redundant writes to registry-managed resources
+  were denied by its service-owned deny assignment.
+- Recovery corrects AzAPI to 2.13 in this root, retains shared validation defaults
+  for other roots, and replaces protected writes with read-only private-access
+  postconditions. The deny assignment is untouched.
+- Live reads prove registry-managed Storage and ACR already have public access
+  disabled. The registry service already granted the workspace UAMI Azure AI
+  Administrator, which covers their reads and private-endpoint approvals.
+- Recovery tests pass: 20 focused tests. Both affected roots validate, and the
+  fresh recovery plan has 27 additions, no changes or deletions. No duplicate
+  project group, workspace, or registry is added.
+- Latest correction: one workspace and one registry in one project resource
+  group. Redundant owner Reader and workspace network-approval role assignments
+  were removed so shared scopes do not produce duplicate RBAC writes.
+- The previous three-group 128-create plan is obsolete and must not be applied.
+  A fresh single-group plan and fingerprint are required.
+- Updated focused regressions pass: 18 tests. The single-group root validates.
+- The infrastructure root is now `infra/AzureMLManagedVnet`; its ignored inputs
+  and empty state were preserved, and provider/module metadata was reinitialized.
+- New Key Vault purge protection is false; seven-day soft delete remains.
+  The unconditional workspace permanent-delete provisioner was removed.
+- Laptop and registry source-storage public-access exceptions are disabled.
+  The customer-subnet NSG and association are managed in Terraform.
+- The pinned provider's supported `storage.data_plane_available=false` feature
+  is enabled in this root. Legacy queue data-plane logging is disabled only for
+  this root; Azure Monitor diagnostics remain enabled. Other roots keep their
+  previous legacy-logging default, with a state-address move for the counted
+  resource.
+- The documented `managedNetwork.managedNetworkKind` placement was corrected
+  and workspace API schema validation enabled.
+- All 16 focused tests pass. Both the renamed root and existing private dev/prod
+  root validate. The retained notebook schema and renamed documentation links
+  validate. No unrelated H2O remediation was performed.
+- The user reconfirmed subscription
+  `5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25`, North Central US, suffix `06`, the existing
+  human compute owner, and current Azure CLI deployment authentication.
+- Proposed names are `mlwprivatencus06`, `mlrprivatencus06`,
+  `stprivatencus06`, `acrprivatencus06`, and `kvprivatencus06`. Storage/ACR/Key Vault
+  names are available, and no matching target resource groups exist.
+- Refreshed ML quota has 100 FSv2 dedicated vCPUs available, 1,000 regional
+  dedicated vCPUs, and 200 clusters/instances; F8s v2 is offered. Required peak
+  compute is 40 vCPUs. Capacity is not guaranteed by quota.
+- The examined purge-protection deny applies to Managed HSM, not the associated
+  workspace Key Vault. No policy change or exemption is authorized.
+- Next: generate and inspect the fresh private-only saved plan, record current
+  validation proof, and obtain its explicit apply approval.
+
+### Earlier Validation Steps and Proof
+
+**Current recovery plan:** verified at `2026-10-28T15:01:51Z`.
+The registry and its private backing resources already exist. The supported
+AzAPI 2.13 provider now validates the workspace API, and recovery adds only the
+27 remaining resources with no updates, replacements, or deletions.
+All 20 focused tests and both affected root validations pass.
+The registry service's live Azure AI Administrator grant covers the backing
+resource reads and private-endpoint approval; redundant denied human-user writes
+were removed, not bypassed.
+Both read-only backend privacy postconditions pass against live `Disabled`
+values. No deny assignment, registry backend, or managed-group role is changed.
+
+Current recovery plan SHA-256:
+`6363E192FD3FA9170AC06F98DBCA22D40903737D4C50ABA9DEBF5DAB3856BCD7`.
+
+All prior full-creation plans below are historical and must not be reapplied.
+
+**Latest single-project plan:** verified at `2026-10-28T14:25:53Z`:
+124 creations, no changes or deletions; exactly one workspace and one registry
+wired to the single project group `rg-aml-private-ncus-06`.
+All 18 focused tests pass and Terraform validation passes.
+The requested `SecurityControl=Ignore` tag is present on the new project group
+and applicable Terraform-managed resources. Private access and purge protection
+off remain explicit. Duplicate Reader/network-approval role scopes were removed.
+
+Current saved plan SHA-256:
+`E9B5AFBA7F2CA947D36A72B2522F56344DA1187EA9F3FBF19DD3D8D1207D02E8`.
+
+The registry parent ID is computed because its module obtains subscription
+context during apply; its group input references the shared project group.
+Verify that actual parent ID and backing resources after apply.
+The three-group evidence below is superseded and is retained only as history.
+
+Validation evidence recorded at `2026-10-28T14:01:11Z`:
+
+| Check | Result |
+| --- | --- |
+| Authenticated context and permissions | Confirmed target subscription and current CLI user; Owner and User Access Administrator remain available |
+| Formatting and initialization | Passed for the renamed root and modified shared files; real variables and plan remain ignored |
+| Terraform validation | New managed-VNet root and existing private dev/prod root pass |
+| Focused regressions | 16 passed; newly added lifecycle, private provisioning, subnet ownership, and API-placement tests first reproduced their failures |
+| Notebook and documentation | Retained notebook schema and all renamed stack links pass |
+| Fresh live plan | 128 to add, 0 to change, 0 to destroy; target state is still empty |
+| Exact plan inspection | Purge protection false and seven-day soft delete; public access disabled on workspace/registry/dependencies; no CMK, NSP, exemptions, auto-purge resources, legacy data-plane queue logging, or changes to other stacks |
+| Compute/network/identity inspection | V1 approved-outbound managed network, identity system datastores, private compute, explicit human owner, SSO disabled, 0-4 cluster, ten private endpoints, Terraform-owned customer subnet NSG |
+| Registry identity inspection | No human principal embedded in registry creation; known role scopes target only new ncus06 groups |
+| Review | Direct source and saved-plan review completed with no blocking code findings; simplification made no additional changes |
+
+Saved plan SHA-256:
+`4B64BE8FB7C5EEBFCEF01D9F11D368FDE5C3CF273F0B04A61DB1EBF4DBEF780C`.
+
+The provider marks empty Storage IP-rule fields as computed; actual empty
+IP rules must be verified after apply, not assumed from the plan.
+Public access is explicitly disabled regardless. Live resource states, private
+endpoint approval, managed-network readiness, effective policy controls, and RBAC
+remain post-apply checks. SDK/job connectivity and registry sharing are not
+reported as tested.
+
+Historical deployment and cleanup evidence follows; it does not authorize
+reusing a stale plan or changing the old protected vault.
+
+---
+
+## Private Azure ML Workspace and External Registry (2026-10-27)
+
+### Current Authorization: Cleanup Only
+
+**Result:** Cleanup completed. Direct Azure checks confirm that all three
+approved resource groups are absent, and the isolated Terraform state is empty.
+The Key Vault remains protected and soft-deleted, with scheduled purge at
+`2026-11-04T13:12:08Z` as reported by Azure. No purge was requested.
+
+The initial teardown removed all tracked resources except the network resource
+group, where Terraform's deletion safeguard found a policy-created NSG. Direct
+inspection confirmed the NSG belonged to the approved failed-deployment network
+and had no subnet or NIC attachments. Only that detached NSG was removed, then
+a reviewed one-delete saved plan removed the remaining network group. The
+provider's resource-group deletion safeguard was not disabled.
+
+The obsolete creation plan was removed; the state backup and cleanup evidence
+remain in the session workspace. Repository templates and workshop assets are
+retained. No other deployments were changed, no NSPs were added, and no new
+deployment was performed.
+
+The user explicitly approved deleting only these failed-deployment resource
+groups in subscription `5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25`:
+
+- `rg-aml-private-ncus-05-workspace`
+- `rg-aml-private-ncus-05-registry`
+- `rg-aml-private-ncus-05-network`
+
+The saved destroy preview contains 50 deletions and no creations or updates.
+Programmatic inspection verified that every Azure resource ID is scoped to
+one of these three groups. A pre-cleanup state backup is retained in the session
+workspace. The protected Key Vault will be soft-deleted, never purged.
+
+The user selected **cleanup only** after clarification: do not redeploy, add
+NSPs, add policy-ignore tags or exemptions, or change existing deployments and
+workshop assets. Earlier deployment and proposed rebuild sections below are
+historical and do not authorize any new provisioning.
+
+Destroy plan SHA-256:
+`5BB7F7EEBCAA51826E48791E87AF1D61622F71A755E885E6F1B3393C9E8E6710`.
+
+#### Cleanup Validation Checks
+
+- Confirm the subscription and all three group-specific deletion approvals.
+- Preserve the current isolated Terraform state before cleanup.
+- Run Terraform validation and a refreshed `plan -destroy`.
+- Inspect the saved plan: deletes only, limited to the exact approved groups;
+  no creation, replacement, update, purge, or external scope.
+- Verify the saved-plan fingerprint immediately before applying it.
+- After cleanup, check each resource group directly, confirm empty managed
+  Terraform state, and confirm the Key Vault is soft-deleted rather than purged.
+- Region capacity and build/deployment checks are not applicable: this operation
+  creates no resources and does not run workshop assets.
+
+**Goal:** Add an independently deployed Terraform stack with one private Azure ML
+workspace, one private Azure ML registry, one compute instance, and one compute
+cluster. Retain the workspace Key Vault and use Microsoft-managed encryption;
+do not provision CMK resources or change CI/CD.
+
+**Implementation:** Reuse the existing private Azure ML modules without changing
+existing deployment defaults. Make the compute instance's human owner explicit
+so infrastructure can be deployed using a managed identity. Add a foundations
+notebook based on `notebooks/asset_sharing/sharing_assets_registries_workspaces.ipynb`
+for registering workspace assets in the external registry.
+
+**Approved networking:** Create a customer VNet and private DNS for inbound
+private endpoints, separate from the AML-managed VNet used by compute and
+approved outbound traffic. Keep the workspace, registry, and registry-managed
+storage/ACR private. Add optional, selected-public-IP access to workspace
+Storage, Key Vault, and ACR for laptop testing; this does not provide direct
+laptop access to the private workspace or registry. Enable only the exact
+registry resource-instance storage exception needed for native asset sharing.
+Service firewalls remain deny-by-default.
+
+**Approved notebook:** Add `08_register_assets_to_registry.ipynb` to
+`workshop/notebooks/01_foundations`. Use existing registered models, environments,
+and data assets, resolve immutable source versions, require an explicit mutation
+switch, refuse existing destination versions, and verify destination readback.
+
+**Execution boundary:** The user subsequently requested deployment and confirmed
+North Central US, suffix `05`, the current Azure CLI user for Terraform
+authentication, managed identities for service access, the detected laptop IP,
+and the prepared network cost model. Apply only the reviewed, create-only saved
+Terraform plan. Do not change existing deployments or register workshop assets.
+Private client connectivity is explicitly deferred by the user.
+
+**Verification:** Terraform formatting and validation, focused regression tests
+for configuration and asset registration, notebook JSON/schema and code syntax,
+and readback of registered assets when the notebook is deliberately executed
+against Azure.
+
+**Recipe:** Existing modular Terraform, with a new independent root at
+`infra/private-workspace-registry`. No azd conversion, state migration, CI/CD, or
+live asset registration is authorized. Real deployment identifiers and laptop IP
+rules are stored only in the ignored `terraform.tfvars`.
+
+**Confirmed Azure target:** Subscription
+`5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25`, `northcentralus`, location code `ncus`,
+prefix `aml`, purpose `private`, suffix `05`. Proposed workspace
+`mlwprivatencus05` and registry `mlrprivatencus05`; new customer VNet
+`10.30.0.0/16` does not overlap the subscription's existing VNets.
+
+**Live quota and policy discovery:** Azure ML has 100 available FSv2 dedicated
+vCPUs, 1,000 available total regional dedicated vCPUs, and 200 available compute
+clusters/instances. The new instance plus maximum cluster scale requires 40
+FSv2 vCPUs. F8s v2 is offered and has no subscription SKU restriction. Quota does
+not guarantee physical allocation. The signed-in deployment user has Owner and
+User Access Administrator permissions. The examined resource-creation deny
+policies target legacy Classic resource types, not this modern resource set.
+No policy exemption or policy modification is authorized.
+
+**Cost and connectivity approval:** The user accepted continuing with the
+prepared Standard Firewall / F8s v2 / two Premium ACR design after reviewing an
+approximate continuously running retail cost of USD 1.3k/month before usage and
+taxes. No VPN/Bastion/jumpbox is included; private endpoint access will be arranged
+after deployment.
+
+**Local verification so far:** Both the new root and the existing private
+dev/prod root pass `terraform validate`. All seven new registry notebook tests
+pass and the notebook schema is valid. The final focused run has 12 passing
+tests with one pre-existing H2O golden-data test deselected. The full selected
+suite reproduced that unrelated failure; the failing test and its target
+notebook are unchanged from HEAD.
+
+### All validation checks pass
+
+- Terraform installed and offline provider initialization: passed.
+- Terraform formatting check: passed for the new root and edited shared files.
+- New root `terraform validate`: passed.
+- Existing private dev/prod root `terraform validate`: passed.
+- Notebook behavior, Python syntax, notebook schema, and new documentation links:
+  passed.
+- Static identity review: workspace/compute UAMIs and registry SMI have scoped
+  data-plane/registry roles; the human owner has workspace/data/registry access;
+  managed private endpoint approvals and managed-resource-group exceptions are
+  wired explicitly.
+- Authenticated Azure preflight, subscription/location confirmation, default
+  local backend, create-only live plan, policy review, quotas, regional SKU
+  eligibility, resource-group isolation, and global Storage/ACR/Key Vault name
+  availability: passed.
+- This is a first deployment with no existing state file; the empty inventory
+  is expected, not a missing remote backend. `terraform init`, default workspace
+  selection, and writing the saved plan to the backend directory passed.
+- Private client routing/DNS testing is deferred by explicit user choice.
+  Resource provisioning, endpoint approvals, network controls, and live RBAC
+  will be verified after apply; laptop data-plane reachability is not promised.
+
+**Azure deployment gate:** Apply requires the user's approval of the saved
+128-create plan. It has no updates, replacements, deletions, or CMK resources.
+No live workshop asset registration is authorized.
+
+## 7. Validation Proof
+
+### Latest Staged-Provisioning Proof
+
+- The visible VS Code validation task ran focused regressions, formatting,
+  validation for both affected roots, a fresh authenticated plan, and exact
+  saved-plan requirement assertions.
+- The plan has 26 additions and no updates, replacements or deletions; exactly
+  one workspace, one existing private registry and one project group.
+- Workspace creation defers managed-network provisioning; the existing compute
+  dependencies require the workspace private endpoint first.
+- Registry backend read-only private-access checks still pass. Private access,
+  managed identities, disabled vault purge protection and seven-day soft delete
+  are unchanged. No deny assignment or protected backend write is added.
+- Azure's automatic-on-compute behavior is grounded in the official managed
+  network guide. The previous internal 404 cause remains unconfirmed.
+- No live success claim is made for the workspace, compute or managed network
+  until the staged apply and live verification complete.
+
+Current staged saved plan SHA-256:
+`F93E9E1032EB61733504F7C0500E948EAC370955803C833D5C7322AABED9B2EF`.
+
+### Current Recovery Proof
+
+- First apply created the private registry and dependencies but stopped before
+  workspace/compute completion.
+- Runtime errors were reproduced and traced to unsupported embedded AzAPI 2.3
+  workspace schema and redundant writes forbidden by the registry-managed-group
+  deny assignment.
+- AzAPI 2.13 installed with signature verification; AzureRM stayed at 4.32.
+  Shared schema validation remains opt-in so other roots keep their defaults.
+- Root and existing private root validate; all 20 focused tests pass.
+- Fresh plan: 27 additions only, zero changes/deletions/replacements.
+- Exactly one project group and one registry remain; the single workspace is
+  among the remaining creations.
+- Registry backend read-only postconditions pass in the plan's check results;
+  actual Storage and ACR are already private. The deny assignment is untouched.
+- New Key Vault provider state confirms purge protection false and private
+  access; Azure retains its mandatory seven-day soft delete.
+
+Verification timestamp: `2026-10-28T15:01:51Z`.
+Current saved plan SHA-256:
+`6363E192FD3FA9170AC06F98DBCA22D40903737D4C50ABA9DEBF5DAB3856BCD7`.
+
+### Latest Single-Project Provisioning Proof
+
+The current saved plan supersedes the earlier three-group plan:
+
+- 124 create-only resources, exactly one Terraform project resource group,
+  one workspace and one AML registry.
+- Workspace parent is the new project group; the registry uses the same group
+  input and its computed parent will be verified after creation.
+- Purge protection false, mandatory seven-day soft delete, private public-access
+  settings, managed identities, registry backing-resource network controls, and
+  ten private endpoints verified in the plan.
+- Explicit development tag present; no NSPs, CMK, policy-exemption resources,
+  legacy queue data-plane logging, or changes to existing environments.
+- Duplicate common-group RBAC assignments removed; 18 focused tests and root
+  validation pass. Direct code/plan review has no blocking findings.
+- Actual live readiness, endpoint approvals, network controls and roles remain
+  post-apply checks; no Azure resources have been created in this attempt.
+
+Verification timestamp: `2026-10-28T14:25:53Z`.
+Current saved plan SHA-256:
+`E9B5AFBA7F2CA947D36A72B2522F56344DA1187EA9F3FBF19DD3D8D1207D02E8`.
+
+### Current AzureMLManagedVnet Provisioning Proof
+
+The current operation is the user-approved fresh `ncus06` development deployment,
+not the historical `ncus05` cleanup below. Detailed results are recorded in
+**Current Validation Steps and Proof** above.
+
+- New root `terraform init`, `fmt -check`, and `validate`: passed.
+- Existing affected root `terraform validate`: passed.
+- Focused regression tests: 16 passed; notebook schema and documentation links
+  also passed.
+- Fresh authenticated `terraform plan -input=false -no-color -out=tfplan`:
+  128 creates, zero changes or deletions.
+- Programmatic `terraform show -json tfplan` inspection: purge protection false,
+  seven-day soft delete, private public-access settings, correct managed-network
+  API shape, user-assigned compute/workspace identities, explicit human owner,
+  system-assigned registry identity, scoped roles and owned subnet NSG.
+- Names, quota, regional SKU availability, target isolation, current permissions,
+  and relevant inherited deny policy definitions were checked.
+- Actual deployment and data-plane/runtime checks are not yet claimed.
+
+Verification timestamp: `2026-10-28T14:01:11Z`.
+Current saved plan SHA-256:
+`4B64BE8FB7C5EEBFCEF01D9F11D368FDE5C3CF273F0B04A61DB1EBF4DBEF780C`.
+
+### Current Cleanup-Only Proof
+
+Cleanup validation recorded at `2026-10-28T13:09:54Z` (execution-host UTC):
+
+- The user confirmed each of the three exact resource-group deletions and then
+  selected cleanup-only. No redeployment or NSP implementation is authorized.
+- `terraform validate -no-color`: passed.
+- `terraform state pull`: pre-cleanup backup retained in the session workspace.
+- Refreshed `terraform plan -destroy -input=false`: passed, 50 to destroy,
+  zero to add or change.
+- Programmatic saved-plan verification: all managed actions are deletes, every
+  Azure resource ID is in the confirmed subscription and one of the three
+  approved groups, and the nine role-assignment actions only remove existing
+  scoped roles.
+- Direct Azure resource reads confirmed the ACR and protected Key Vault still
+  exist despite incomplete generic resource-list results.
+- Saved destroy-plan SHA-256 was rechecked successfully. Key Vault purge on
+  destroy remains disabled; the vault has a seven-day protected soft-delete
+  retention period.
+- Build and regional provisioning checks are not applicable to cleanup-only.
+  Final group absence, Terraform-state emptiness, and vault soft-delete readback
+  will be verified after applying the approved destroy plan.
+
+The provisioning proof below is historical; it does not authorize creation.
+
+Validated checks recorded at `2026-10-27T16:57:26Z` for
+`infra/private-workspace-registry`:
+
+| Check | Command / evidence | Result |
+| --- | --- | --- |
+| Authentication | `az account show`, scoped role-assignment inspection | Confirmed target subscription; signed-in user has Owner and User Access Administrator |
+| Initialization | `terraform init -input=false` | Passed; existing pinned provider versions reused |
+| Formatting | `terraform fmt -check -recursive` | Passed |
+| Configuration | `terraform validate -no-color` | Passed |
+| Backend isolation | `terraform workspace show` and fresh-state inspection | Default workspace; no prior state, as expected for this independent root |
+| Live plan | `terraform plan -input=false -no-color -out=tfplan` | 128 to add, 0 to change, 0 to destroy |
+| Exact plan invariants | Programmatic inspection of `terraform show -json tfplan` | All managed actions are create-only; no CMK; private workspace/registry/backends; approved managed-network egress; identity datastores; private compute; correct human owner; scoped RBAC |
+| Supporting-service access | Programmatic inspection of the saved plan | Exact laptop IP rules; deny-by-default firewalls; shared storage keys and ACR admin disabled; Key Vault purge protection enabled |
+| Regional eligibility | Azure ML quotas, VM SKU restrictions, provider locations, ML size listing | North Central US supports workspace, registry, F8s v2, and the required peak 40 vCPUs within the available 100 |
+| Policy | Applicable assignment/definition review | Planned modern types are not blocked by the examined Classic-resource deny policies; four-node cluster is below the enforced ten-node VMSS limit |
+| Name/address isolation | Storage/ACR/Key Vault availability, resource-group and VNet inventory | New names available; no matching target groups or overlapping customer VNet CIDR |
+| Notebook | Focused pytest suite and nbformat validation | Seven tests passed; notebook schema/code syntax valid |
+
+Saved plan SHA-256:
+`D6FB5D500A8E647A896DB3F2602C41503E020CA1F25803DD8ADB234B31834F45`.
+
+The bundled PowerShell preflight wrapper dropped its Terraform arguments and
+printed Terraform usage. Its reported Terraform failures were not accepted as
+validation evidence: the same initialization, formatting, validation, and plan
+commands were executed directly and passed. `terraform state list` reports no
+state because this root has never been applied; no existing state was copied,
+fabricated, or imported. Private connectivity remains explicitly out of scope
+until the operator arranges it after deployment.
+
+### First Apply and Recovery Findings
+
+The approved apply failed during registry initialization after approximately
+20 minutes. The exact activity-log error was `UnmatchedPrincipalType`: the
+registry service tried to assign a human deployment user as a service principal.
+The registry-managed resource group was rolled back by Azure. The private root
+retains 58 state entries; existing deployments were not changed or deleted.
+Workspace and compute provisioning have not completed.
+
+The registry input has been corrected to include the workspace UAMI and only
+explicitly supplied service-principal object IDs. A regression test reproduces
+the original accidental human-principal inclusion.
+
+Live governance evidence also shows that inherited modification policies force
+Key Vault and Storage public access to `Disabled`, and disable Storage shared-key
+authentication. Key Vault's public access was changed by policy despite the
+planned laptop exception. These controls must not be bypassed with ignore tags
+or unapproved exemptions. The selected laptop-access/native-sharing design needs
+a policy-compliant revision before retrying.
+
+No retry, destructive cleanup, policy change, or workshop asset registration has
+been performed. A new validated saved plan and user approval are required before
+the next apply; the first saved plan is stale against the partial deployment.
 
 ---
 

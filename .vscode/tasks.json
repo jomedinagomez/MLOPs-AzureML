@@ -1,0 +1,253 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "AzureML: Storage ingress state",
+			"type": "shell",
+			"command": "az",
+			"args": [
+				"storage",
+				"account",
+				"show",
+				"--subscription",
+				"5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25",
+				"--resource-group",
+				"rg-aml-private-ncus-06",
+				"--name",
+				"stprivatencus06",
+				"--query",
+				"'{publicAccess:publicNetworkAccess,defaultAction:networkRuleSet.defaultAction,ipRules:networkRuleSet.ipRules,sharedKeys:allowSharedKeyAccess}'",
+				"--output",
+				"json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "AzureML: verify computer Blob access",
+			"type": "shell",
+			"command": "az",
+			"args": [
+				"storage",
+				"container",
+				"list",
+				"--subscription",
+				"5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25",
+				"--account-name",
+				"stprivatencus06",
+				"--auth-mode",
+				"login",
+				"--num-results",
+				"1",
+				"--query",
+				"'[].name'",
+				"--output",
+				"json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "AzureML: verify workspace selected-IP access",
+			"type": "shell",
+			"command": "az",
+			"args": [
+				"resource",
+				"show",
+				"--subscription",
+				"5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25",
+				"--resource-group",
+				"rg-aml-private-ncus-06",
+				"--resource-type",
+				"Microsoft.MachineLearningServices/workspaces",
+				"--name",
+				"mlwprivatencus06",
+				"--api-version",
+				"2025-04-01-preview",
+				"--query",
+				"'{name:name,state:properties.provisioningState,publicAccess:properties.publicNetworkAccess,acl:properties.networkAcls,isolation:properties.managedNetwork.isolationMode,networkStatus:properties.managedNetwork.status.status,identity:identity.type,outboundDestinations:properties.managedNetwork.outboundRules.*.destination.serviceResourceId,outboundRuleStates:properties.managedNetwork.outboundRules.*.status}'",
+				"--output",
+				"json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "AzureML: verify private endpoints retained",
+			"type": "shell",
+			"command": "az",
+			"args": [
+				"network",
+				"private-endpoint",
+				"list",
+				"--subscription",
+				"5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25",
+				"--resource-group",
+				"rg-aml-private-ncus-06",
+				"--query",
+				"'[].{name:name,state:provisioningState,approval:privateLinkServiceConnections[0].privateLinkServiceConnectionState.status}'",
+				"--output",
+				"json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "AzureML: inspect current online endpoints",
+			"type": "shell",
+			"command": "az",
+			"args": [
+				"ml",
+				"online-endpoint",
+				"list",
+				"--subscription",
+				"5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25",
+				"--resource-group",
+				"rg-aml-private-ncus-06",
+				"--workspace-name",
+				"mlwprivatencus06",
+				"--query",
+				"'[].{name:name,state:provisioning_state,publicAccess:public_network_access,traffic:traffic}'",
+				"--output",
+				"json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "AzureML: test private registry asset reads",
+			"type": "shell",
+			"command": "az",
+			"args": [
+				"ml",
+				"model",
+				"list",
+				"--subscription",
+				"5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25",
+				"--registry-name",
+				"mlrprivatencus06",
+				"--query",
+				"'[].name'",
+				"--output",
+				"json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "AzureML: inspect registry sharing Storage rules",
+			"type": "shell",
+			"command": "az",
+			"args": [
+				"storage",
+				"account",
+				"show",
+				"--subscription",
+				"5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25",
+				"--resource-group",
+				"rg-aml-private-ncus-06",
+				"--name",
+				"stprivatencus06",
+				"--query",
+				"networkRuleSet.resourceAccessRules",
+				"--output",
+				"json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "AzureML: diagnose endpoint 06 state",
+			"type": "shell",
+			"command": "az",
+			"args": [
+				"ml",
+				"online-endpoint",
+				"show",
+				"--subscription",
+				"5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25",
+				"--resource-group",
+				"rg-aml-private-ncus-06",
+				"--workspace-name",
+				"mlwprivatencus06",
+				"--name",
+				"workshop-taxi-endpoint",
+				"--query",
+				"'{name:name,state:provisioning_state,publicAccess:public_network_access,auth:auth_mode,traffic:traffic,scoringUri:scoring_uri}'",
+				"--output",
+				"json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "AzureML: inspect deployment health without redeploying",
+			"type": "shell",
+			"command": "az",
+			"args": [
+				"ml",
+				"online-deployment",
+				"list",
+				"--subscription",
+				"5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25",
+				"--resource-group",
+				"rg-aml-private-ncus-06",
+				"--workspace-name",
+				"mlwprivatencus06",
+				"--endpoint-name",
+				"workshop-taxi-endpoint",
+				"--query",
+				"'[].{name:name,state:provisioning_state,instanceType:instance_type,replicas:instance_count}'",
+				"--output",
+				"json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "AzureML: reproduce scoring ACL failure only",
+			"type": "shell",
+			"command": "az",
+			"args": [
+				"ml",
+				"online-endpoint",
+				"invoke",
+				"--subscription",
+				"5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25",
+				"--resource-group",
+				"rg-aml-private-ncus-06",
+				"--workspace-name",
+				"mlwprivatencus06",
+				"--name",
+				"workshop-taxi-endpoint",
+				"--deployment-name",
+				"blue",
+				"--request-file",
+				"workshop\\outputs\\generated\\foundations\\online\\request.json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "AzureML: inspect identity variant worktree",
+			"type": "shell",
+			"command": "git --no-pager status --short --untracked-files=all; git branch --show-current; git symbolic-ref --short refs/remotes/origin/HEAD; git rev-parse HEAD",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Research: Matt injected-workspace endpoint restrictions",
+			"type": "shell",
+			"command": "gh api -H 'Accept: application/vnd.github.raw+json' 'repos/mattfeltonma/azure-terraform-lab-base-azfw/contents/workloads/aml/aml-injected/main.tf' | Select-String -Pattern 'v1LegacyMode|v1_legacy_mode|online|managedNetwork|isolationMode|subnetResourceId|subnet_id' -Context 3, 5",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Research: extract exact Microsoft network sources",
+			"type": "shell",
+			"command": "Get-Content -LiteralPath 'C:\\Users\\jomedin\\AppData\\Local\\Temp\\1793285412588-copilot-tool-output-f0745cc2f4704a64bcc0d9cdfb6a528d.txt' -TotalCount 1 | ConvertFrom-Json | ForEach-Object { $_.results | Select-Object -First 3 title,url,link,content | Format-List }",
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}

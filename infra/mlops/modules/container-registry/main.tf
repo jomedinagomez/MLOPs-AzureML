@@ -23,9 +23,15 @@ resource "azurerm_container_registry" "acr" {
   }
 
   public_network_access_enabled = var.public_network_access_enabled
-  network_rule_set {
+  network_rule_set = [{
     default_action = var.default_network_action
-  }
+    ip_rule = [
+      for cidr in var.allowed_ip_cidrs : {
+        action   = "Allow"
+        ip_range = cidr
+      }
+    ]
+  }]
   network_rule_bypass_option = "AzureServices"
 
   tags = var.tags

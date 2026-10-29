@@ -11,6 +11,11 @@ output "registry_name" {
   value       = azapi_resource.registry.name
 }
 
+output "registry_principal_id" {
+  description = "Principal ID of the registry system-assigned managed identity."
+  value       = azapi_resource.registry.output.identity.principalId
+}
+
 output "resource_group_name" {
   description = "Name of the resource group containing the AML registry"
   value       = local.rg_name

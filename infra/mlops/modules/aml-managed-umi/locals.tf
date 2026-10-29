@@ -3,6 +3,10 @@ locals {
   app_insights_prefix  = "${var.resource_prefixes.workspace}in"
   aml_workspace_prefix = var.resource_prefixes.workspace
 
+  service_firewall_ip_rules = [
+    for cidr in var.allowed_public_ip_cidrs : trimsuffix(cidr, "/32")
+  ]
+
   # Settings for Azure Key Vault
   sku_name            = "premium"
   rbac_enabled        = true
