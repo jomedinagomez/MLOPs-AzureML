@@ -3,9 +3,173 @@
 > **Status:** Deployed
 
 Generated: 2026-10-05
-Updated: 2026-10-28
+Updated: 2026-10-29
 
 ---
+
+## Approved Storage 07 Selected-IP Access (2026-10-29)
+
+The user explicitly requested matching Storage 06's access configuration and
+confirmed the scoped change to **`stprivatencus07` only**. The inherited
+`StorageAccount_PublicNetwork_Modify` definition was read first: it explicitly
+supports `SecurityControl=Ignore` on either the resource or resource group.
+The narrow resource-level exclusion was selected; no other resource was tagged.
+
+Applied through scoped Azure CLI operations:
+
+- Merged `SecurityControl=Ignore` onto Storage 07, preserving existing tags.
+- Enabled its public endpoint with default deny and the existing single approved
+  IPv4 rule, matching Storage 06's selected-IP access posture.
+- Kept shared-key authentication and anonymous Blob access disabled, TLS 1.2,
+  trusted-service bypass, and existing resource-instance rules unchanged.
+
+Verified at `2026-10-29T19:30:11Z`: the tag and public-access setting persisted;
+all eight existing private endpoint connections retained their states; and
+authenticated laptop container listing succeeded. The workspace managed network
+and registry outbound rule remain `Active`. The resource group, workspace,
+registry, ACR, and Key Vault were not given the tag. No registry identity,
+preauthorization, RBAC, or data asset was changed.
+
+This resolves the Storage network blocker, not proof of a completed notebook
+registration. Rerun its registration cell to create and verify the data asset.
+As with the existing 06 manual ingress exception, Terraform retains the private
+baseline and a future apply can reset this account tag/access exception.
+
+## Active: Approver-Only Registry Connectivity Experiment
+
+The user approved a second workspace, `mlwprivatencus07`, in
+`rg-aml-private-ncus-07`, subscription
+`5784b6a5-de3f-4fa4-8b8f-e5bb70ff6b25`, region `northcentralus`.
+Duplicate the existing workspace's supporting resources, managed-network
+configuration, compute cluster, and compute instance. Retain both environments.
+The existing `06` environment remains deployed and must not be replaced,
+destroyed, imported into new state, or updated by this experiment.
+
+Use an independent Terraform root and state. Reuse the existing workspace
+module, with a fresh workspace UAMI, separate Storage/Key Vault/ACR, and matching
+V1 `AllowOnlyApprovedOutbound` networking. Match the existing restricted
+selected-IP ingress, not unrestricted public access. Inspect the live compute
+configuration and regional capacity before provisioning.
+
+The only approved change to the existing registry `mlrprivatencus06` is an
+`Azure AI Enterprise Network Connection Approver` assignment for the new
+workspace identity at registry scope. Do not add that identity to
+`managedResourceGroupSettings.assignedIdentities`, grant it Azure AI Administrator
+on the registry-managed resource group, change deny assignments, modify registry
+backends, or create policy exemptions. Do not copy policy opt-out tags without
+separate approval.
+
+Recipe: Terraform for the new environment, followed by a scoped CLI
+managed-private-endpoint experiment against the existing registry. Validate
+before applying. Record role propagation, the actual outbound-rule and endpoint
+states, and any exact denied action; do not broaden permissions to force success.
+No automatic cleanup or deletion is authorized.
+
+Implementation: `infra/RegistryConnectivityTest`, using the existing workspace
+module and provider versions with an independent local Terraform state. No
+registry module is instantiated. The registry outbound rule is deliberately a
+post-deployment experiment so its expected authorization failure cannot interrupt
+creation of the requested workspace and computes.
+
+Read-only preflight confirmed the source cluster and instance both use
+`Standard_F8s_v2`, no node public IPs, and user-assigned identities. Cluster
+scaling is zero to four nodes with a two-minute idle timeout. Regional FSv2
+dedicated quota is 100 vCPUs with 8 currently used; the duplicate requires at
+most 40 more. Regional dedicated quota is 1,000 with 24 used; cluster count is
+4 of 200. Capacity is not guaranteed by quota.
+
+The new resource group does not exist. Storage, ACR, and Key Vault names ending
+in `07` are available. The approved registry-scoped role resolves to built-in
+definition `b556d68e-0be0-4f35-a333-ad7ee1ce17ea`.
+
+### Experiment Validation Proof
+
+Verified at `2026-10-29T17:04:58Z`:
+
+- `terraform init -input=false -no-color`: passed for the independent root.
+- `terraform fmt -check`: passed.
+- `terraform validate -no-color`: passed, including AzAPI workspace schema.
+- `terraform plan -input=false -no-color -out=tfplan`: **101 additions, zero
+  updates, zero deletions**.
+- Structured inspection of that exact saved plan confirmed two F8s v2 computes
+  without node public IPs, no new AML registry, no writes to the original
+  workspace, and exactly one existing-registry role: Network Connection Approver.
+- `python -m pytest -q tests/test_private_aml_configuration.py`: **15 passed**.
+  Missing pytest was restored only under the session directory; installed
+  environment packages were not changed.
+- The new root's local state is initially absent, as expected before its first
+  apply. The original root and state were not imported, selected, or modified.
+- Template-variable scan passed; no JSON variable file is used.
+- Static role review confirmed normal workspace permissions remain scoped to
+  the new workspace RG. No registry-managed-RG assignment or exemption exists.
+- Subscription policy assignments were inspected. Activity-log investigation
+  later identified an additional parent-management-group modify policy, recorded
+  below. No policy exemptions or opt-out tags were introduced.
+- Registry authorized identities and backing-resource IDs were snapshotted
+  before the experiment. Public access remains disabled.
+
+The supplied preflight wrapper invoked Terraform without subcommands because of
+its PowerShell argument handling. Equivalent native checks above were run
+explicitly and passed; the wrapper and unrelated infrastructure were not changed.
+
+Saved plan SHA-256:
+`8005DF6A41B58008B9277A3277388F15B5CD06B07CD4E67B17B06757871EFF95`.
+
+### Experiment Validation Checklist
+
+- [x] All validation checks pass:
+  - [x] Terraform and Azure CLI installed; Azure authentication confirmed.
+  - [x] Initialize the independent root and check Terraform formatting.
+  - [x] Validate configuration and generate a saved plan.
+  - [x] Confirm the local backend is independent and initially empty.
+  - [x] Check unresolved template variables and applicable JSON inputs.
+  - [x] Verify the plan creates only new resources and the approved scoped role.
+  - [x] Verify matched compute sizing, scaling, and available quota.
+  - [x] Run the focused private-workspace regression checks.
+  - [x] Review roles and policy requirements without adding exemptions.
+
+### Experiment Deployment and Result
+
+The exact validated plan applied successfully: **101 resources added, zero
+changed, zero destroyed**. The new workspace `mlwprivatencus07` and both
+`ccncus07` and `cincus07` report `Succeeded`. The instance reports `Running`
+and incurs ongoing charges. The cluster retains the source's zero-to-four-node
+F8s v2 configuration. Both computes have node public IPs disabled. Workspace
+image-build compute is `ccncus07`; managed network V1 is `Active`.
+
+The approver-only managed-private-endpoint experiment **passed**:
+
+- CLI outbound-rule creation completed successfully with
+  `AllowExternalRegistry-approver-only` in `Active` state.
+- The target registry's backing Blob and ACR private endpoint connections both
+  report `Approved`.
+- Live post-test RBAC shows the new workspace UAMI has only
+  `Azure AI Enterprise Network Connection Approver` at registry scope, and no
+  role assignment inherited or direct on the registry-managed resource group.
+- Registry `assignedIdentities` is unchanged and does not contain the new UAMI.
+  Registry-managed-group Azure AI Administrator was not required for this
+  workspace identity's connection in this run.
+- Normal Azure AI Administrator remains on the **new workspace RG**, not the
+  registry-managed RG. The initiating operator's existing permissions were not
+  reduced; this was not a least-privileged deployment-principal experiment.
+- The original workspace still reports an `Active` managed network and original
+  registry rule, with its existing restricted-IP/default-deny ingress intact.
+
+The new workspace's selected-IP/default-deny ingress was copied and verified.
+Initially its Storage account kept the approved IP rule, default deny, and shared
+keys disabled, but public network access remained **Disabled**. Both CLI and direct
+ARM updates requesting `Enabled` were modified back to `Disabled`. Activity-log
+events at `2026-10-29T18:12:12Z` identify the inherited
+`StorageAccount_PublicNetwork_Modify` policy under `MCAPSGovDeployPolicies`.
+Authenticated laptop container listing was therefore blocked at that stage.
+The later explicitly approved Storage-only tag and selected-IP access change,
+recorded above, resolved this blocker without changing registry permissions or
+using a default-allow firewall.
+
+This verifies managed-endpoint creation and approval, not registry asset
+authorization or application/job traffic. Both environments are retained.
+Infrastructure, local state, and variable values for the new environment are
+independent of the original root. No cleanup is authorized or performed.
 
 ## Applied CLI Computer IP Allowlist
 

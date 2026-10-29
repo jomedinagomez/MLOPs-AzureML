@@ -82,6 +82,13 @@ the backing resources and requires public access to be disabled through
 postconditions. If either check fails, stop; do not remove or bypass the deny
 assignment.
 
+These grants describe this root's configured baseline, not a universal
+private-endpoint requirement. The separate
+[approver-only experiment](../RegistryConnectivityTest/README.md#verified-result)
+created an Active registry connection with approved backing endpoints and no
+workspace-identity grant or preauthorization on the registry-managed group.
+This root's existing configuration is unchanged.
+
 The managed-network and registry patterns follow the existing repository modules
 and [Matt Felton's Azure lab](https://github.com/mattfeltonma/azure-terraform-lab-base-azfw).
 AzureRM stays on the existing 4.32 release line. This root requires AzAPI 2.13

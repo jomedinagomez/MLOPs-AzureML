@@ -1,0 +1,6 @@
+subscription_id         = "<SUBSCRIPTION_ID>"
+registry_id             = "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/<REGISTRY_RESOURCE_GROUP>/providers/Microsoft.MachineLearningServices/registries/<EXISTING_REGISTRY_NAME>"
+assigned_user_object_id = "<HUMAN_ENTRA_OBJECT_ID>"
+location                = "northcentralus"
+location_code           = "ncus"
+naming_suffix           = "07"
