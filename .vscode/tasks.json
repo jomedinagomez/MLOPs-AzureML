@@ -248,6 +248,48 @@
 			"command": "Get-Content -LiteralPath 'C:\\Users\\jomedin\\AppData\\Local\\Temp\\1793285412588-copilot-tool-output-f0745cc2f4704a64bcc0d9cdfb6a528d.txt' -TotalCount 1 | ConvertFrom-Json | ForEach-Object { $_.results | Select-Object -First 3 title,url,link,content | Format-List }",
 			"isBackground": false,
 			"problemMatcher": []
+		},
+		{
+			"label": "AzureML: inspect integration registration edit scope",
+			"type": "shell",
+			"command": "git --no-pager status --short -- workshop/notebooks/02_jobs_and_pipelines/02_submit_integration_compare.ipynb workshop/.env.example workshop/README.md tests/test_workshop_notebook_artifacts.py tests/test_registry_asset_sharing.py; git branch --show-current; git rev-parse HEAD",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "AzureML: reproduce missing pipeline registry node",
+			"type": "shell",
+			"command": "C:\\Users\\jomedin\\Documents\\MLOPs-AzureML\\.venv\\Scripts\\python.exe",
+			"args": [
+				"-m",
+				"pytest",
+				"tests\\test_integration_registry_step.py::test_registration_is_a_sixth_pipeline_node",
+				"-q"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "AzureML: validate integration registry pipeline step",
+			"type": "shell",
+			"command": "C:\\Users\\jomedin\\Documents\\MLOPs-AzureML\\.venv\\Scripts\\python.exe",
+			"args": [
+				"-m",
+				"pytest",
+				"tests\\test_integration_registry_step.py",
+				"tests\\test_workshop_notebook_artifacts.py::test_yaml_first_job_section_keeps_checked_in_definitions",
+				"-q",
+				"--disable-warnings"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "AzureML: check registry step patch formatting",
+			"type": "shell",
+			"command": "git --no-pager diff --check -- workshop/pipelines/integration-compare-pipeline.yaml workshop/notebooks/02_jobs_and_pipelines/02_submit_integration_compare.ipynb workshop/.env.example workshop/README.md; git --no-pager status --short -- workshop/src/register/register.py workshop/src/components/register.yaml tests/test_integration_registry_step.py",
+			"isBackground": false,
+			"problemMatcher": []
 		}
 	]
 }

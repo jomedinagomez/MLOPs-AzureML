@@ -1,0 +1,28 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: register_taxi_fares
+display_name: RegisterTaxiFares
+type: command
+is_deterministic: false
+inputs:
+  model_input:
+    type: mlflow_model
+  model_name:
+    type: string
+  compare_output:
+    type: uri_folder
+  registry:
+    type: string
+outputs:
+  register_output:
+    type: uri_folder
+code: ../register
+environment:
+  conda_file: ../../environment/train/conda.yaml
+  image: mcr.microsoft.com/azureml/openmpi5.0-ubuntu24.04:latest
+command: >-
+  python register.py
+  --model_input ${{inputs.model_input}}
+  --model_name ${{inputs.model_name}}
+  --compare_output ${{inputs.compare_output}}
+  --registry ${{inputs.registry}}
+  --register_output ${{outputs.register_output}}

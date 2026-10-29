@@ -2,8 +2,8 @@ $schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
 type: pipeline
 experiment_name: azureml-workshop-taxi-integration
 description: >-
-  Integration validation pipeline that runs training and CompareTaxiFare gate only.
-  Used by CI to validate source changes before optional model registration or promotion.
+  Integration pipeline that trains, predicts, compares, and registers the
+  resulting MLflow model in the configured external registry.
 
 inputs:
   environment: 'dev'
@@ -15,8 +15,8 @@ inputs:
   enable_vote_ensemble: false
   enable_stack_ensemble: false
   conda_file: custom_dev.yaml
-  # External registry registration is disabled for customer validation.
-  # registry: '<REGISTRY_NAME>'
+  # The submission notebook replaces this value with AZUREML_REGISTRY_NAME.
+  registry: '<REGISTRY_NAME>'
 outputs:
   pipeline_job_trained_model:
     mode: rw_mount
@@ -24,8 +24,8 @@ outputs:
     mode: rw_mount
   pipeline_job_comparison:
     mode: rw_mount
-  # register_metadata:
-  #   mode: upload
+  register_metadata:
+    mode: upload
 
 settings:
   default_datastore: azureml:workspaceblobstore
@@ -97,14 +97,13 @@ jobs:
     outputs:
       compare_output: ${{parent.outputs.pipeline_job_comparison}}
 
-  # External registry-dependent component disabled for customer validation.
-  # register_job:
-  #   type: command
-  #   component: ../src/components/register.yaml
-  #   inputs:
-  #     model_input: ${{parent.jobs.train_job.outputs.model_output}}
-  #     model_name: '${{parent.inputs.model_base}}-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
-  #     compare_output: ${{parent.jobs.compare_job.outputs.compare_output}}
-  #     registry: ${{parent.inputs.registry}}
-  #   outputs:
-  #     register_output: ${{parent.outputs.register_metadata}}
+  register_job:
+    type: command
+    component: ../src/components/register.yaml
+    inputs:
+      model_input: ${{parent.jobs.train_job.outputs.model_output}}
+      model_name: '${{parent.inputs.model_base}}-${{parent.inputs.environment}}-${{parent.inputs.artifact_id}}'
+      compare_output: ${{parent.jobs.compare_job.outputs.compare_output}}
+      registry: ${{parent.inputs.registry}}
+    outputs:
+      register_output: ${{parent.outputs.register_metadata}}

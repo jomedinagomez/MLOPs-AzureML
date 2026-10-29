@@ -83,6 +83,17 @@ service-side sharing operation.
 1. `notebooks/02_jobs_and_pipelines/01_submit_single_step_merge.ipynb`
 2. `notebooks/02_jobs_and_pipelines/02_submit_integration_compare.ipynb`
 
+The integration pipeline includes a sixth `register_job` after training and
+comparison. Set `AZUREML_REGISTRY_NAME` before submission. The registration node
+uses the cluster UAMI selected by `AZUREML_COMPUTE_IDENTITY_CLIENT_ID`, which needs
+**AzureML Registry User** on the destination and network access to its private
+registry and backing Storage/ACR. It uploads the MLflow artifact from the mounted
+training output, rather than sharing a registered workspace asset, and writes
+the verified model ID/version to the `register_metadata` pipeline output as
+`registration.json`. Registration runs only with a newly submitted pipeline;
+previously completed runs are unchanged. Each execution assigns a new model
+version and is not reused from the pipeline cache.
+
 ### Reference H2O Flow
 
 1. `notebooks/03_h2o_reference/01_create_reference_binary_model.ipynb`
@@ -153,7 +164,7 @@ Managed Redis, and a managed online endpoint. See the module README for costs an
 ## Jobs and Pipelines
 
 - `pipelines/single-step-merge-job.yaml` remains the source-controlled command-job definition.
-- `pipelines/integration-compare-pipeline.yaml` and `src/components/*.yaml` remain the source-controlled five-stage integration definition.
+- `pipelines/integration-compare-pipeline.yaml` and `src/components/*.yaml` define the six-stage integration flow, including external-registry registration.
 - `notebooks/06_spark_jobs_pipelines/` contains the notebook-driven serverless Spark
   exercises, a checked-in multi-stage pipeline YAML, and PySpark entry points.
 - `notebooks/07_feature_store/` contains the managed feature store demo based on the
